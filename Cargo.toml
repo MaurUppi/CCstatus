@@ -1,0 +1,17 @@
+[package]
+name = "ccometixline"
+version = "0.1.0"
+edition = "2021"
+description = "CCometixLine (ccline) - High-performance Claude Code StatusLine tool written in Rust"
+authors = ["CCometixLine Contributors"]
+license = "MIT"
+repository = "https://github.com/username/CCometixLine"
+readme = "README.md"
+keywords = ["claude", "statusline", "powerline", "rust", "claude-code"]
+categories = ["command-line-utilities", "development-tools"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+clap = { version = "4.0", features = ["derive"] }
+toml = "0.8"
