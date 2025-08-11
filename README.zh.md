@@ -5,6 +5,12 @@
 ![Language:Rust](https://img.shields.io/static/v1?label=Language&message=Rust&color=orange&style=flat-square)
 ![License:MIT](https://img.shields.io/static/v1?label=License&message=MIT&color=blue&style=flat-square)
 
+## 截图
+
+![CCometixLine](assets/img1.png)
+
+状态栏显示：模型 | 目录 | Git 分支状态 | 上下文窗口信息
+
 ## 特性
 
 - **高性能** Rust 原生速度
@@ -66,7 +72,7 @@ ccline --configure
 
 ## 默认段落
 
-显示：`目录 | Git 分支状态 | 模型 | 使用量`
+显示：`目录 | Git 分支状态 | 模型 | 上下文窗口`
 
 ### Git 状态指示器
 
@@ -80,7 +86,7 @@ ccline --configure
 - `claude-3-5-sonnet` → `Sonnet 3.5`
 - `claude-4-sonnet` → `Sonnet 4`
 
-### 使用量显示
+### 上下文窗口显示
 
 基于转录文件分析的令牌使用百分比，包含上下文限制跟踪。
 

@@ -5,6 +5,12 @@ A high-performance Claude Code statusline tool written in Rust with Git integrat
 ![Language:Rust](https://img.shields.io/static/v1?label=Language&message=Rust&color=orange&style=flat-square)
 ![License:MIT](https://img.shields.io/static/v1?label=License&message=MIT&color=blue&style=flat-square)
 
+## Screenshots
+
+![CCometixLine](assets/img1.png)
+
+The statusline shows: Model | Directory | Git Branch Status | Context Window Information
+
 ## Features
 
 - **High performance** with Rust native speed
@@ -19,25 +25,51 @@ A high-performance Claude Code statusline tool written in Rust with Git integrat
 
 Download from [Releases](https://github.com/Haleclipse/CCometixLine/releases):
 
+### Linux
+
 ```bash
-# Download and install
+mkdir -p ~/.claude/ccline
 wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-linux-x64.tar.gz
 tar -xzf ccline-linux-x64.tar.gz
-mkdir -p ~/.claude/ccline
 cp ccline ~/.claude/ccline/
+chmod +x ~/.claude/ccline/ccline
 ```
 
-Or build from source:
+### macOS (Intel)
+
+```bash  
+mkdir -p ~/.claude/ccline
+wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-macos-x64.tar.gz
+tar -xzf ccline-macos-x64.tar.gz
+cp ccline ~/.claude/ccline/
+chmod +x ~/.claude/ccline/ccline
+```
+
+### macOS (Apple Silicon)
 
 ```bash
-git clone https://github.com/Haleclipse/CCometixLine.git
-cd CCometixLine
-cargo build --release
-cp target/release/ccometixline ~/.claude/ccline/ccline
+mkdir -p ~/.claude/ccline  
+wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-macos-arm64.tar.gz
+tar -xzf ccline-macos-arm64.tar.gz
+cp ccline ~/.claude/ccline/
+chmod +x ~/.claude/ccline/ccline
 ```
+
+### Windows
+
+```powershell
+# Create directory and download
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\ccline"
+Invoke-WebRequest -Uri "https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-windows-x64.zip" -OutFile "ccline-windows-x64.zip"
+Expand-Archive -Path "ccline-windows-x64.zip" -DestinationPath "."
+Move-Item "ccline.exe" "$env:USERPROFILE\.claude\ccline\"
+```
+
+### Claude Code Configuration
 
 Add to your Claude Code `settings.json`:
 
+**Linux/macOS:**
 ```json
 {
   "statusLine": {
@@ -46,6 +78,34 @@ Add to your Claude Code `settings.json`:
     "padding": 0
   }
 }
+```
+
+**Windows:**
+```json
+{
+  "statusLine": {
+    "type": "command", 
+    "command": "%USERPROFILE%\\.claude\\ccline\\ccline.exe",
+    "padding": 0
+  }
+}
+```
+
+### Build from Source
+
+```bash
+git clone https://github.com/Haleclipse/CCometixLine.git
+cd CCometixLine
+cargo build --release
+
+# Linux/macOS
+mkdir -p ~/.claude/ccline
+cp target/release/ccometixline ~/.claude/ccline/ccline
+chmod +x ~/.claude/ccline/ccline
+
+# Windows (PowerShell)
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\ccline"
+copy target\release\ccometixline.exe "$env:USERPROFILE\.claude\ccline\ccline.exe"
 ```
 
 ## Usage
@@ -66,7 +126,7 @@ ccline --configure
 
 ## Default Segments
 
-Displays: `Directory | Git Branch Status | Model | Usage`
+Displays: `Directory | Git Branch Status | Model | Context Window`
 
 ### Git Status Indicators
 
@@ -80,7 +140,7 @@ Shows simplified Claude model names:
 - `claude-3-5-sonnet` → `Sonnet 3.5`
 - `claude-4-sonnet` → `Sonnet 4`
 
-### Usage Display
+### Context Window Display
 
 Token usage percentage based on transcript analysis with context limit tracking.
 
