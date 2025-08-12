@@ -24,15 +24,29 @@ impl Segment for UsageSegment {
 
         let context_used_token = parse_transcript_usage(&input.transcript_path);
         let context_used_rate = (context_used_token as f64 / CONTEXT_LIMIT as f64) * 100.0;
+
+        // Format percentage: show integer when whole number, decimal when fractional
+        let percentage_display = if context_used_rate.fract() == 0.0 {
+            format!("{:.0}%", context_used_rate)
+        } else {
+            format!("{:.1}%", context_used_rate)
+        };
+
+        // Format tokens: show integer k when whole number, decimal k when fractional
         let tokens_display = if context_used_token >= 1000 {
-            format!("{:.1}k", context_used_token as f64 / 1000.0)
+            let k_value = context_used_token as f64 / 1000.0;
+            if k_value.fract() == 0.0 {
+                format!("{}k", k_value as u32)
+            } else {
+                format!("{:.1}k", k_value)
+            }
         } else {
             context_used_token.to_string()
         };
 
         format!(
-            "\u{f49b} {:.1}% · {} tokens",
-            context_used_rate, tokens_display
+            "\u{f49b} {} · {} tokens",
+            percentage_display, tokens_display
         )
     }
 
