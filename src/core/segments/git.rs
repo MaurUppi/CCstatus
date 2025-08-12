@@ -37,13 +37,16 @@ impl GitSegment {
     }
 
     fn get_git_info(&self, working_dir: &str) -> Option<GitInfo> {
-        let sanitized_dir = self.sanitize_path(working_dir);
+        // First check if we're in a Git repository
+        if !self.is_git_repository(working_dir) {
+            return None;
+        }
         
-        let branch = self.get_branch(&sanitized_dir).unwrap_or_else(|| "detached".to_string());
-        let status = self.get_status(&sanitized_dir);
-        let (ahead, behind) = self.get_ahead_behind(&sanitized_dir);
+        let branch = self.get_branch(working_dir).unwrap_or_else(|| "detached".to_string());
+        let status = self.get_status(working_dir);
+        let (ahead, behind) = self.get_ahead_behind(working_dir);
         let sha = if self.show_sha {
-            self.get_sha(&sanitized_dir)
+            self.get_sha(working_dir)
         } else {
             None
         };
@@ -57,12 +60,15 @@ impl GitSegment {
         })
     }
 
-    fn sanitize_path(&self, path: &str) -> String {
-        // Remove dangerous characters to prevent command injection
-        path.chars()
-            .filter(|c| !matches!(c, ';' | '&' | '|' | '`' | '$' | '(' | ')' | '{' | '}' | '[' | ']' | '<' | '>' | '\'' | '"' | '\\'))
-            .collect()
+    fn is_git_repository(&self, working_dir: &str) -> bool {
+        Command::new("git")
+            .args(["rev-parse", "--git-dir"])
+            .current_dir(working_dir)
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false)
     }
+
 
     fn get_branch(&self, working_dir: &str) -> Option<String> {
         let output = Command::new("git")
