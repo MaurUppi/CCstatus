@@ -2,12 +2,16 @@ use clap::Parser;
 
 #[derive(Parser, Debug)]
 #[command(name = "CCometixLine (ccline)")]
-#[command(version = "0.1.0")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(
     about = "CCometixLine (ccline) - High-performance Claude Code StatusLine tool written in Rust"
 )]
 #[command(
-    long_about = "CCometixLine (ccline) v0.1.0\nA high-performance Claude Code StatusLine tool written in Rust.\nProvides real-time usage tracking, Git integration, and customizable themes."
+    long_about = concat!(
+        "CCometixLine (ccline) v", env!("CARGO_PKG_VERSION"), "\n",
+        "A high-performance Claude Code StatusLine tool written in Rust.\n",
+        "Provides real-time usage tracking, Git integration, and customizable themes."
+    )
 )]
 pub struct Cli {
     /// Configuration file path
