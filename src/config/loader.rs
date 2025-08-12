@@ -8,7 +8,7 @@ impl ConfigLoader {
         // Return default config for now, implement multi-layer loading later
         Config::default()
     }
-    
+
     pub fn load_from_path<P: AsRef<Path>>(_path: P) -> Result<Config, Box<dyn std::error::Error>> {
         // Load config from file
         Ok(Config::default())

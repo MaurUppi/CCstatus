@@ -16,10 +16,13 @@ impl Segment for ModelSegment {
         if !self.enabled {
             return String::new();
         }
-        
-        format!("\u{e26d} {}", self.format_model_name(&input.model.display_name))
+
+        format!(
+            "\u{e26d} {}",
+            self.format_model_name(&input.model.display_name)
+        )
     }
-    
+
     fn enabled(&self) -> bool {
         self.enabled
     }
@@ -31,7 +34,7 @@ impl ModelSegment {
         match display_name {
             name if name.contains("claude-3-5-sonnet") => "Sonnet 3.5".to_string(),
             name if name.contains("claude-3-7-sonnet") => "Sonnet 3.7".to_string(),
-            name if name.contains("claude-3-sonnet") => "Sonnet 3".to_string(), 
+            name if name.contains("claude-3-sonnet") => "Sonnet 3".to_string(),
             name if name.contains("claude-3-haiku") => "Haiku 3".to_string(),
             name if name.contains("claude-4-sonnet") => "Sonnet 4".to_string(),
             name if name.contains("claude-4-opus") => "Opus 4".to_string(),

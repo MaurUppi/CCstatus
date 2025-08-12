@@ -1,7 +1,7 @@
-pub mod types;
-pub mod loader;
 pub mod defaults;
+pub mod loader;
+pub mod types;
 
-pub use types::*;
-pub use loader::ConfigLoader;
 pub use defaults::DEFAULT_CONFIG;
+pub use loader::ConfigLoader;
+pub use types::*;
