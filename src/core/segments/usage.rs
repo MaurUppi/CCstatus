@@ -21,7 +21,7 @@ impl Segment for UsageSegment {
         if !self.enabled {
             return String::new();
         }
-        
+
         let context_used_token = parse_transcript_usage(&input.transcript_path);
         let context_used_rate = (context_used_token as f64 / CONTEXT_LIMIT as f64) * 100.0;
         let tokens_display = if context_used_token >= 1000 {
@@ -29,13 +29,13 @@ impl Segment for UsageSegment {
         } else {
             context_used_token.to_string()
         };
-        
+
         format!(
             "\u{f49b} {:.1}% · {} tokens",
             context_used_rate, tokens_display
         )
     }
-    
+
     fn enabled(&self) -> bool {
         self.enabled
     }
@@ -48,7 +48,10 @@ fn parse_transcript_usage<P: AsRef<Path>>(transcript_path: P) -> u32 {
     };
 
     let reader = BufReader::new(file);
-    let lines: Vec<String> = reader.lines().collect::<Result<Vec<_>, _>>().unwrap_or_default();
+    let lines: Vec<String> = reader
+        .lines()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap_or_default();
 
     for line in lines.iter().rev() {
         let line = line.trim();
@@ -60,9 +63,7 @@ fn parse_transcript_usage<P: AsRef<Path>>(transcript_path: P) -> u32 {
             if entry.r#type.as_deref() == Some("assistant") {
                 if let Some(message) = &entry.message {
                     if let Some(usage) = &message.usage {
-                        return usage.input_tokens 
-                            + usage.cache_creation_input_tokens 
-                            + usage.cache_read_input_tokens;
+                        return calculate_input_tokens(usage);
                     }
                 }
             }
@@ -70,4 +71,29 @@ fn parse_transcript_usage<P: AsRef<Path>>(transcript_path: P) -> u32 {
     }
 
     0
+}
+
+fn calculate_input_tokens(usage: &crate::config::Usage) -> u32 {
+    // Priority 1: total_tokens (most accurate, includes all costs)
+    if let Some(total_tokens) = usage.total_tokens {
+        return total_tokens;
+    }
+
+    // Priority 2: Claude complete format (backward compatibility)
+    let claude_input = usage.input_tokens.unwrap_or(0)
+        + usage.cache_creation_input_tokens.unwrap_or(0)
+        + usage.cache_read_input_tokens.unwrap_or(0);
+
+    if claude_input > 0 {
+        return claude_input;
+    }
+
+    // Priority 3: OpenAI manual calculation (fallback)
+    if let Some(prompt_tokens) = usage.prompt_tokens {
+        let completion_tokens = usage.completion_tokens.or(usage.output_tokens).unwrap_or(0);
+        return prompt_tokens + completion_tokens;
+    }
+
+    // Priority 4: Input tokens only (last resort)
+    usage.input_tokens.or(usage.prompt_tokens).unwrap_or(0)
 }
