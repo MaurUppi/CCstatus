@@ -12,19 +12,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Proper Git repository detection using `git rev-parse --git-dir`
 - Cross-platform compatibility improvements for Windows path handling
 - Pre-commit hooks for automatic code formatting
+- **Static Linux binary**: Added musl-based static binary for universal Linux compatibility without glibc dependencies
 
 ### Changed
 - **Token calculation priority**: `total_tokens` → Claude format → OpenAI format → fallback
 - **Display formatting**: Removed redundant ".0" from integer percentages and token counts
   - `0.0%` → `0%`, `25.0%` → `25%`, `50.0k` → `50k`
-- **CI/CD**: Updated GitHub Actions to use Ubuntu 20.04 for better glibc compatibility
+- **CI/CD**: Updated GitHub Actions to use Ubuntu 22.04 for Linux builds and ubuntu-latest for Windows cross-compilation
+- **Binary distribution**: Now provides two Linux options - dynamic (glibc) and static (musl) binaries
 - **Version management**: Unified version number using `env!("CARGO_PKG_VERSION")`
-- **Author**: Updated package author to "Haleclipse"
 
 ### Fixed
 - Git segment now properly hides for non-Git directories instead of showing misleading "detached" status
 - Windows Git repository path handling issues by removing overly aggressive path sanitization
-- glibc compatibility issues on older Linux systems (now supports Ubuntu 18.04+, CentOS 8+, Debian 10+)
+- GitHub Actions runner compatibility issues (updated to supported versions: ubuntu-22.04 for Linux, ubuntu-latest for Windows)
+- **Git version compatibility**: Added fallback to `git symbolic-ref` for Git versions < 2.22 when `--show-current` is not available
 
 ### Removed
 - Path sanitization function that could break Windows paths in Git operations

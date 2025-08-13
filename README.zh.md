@@ -1,5 +1,7 @@
 # CCometixLine
 
+[English](README.md) | [中文](README.zh.md)
+
 基于 Rust 的高性能 Claude Code 状态栏工具，集成 Git 信息和实时使用量跟踪。
 
 ![Language:Rust](https://img.shields.io/static/v1?label=Language&message=Rust&color=orange&style=flat-square)
@@ -25,15 +27,59 @@
 
 从 [Releases](https://github.com/Haleclipse/CCometixLine/releases) 下载：
 
+### Linux
+
+#### 选项 1: 动态链接版本（推荐）
 ```bash
-# 下载并安装
+mkdir -p ~/.claude/ccline
 wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-linux-x64.tar.gz
 tar -xzf ccline-linux-x64.tar.gz
-mkdir -p ~/.claude/ccline
 cp ccline ~/.claude/ccline/
+chmod +x ~/.claude/ccline/ccline
+```
+*系统要求: Ubuntu 22.04+, CentOS 9+, Debian 11+, RHEL 9+ (glibc 2.35+)*
+
+#### 选项 2: 静态链接版本（通用兼容）
+```bash
+mkdir -p ~/.claude/ccline
+wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-linux-x64-static.tar.gz
+tar -xzf ccline-linux-x64-static.tar.gz
+cp ccline ~/.claude/ccline/
+chmod +x ~/.claude/ccline/ccline
+```
+*适用于任何 Linux 发行版（静态链接，无依赖）*
+
+### macOS (Intel)
+
+```bash  
+mkdir -p ~/.claude/ccline
+wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-macos-x64.tar.gz
+tar -xzf ccline-macos-x64.tar.gz
+cp ccline ~/.claude/ccline/
+chmod +x ~/.claude/ccline/ccline
 ```
 
-或从源码构建：
+### macOS (Apple Silicon)
+
+```bash
+mkdir -p ~/.claude/ccline  
+wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-macos-arm64.tar.gz
+tar -xzf ccline-macos-arm64.tar.gz
+cp ccline ~/.claude/ccline/
+chmod +x ~/.claude/ccline/ccline
+```
+
+### Windows
+
+```powershell
+# 创建目录并下载
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\ccline"
+Invoke-WebRequest -Uri "https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-windows-x64.zip" -OutFile "ccline-windows-x64.zip"
+Expand-Archive -Path "ccline-windows-x64.zip" -DestinationPath "."
+Move-Item "ccline.exe" "$env:USERPROFILE\.claude\ccline\"
+```
+
+### 从源码构建
 
 ```bash
 git clone https://github.com/Haleclipse/CCometixLine.git
@@ -42,13 +88,27 @@ cargo build --release
 cp target/release/ccometixline ~/.claude/ccline/ccline
 ```
 
+### Claude Code 配置
+
 添加到 Claude Code `settings.json`：
 
+**Linux/macOS:**
 ```json
 {
   "statusLine": {
     "type": "command", 
     "command": "~/.claude/ccline/ccline",
+    "padding": 0
+  }
+}
+```
+
+**Windows:**
+```json
+{
+  "statusLine": {
+    "type": "command", 
+    "command": "%USERPROFILE%\\.claude\\ccline\\ccline.exe",
     "padding": 0
   }
 }
@@ -100,11 +160,14 @@ ccline --configure
 - **内存使用**：< 10MB（Node.js 工具约 25MB）
 - **二进制大小**：约 2MB 优化版本
 
-## 要求
+## 系统要求
 
-- Git（可选，用于 Git 集成）
-- 支持 Nerd Font 的终端
-- Claude Code 用于状态栏集成
+- **Git**: 版本 1.5+ (推荐 Git 2.22+ 以获得更好的分支检测)
+- **终端**: 必须支持 Nerd Font 图标正常显示
+  - 安装 [Nerd Font](https://www.nerdfonts.com/) 字体
+  - 中文用户推荐: [Maple Font](https://github.com/subframe7536/maple-font) (支持中文的 Nerd Font)
+  - 在终端中配置使用该字体
+- **Claude Code**: 用于状态栏集成
 
 ## 开发
 

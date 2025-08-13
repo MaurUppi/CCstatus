@@ -72,22 +72,35 @@ impl GitSegment {
     }
 
     fn get_branch(&self, working_dir: &str) -> Option<String> {
-        let output = Command::new("git")
+        // Try modern Git 2.22+ command first
+        if let Ok(output) = Command::new("git")
             .args(["branch", "--show-current"])
             .current_dir(working_dir)
             .output()
-            .ok()?;
-
-        if output.status.success() {
-            let branch = String::from_utf8(output.stdout).ok()?.trim().to_string();
-            if branch.is_empty() {
-                None
-            } else {
-                Some(branch)
+        {
+            if output.status.success() {
+                let branch = String::from_utf8(output.stdout).ok()?.trim().to_string();
+                if !branch.is_empty() {
+                    return Some(branch);
+                }
             }
-        } else {
-            None
         }
+
+        // Fallback for older Git versions (< 2.22)
+        if let Ok(output) = Command::new("git")
+            .args(["symbolic-ref", "--short", "HEAD"])
+            .current_dir(working_dir)
+            .output()
+        {
+            if output.status.success() {
+                let branch = String::from_utf8(output.stdout).ok()?.trim().to_string();
+                if !branch.is_empty() {
+                    return Some(branch);
+                }
+            }
+        }
+
+        None
     }
 
     fn get_status(&self, working_dir: &str) -> GitStatus {

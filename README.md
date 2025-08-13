@@ -1,5 +1,7 @@
 # CCometixLine
 
+[English](README.md) | [中文](README.zh.md)
+
 A high-performance Claude Code statusline tool written in Rust with Git integration and real-time usage tracking.
 
 ![Language:Rust](https://img.shields.io/static/v1?label=Language&message=Rust&color=orange&style=flat-square)
@@ -27,6 +29,7 @@ Download from [Releases](https://github.com/Haleclipse/CCometixLine/releases):
 
 ### Linux
 
+#### Option 1: Dynamic Binary (Recommended)
 ```bash
 mkdir -p ~/.claude/ccline
 wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-linux-x64.tar.gz
@@ -34,6 +37,17 @@ tar -xzf ccline-linux-x64.tar.gz
 cp ccline ~/.claude/ccline/
 chmod +x ~/.claude/ccline/ccline
 ```
+*Requires: Ubuntu 22.04+, CentOS 9+, Debian 11+, RHEL 9+ (glibc 2.35+)*
+
+#### Option 2: Static Binary (Universal Compatibility)
+```bash
+mkdir -p ~/.claude/ccline
+wget https://github.com/Haleclipse/CCometixLine/releases/latest/download/ccline-linux-x64-static.tar.gz
+tar -xzf ccline-linux-x64-static.tar.gz
+cp ccline ~/.claude/ccline/
+chmod +x ~/.claude/ccline/ccline
+```
+*Works on any Linux distribution (static, no dependencies)*
 
 ### macOS (Intel)
 
@@ -156,9 +170,11 @@ Configuration support is planned for future releases. Currently uses sensible de
 
 ## Requirements
 
-- Git (optional, for git integration)  
-- Terminal with Nerd Font support
-- Claude Code for statusline integration
+- **Git**: Version 1.5+ (Git 2.22+ recommended for better branch detection)
+- **Terminal**: Must support Nerd Fonts for proper icon display
+  - Install a [Nerd Font](https://www.nerdfonts.com/) (e.g., FiraCode Nerd Font, JetBrains Mono Nerd Font)
+  - Configure your terminal to use the Nerd Font
+- **Claude Code**: For statusline integration
 
 ## Development
 

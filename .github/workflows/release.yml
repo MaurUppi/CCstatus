@@ -19,6 +19,9 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
             name: ccline-linux-x64.tar.gz
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            name: ccline-linux-x64-static.tar.gz
           - target: x86_64-pc-windows-gnu
             os: ubuntu-latest
             name: ccline-windows-x64.zip
@@ -43,6 +46,12 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y mingw-w64
+
+    - name: Install musl tools
+      if: matrix.target == 'x86_64-unknown-linux-musl'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y musl-tools
 
     - name: Build binary
       run: cargo build --release --target ${{ matrix.target }}
