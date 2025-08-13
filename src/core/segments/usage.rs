@@ -76,8 +76,10 @@ fn parse_transcript_usage<P: AsRef<Path>>(transcript_path: P) -> u32 {
         if let Ok(entry) = serde_json::from_str::<TranscriptEntry>(line) {
             if entry.r#type.as_deref() == Some("assistant") {
                 if let Some(message) = &entry.message {
-                    if let Some(usage) = &message.usage {
-                        return calculate_input_tokens(usage);
+                    if let Some(raw_usage) = &message.usage {
+                        let normalized = raw_usage.clone().normalize();
+                        // Use display_tokens() which prioritizes context-relevant tokens
+                        return normalized.display_tokens();
                     }
                 }
             }
@@ -85,29 +87,4 @@ fn parse_transcript_usage<P: AsRef<Path>>(transcript_path: P) -> u32 {
     }
 
     0
-}
-
-fn calculate_input_tokens(usage: &crate::config::Usage) -> u32 {
-    // Priority 1: total_tokens (most accurate, includes all costs)
-    if let Some(total_tokens) = usage.total_tokens {
-        return total_tokens;
-    }
-
-    // Priority 2: Claude complete format (backward compatibility)
-    let claude_input = usage.input_tokens.unwrap_or(0)
-        + usage.cache_creation_input_tokens.unwrap_or(0)
-        + usage.cache_read_input_tokens.unwrap_or(0);
-
-    if claude_input > 0 {
-        return claude_input;
-    }
-
-    // Priority 3: OpenAI manual calculation (fallback)
-    if let Some(prompt_tokens) = usage.prompt_tokens {
-        let completion_tokens = usage.completion_tokens.or(usage.output_tokens).unwrap_or(0);
-        return prompt_tokens + completion_tokens;
-    }
-
-    // Priority 4: Input tokens only (last resort)
-    usage.input_tokens.or(usage.prompt_tokens).unwrap_or(0)
 }
