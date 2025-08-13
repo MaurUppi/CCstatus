@@ -1,5 +1,7 @@
 use crate::config::{Config, InputData};
-use crate::core::segments::{DirectorySegment, GitSegment, ModelSegment, Segment, UsageSegment};
+use crate::core::segments::{
+    DirectorySegment, GitSegment, ModelSegment, Segment, UpdateSegment, UsageSegment,
+};
 
 pub struct StatusLineGenerator {
     config: Config,
@@ -43,6 +45,13 @@ impl StatusLineGenerator {
             let usage_segment = UsageSegment::new(true);
             let content = usage_segment.render(input);
             segments.push(format!("\x1b[1;35m{}\x1b[0m", content));
+        }
+
+        // Add update segment (always enabled when there's an update)
+        let update_segment = UpdateSegment::new();
+        if update_segment.enabled() {
+            let content = update_segment.render(input);
+            segments.push(format!("\x1b[1;37m{}\x1b[0m", content));
         }
 
         // Join segments with white separator

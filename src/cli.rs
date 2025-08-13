@@ -2,7 +2,7 @@ use clap::Parser;
 
 #[derive(Parser, Debug)]
 #[command(name = "CCometixLine (ccline)")]
-#[command(version = env!("CARGO_PKG_VERSION"))]
+#[command(disable_version_flag = true)]
 #[command(
     about = "CCometixLine (ccline) - High-performance Claude Code StatusLine tool written in Rust"
 )]
@@ -33,6 +33,14 @@ pub struct Cli {
     /// Validate configuration file
     #[arg(long)]
     pub validate: bool,
+
+    /// Update to the latest version
+    #[arg(long)]
+    pub update: bool,
+
+    /// Show current version
+    #[arg(short = 'v', long = "version")]
+    pub version: bool,
 }
 
 impl Cli {
