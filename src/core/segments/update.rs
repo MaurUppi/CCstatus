@@ -15,6 +15,12 @@ impl UpdateSegment {
     }
 }
 
+impl Default for UpdateSegment {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Segment for UpdateSegment {
     fn render(&self, _input: &InputData) -> String {
         self.state.status_text().unwrap_or_default()

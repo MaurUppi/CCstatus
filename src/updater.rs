@@ -4,9 +4,10 @@ use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 
 /// Update status enum
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum UpdateStatus {
     /// Idle state, no update activity
+    #[default]
     Idle,
     /// Currently checking for updates
     Checking,
@@ -40,12 +41,6 @@ pub struct UpdateState {
     pub update_pid: Option<u32>,
 }
 
-impl Default for UpdateStatus {
-    fn default() -> Self {
-        UpdateStatus::Idle
-    }
-}
-
 impl UpdateState {
     /// Get status bar display text
     pub fn status_text(&self) -> Option<String> {
@@ -55,7 +50,7 @@ impl UpdateState {
             #[cfg(not(feature = "self-update"))]
             UpdateStatus::Ready { version, .. } => Some(format!("\u{f06b0} Update v{}!", version)),
             UpdateStatus::Downloading { progress } => Some(format!("\u{f01da} {}%", progress)),
-            UpdateStatus::Installing => Some(format!("\u{f01da} Installing...")),
+            UpdateStatus::Installing => Some("\u{f01da} Installing...".to_string()),
             #[cfg(feature = "self-update")]
             UpdateStatus::Completed {
                 version,
@@ -152,7 +147,7 @@ impl UpdateState {
                 }
             }
 
-            return state;
+            state
         }
 
         #[cfg(not(feature = "self-update"))]
@@ -299,9 +294,9 @@ pub mod github {
         {
             // glibc 2.35 is the watershed - use static for older systems
             if should_use_static_binary() {
-                return "linux-x64-static.tar.gz".to_string();
+                "linux-x64-static.tar.gz".to_string()
             } else {
-                return "linux-x64.tar.gz".to_string();
+                "linux-x64.tar.gz".to_string()
             }
         }
 
