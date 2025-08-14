@@ -10,7 +10,7 @@ pub enum UpdateStatus {
     Idle,
     /// Currently checking for updates
     Checking,
-    /// New version found, will auto-update in 3 seconds
+    /// New version found, manual update required
     Ready {
         version: String,
         found_at: DateTime<Utc>,
@@ -51,17 +51,7 @@ impl UpdateState {
     pub fn status_text(&self) -> Option<String> {
         match &self.status {
             #[cfg(feature = "self-update")]
-            UpdateStatus::Ready { version, found_at } => {
-                let now = Utc::now();
-                let seconds_passed = now.signed_duration_since(*found_at).num_seconds();
-                let remaining = 3 - seconds_passed;
-
-                if remaining > 0 {
-                    Some(format!("\u{f06b0} Update v{}! ({}s)", version, remaining))
-                } else {
-                    Some(format!("\u{f01da} Starting update..."))
-                }
-            }
+            UpdateStatus::Ready { version, .. } => Some(format!("\u{f06b0} Update v{}!", version)),
             #[cfg(not(feature = "self-update"))]
             UpdateStatus::Ready { version, .. } => Some(format!("\u{f06b0} Update v{}!", version)),
             UpdateStatus::Downloading { progress } => Some(format!("\u{f01da} {}%", progress)),
@@ -135,14 +125,12 @@ impl UpdateState {
                     // Perform update check
                     match check_for_updates() {
                         Ok(Some(release)) => {
-                            if let Some(asset) = release.find_asset_for_platform() {
-                                // Set Ready status with timestamp, auto-update will start after 3 seconds
+                            if release.find_asset_for_platform().is_some() {
+                                // Set Ready status with timestamp, user must run --update manually
                                 state.status = UpdateStatus::Ready {
                                     version: release.version(),
                                     found_at: chrono::Utc::now(),
                                 };
-                                // Start background thread to handle delayed auto-update
-                                Self::spawn_delayed_auto_update(release.clone(), asset.clone());
                             } else {
                                 state.status = UpdateStatus::Failed {
                                     error: "No compatible asset found".to_string(),
@@ -168,148 +156,6 @@ impl UpdateState {
         }
 
         #[cfg(not(feature = "self-update"))]
-        UpdateState {
-            current_version: env!("CARGO_PKG_VERSION").to_string(),
-            ..Default::default()
-        }
-    }
-
-    /// Spawn delayed automatic update process (waits 3 seconds)
-    #[cfg(feature = "self-update")]
-    fn spawn_delayed_auto_update(
-        release: crate::updater::github::GitHubRelease,
-        asset: crate::updater::github::ReleaseAsset,
-    ) {
-        std::thread::spawn(move || {
-            // Wait 3 seconds for user to see the countdown
-            std::thread::sleep(std::time::Duration::from_secs(3));
-            Self::perform_auto_update(release, asset);
-        });
-    }
-
-    /// Perform automatic update download and installation
-    #[cfg(feature = "self-update")]
-    fn perform_auto_update(
-        release: crate::updater::github::GitHubRelease,
-        asset: crate::updater::github::ReleaseAsset,
-    ) {
-        use std::fs::File;
-        use std::io::{Read, Write};
-
-        let version = release.version();
-
-        // Download to our ccline directory
-        let ccline_dir = dirs::home_dir()
-            .unwrap_or_default()
-            .join(".claude")
-            .join("ccline");
-        let _ = std::fs::create_dir_all(&ccline_dir);
-        let temp_file = ccline_dir.join(format!("ccline-update-{}.tmp", version));
-
-        // Download with progress updates
-        match ureq::get(&asset.browser_download_url).call() {
-            Ok(response) => {
-                let total_size = asset.size;
-                let mut downloaded = 0u64;
-                let mut buffer = [0u8; 8192];
-
-                if let Ok(mut file) = File::create(&temp_file) {
-                    let mut reader = response.into_reader();
-
-                    loop {
-                        match reader.read(&mut buffer) {
-                            Ok(0) => break, // EOF
-                            Ok(bytes_read) => {
-                                if file.write_all(&buffer[..bytes_read]).is_err() {
-                                    break;
-                                }
-                                downloaded += bytes_read as u64;
-
-                                // Update progress
-                                let progress = if total_size > 0 {
-                                    ((downloaded as f64 / total_size as f64) * 100.0) as u8
-                                } else {
-                                    50 // Unknown size, show 50%
-                                };
-
-                                Self::update_download_progress(progress);
-
-                                if progress >= 100 {
-                                    break;
-                                }
-                            }
-                            Err(_) => break,
-                        }
-                    }
-
-                    // Download completed, start installation
-                    Self::install_update(&temp_file, &version);
-                } else {
-                    Self::set_update_failed("Failed to create temp file");
-                }
-            }
-            Err(_) => {
-                Self::set_update_failed("Download failed");
-            }
-        }
-    }
-
-    /// Update download progress
-    #[cfg(feature = "self-update")]
-    fn update_download_progress(progress: u8) {
-        let mut state = Self::load_without_check();
-        state.status = UpdateStatus::Downloading { progress };
-        let _ = state.save();
-    }
-
-    /// Install update from downloaded file
-    #[cfg(feature = "self-update")]
-    fn install_update(downloaded_file: &std::path::Path, version: &str) {
-        // Update status to installing
-        let mut state = Self::load_without_check();
-        state.status = UpdateStatus::Installing;
-        let _ = state.save();
-
-        // Simple installation simulation for now
-        std::thread::sleep(std::time::Duration::from_secs(2));
-
-        // Set completion status
-        state.status = UpdateStatus::Completed {
-            version: version.to_string(),
-            completed_at: chrono::Utc::now(),
-        };
-        let _ = state.save();
-
-        // Clean up temp file
-        let _ = std::fs::remove_file(downloaded_file);
-    }
-
-    /// Set update failed status
-    #[cfg(feature = "self-update")]
-    fn set_update_failed(error: &str) {
-        let mut state = Self::load_without_check();
-        state.status = UpdateStatus::Failed {
-            error: error.to_string(),
-        };
-        let _ = state.save();
-    }
-
-    /// Load state without triggering update check (internal use)
-    #[cfg(feature = "self-update")]
-    fn load_without_check() -> Self {
-        let config_dir = dirs::home_dir()
-            .unwrap_or_default()
-            .join(".claude")
-            .join("ccline");
-
-        let state_file = config_dir.join(".update_state.json");
-
-        if let Ok(content) = std::fs::read_to_string(&state_file) {
-            if let Ok(state) = serde_json::from_str::<UpdateState>(&content) {
-                return state;
-            }
-        }
-
         UpdateState {
             current_version: env!("CARGO_PKG_VERSION").to_string(),
             ..Default::default()
@@ -377,11 +223,11 @@ impl UpdateState {
             _ => {}
         }
 
-        // Check time interval (6 hours)
+        // Check time interval (1 hour)
         if let Some(last_check) = self.last_check {
             let now = Utc::now();
             let hours_passed = now.signed_duration_since(last_check).num_hours();
-            hours_passed >= 6
+            hours_passed >= 1
         } else {
             true
         }
@@ -452,7 +298,7 @@ pub mod github {
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
         {
             // glibc 2.35 is the watershed - use static for older systems
-            if Self::should_use_static_binary() {
+            if should_use_static_binary() {
                 return "linux-x64-static.tar.gz".to_string();
             } else {
                 return "linux-x64.tar.gz".to_string();
@@ -481,7 +327,7 @@ pub mod github {
             for line in version_output.lines() {
                 if line.contains("GNU libc") || line.contains("GLIBC") {
                     if let Some(version_part) = line.split_whitespace().last() {
-                        if let Some((major, minor)) = Self::parse_version(version_part) {
+                        if let Some((major, minor)) = parse_version(version_part) {
                             // Use dynamic binary if glibc >= 2.35, otherwise use static
                             return major < 2 || (major == 2 && minor < 35);
                         }
