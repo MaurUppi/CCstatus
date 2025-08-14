@@ -25,9 +25,42 @@ The statusline shows: Model | Directory | Git Branch Status | Context Window Inf
 
 ## Installation
 
-Download from [Releases](https://github.com/Haleclipse/CCometixLine/releases):
+### Quick Install (Recommended)
 
-### Linux
+Install via npm (works on all platforms):
+
+```bash
+# Install globally
+npm install -g @cometix/ccline
+
+# Or using yarn
+yarn global add @cometix/ccline
+
+# Or using pnpm
+pnpm add -g @cometix/ccline
+```
+
+Use npm mirror for faster download:
+```bash
+npm install -g @cometix/ccline --registry https://registry.npmmirror.com
+```
+
+After installation:
+- ✅ Global command `ccline` is available everywhere  
+- ✅ Automatically configured for Claude Code at `~/.claude/ccline/ccline`
+- ✅ Ready to use immediately!
+
+### Update
+
+```bash
+npm update -g @cometix/ccline
+```
+
+### Manual Installation
+
+Alternatively, download from [Releases](https://github.com/Haleclipse/CCometixLine/releases):
+
+#### Linux
 
 #### Option 1: Dynamic Binary (Recommended)
 ```bash

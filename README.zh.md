@@ -25,9 +25,42 @@
 
 ## 安装
 
-从 [Releases](https://github.com/Haleclipse/CCometixLine/releases) 下载：
+### 快速安装（推荐）
 
-### Linux
+通过 npm 安装（适用于所有平台）：
+
+```bash
+# 全局安装
+npm install -g @cometix/ccline
+
+# 或使用 yarn
+yarn global add @cometix/ccline
+
+# 或使用 pnpm
+pnpm add -g @cometix/ccline
+```
+
+使用镜像源加速下载：
+```bash
+npm install -g @cometix/ccline --registry https://registry.npmmirror.com
+```
+
+安装后：
+- ✅ 全局命令 `ccline` 可在任何地方使用
+- ✅ 自动配置 Claude Code 到 `~/.claude/ccline/ccline`
+- ✅ 立即可用！
+
+### 更新
+
+```bash
+npm update -g @cometix/ccline
+```
+
+### 手动安装
+
+或者从 [Releases](https://github.com/Haleclipse/CCometixLine/releases) 手动下载：
+
+#### Linux
 
 #### 选项 1: 动态链接版本（推荐）
 ```bash

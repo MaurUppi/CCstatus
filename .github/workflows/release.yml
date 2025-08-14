@@ -99,3 +99,88 @@ jobs:
         generate_release_notes: true
         draft: false
         prerelease: false
+
+    - name: Setup Node.js for NPM
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        registry-url: 'https://registry.npmjs.org'
+
+    - name: Extract binaries from archives
+      run: |
+        mkdir -p extracted
+        
+        # macOS x64
+        tar -xzf artifacts/ccline-macos-x64.tar.gz/ccline-macos-x64.tar.gz -C extracted
+        mv extracted/ccline extracted/ccline-darwin-x64
+        
+        # macOS ARM64
+        tar -xzf artifacts/ccline-macos-arm64.tar.gz/ccline-macos-arm64.tar.gz -C extracted
+        mv extracted/ccline extracted/ccline-darwin-arm64
+        
+        # Linux x64
+        tar -xzf artifacts/ccline-linux-x64.tar.gz/ccline-linux-x64.tar.gz -C extracted
+        mv extracted/ccline extracted/ccline-linux-x64
+        
+        # Linux musl (static)
+        tar -xzf artifacts/ccline-linux-x64-static.tar.gz/ccline-linux-x64-static.tar.gz -C extracted
+        mv extracted/ccline extracted/ccline-linux-x64-musl
+        
+        # Windows
+        unzip artifacts/ccline-windows-x64.zip/ccline-windows-x64.zip -d extracted
+        mv extracted/ccline.exe extracted/ccline-win32-x64.exe
+        
+        # List extracted files
+        ls -la extracted/
+
+    - name: Prepare NPM packages
+      run: |
+        # Prepare packages with version management
+        node npm/scripts/prepare-packages.js
+        
+        # Copy binaries to platform directories
+        cp extracted/ccline-darwin-x64 npm-publish/darwin-x64/ccline
+        cp extracted/ccline-darwin-arm64 npm-publish/darwin-arm64/ccline
+        cp extracted/ccline-linux-x64 npm-publish/linux-x64/ccline
+        cp extracted/ccline-linux-x64-musl npm-publish/linux-x64-musl/ccline
+        cp extracted/ccline-win32-x64.exe npm-publish/win32-x64/ccline.exe
+        
+        # Set executable permissions for Unix binaries
+        chmod +x npm-publish/darwin-x64/ccline
+        chmod +x npm-publish/darwin-arm64/ccline
+        chmod +x npm-publish/linux-x64/ccline
+        chmod +x npm-publish/linux-x64-musl/ccline
+        
+        # Verify packages
+        echo "Package structure:"
+        find npm-publish -name "package.json" -exec echo "=== {} ===" \; -exec head -5 {} \;
+
+    - name: Publish platform packages to NPM
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      run: |
+        # Publish platform packages first
+        for platform in darwin-x64 darwin-arm64 linux-x64 linux-x64-musl win32-x64; do
+          echo "📦 Publishing @cometix/ccline-$platform"
+          cd npm-publish/$platform
+          npm publish --access public
+          cd ../..
+          echo "✅ Published @cometix/ccline-$platform"
+        done
+
+    - name: Wait for NPM registry
+      run: |
+        echo "⏳ Waiting for platform packages to be available on NPM..."
+        sleep 30
+
+    - name: Publish main package to NPM
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      run: |
+        cd npm-publish/main
+        echo "📦 Publishing @cometix/ccline"
+        npm publish --access public
+        echo "✅ Published @cometix/ccline"
+        echo ""
+        echo "🎉 NPM packages published successfully!"
+        echo "Install with: npm install -g @cometix/ccline"
