@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2025-08-16
+
+### Added
+- **Interactive TUI Mode**: Full-featured terminal user interface with ratatui
+  - Real-time statusline preview while editing configuration
+  - Live theme switching with instant visual feedback
+  - Intuitive keyboard navigation (Tab, Escape, Enter, Arrow keys)
+  - Comprehensive help system with context-sensitive guidance
+- **Comprehensive Theme System**: Modular theme architecture with multiple presets
+  - Default, Minimal, Powerline, Compact themes included
+  - Custom color schemes and icon sets
+  - Theme validation and error reporting
+  - Powerline theme importer for external theme compatibility
+- **Enhanced Configuration System**: Robust config management with validation
+  - TOML-based configuration with schema validation
+  - Dynamic config loading with intelligent defaults
+  - Interactive mode support and theme selection
+  - Configuration error handling and user feedback
+- **Advanced Segment System**: Modular statusline segments with improved functionality
+  - Enhanced Git segment with stash detection and conflict status
+  - Model segment with simplified display names for Claude models
+  - Directory segment with customizable display options
+  - Usage segment with better token calculation accuracy
+  - Update segment for version management and notifications
+- **CLI Interface Enhancements**: Improved command-line experience
+  - `--interactive` flag for launching TUI configuration mode
+  - Enhanced argument parsing with better error messages
+  - Theme selection via command line options
+  - Comprehensive help and version information
+
+### Changed
+- **Architecture**: Complete modularization of codebase for better maintainability
+  - Separated core logic from presentation layer
+  - Improved error handling throughout all modules
+  - Better separation of concerns between data and UI
+- **Dependencies**: Added TUI and terminal handling capabilities
+  - ratatui for terminal user interface components
+  - crossterm for cross-platform terminal manipulation
+  - ansi_term and ansi-to-tui for color processing
+- **Configuration**: Enhanced config structure for theme and interactive mode support
+  - Expanded config types to support new features
+  - Improved validation and default value handling
+  - Better error messages for configuration issues
+
+### Technical Improvements
+- **Performance**: Optimized statusline generation and rendering
+- **Code Quality**: Comprehensive refactoring with improved error handling
+- **User Experience**: Intuitive interface design with immediate visual feedback
+- **Extensibility**: Modular architecture allows easy addition of new themes and segments
+
+### Breaking Changes
+- Configuration file format has been extended (backward compatible for basic usage)
+- Some internal APIs have been restructured for better modularity
+- Minimum supported features now include optional TUI dependencies
+
 ## [0.1.1] - 2025-08-12
 
 ### Added
