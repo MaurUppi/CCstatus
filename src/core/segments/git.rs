@@ -1,5 +1,6 @@
-use super::Segment;
-use crate::config::InputData;
+use super::{Segment, SegmentData};
+use crate::config::{InputData, SegmentId};
+use std::collections::HashMap;
 use std::process::Command;
 
 #[derive(Debug)]
@@ -19,16 +20,18 @@ pub enum GitStatus {
 }
 
 pub struct GitSegment {
-    enabled: bool,
     show_sha: bool,
 }
 
+impl Default for GitSegment {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GitSegment {
-    pub fn new(enabled: bool) -> Self {
-        Self {
-            enabled,
-            show_sha: false,
-        }
+    pub fn new() -> Self {
+        Self { show_sha: false }
     }
 
     pub fn with_sha(mut self, show_sha: bool) -> Self {
@@ -37,7 +40,6 @@ impl GitSegment {
     }
 
     fn get_git_info(&self, working_dir: &str) -> Option<GitInfo> {
-        // First check if we're in a Git repository
         if !self.is_git_repository(working_dir) {
             return None;
         }
@@ -72,7 +74,6 @@ impl GitSegment {
     }
 
     fn get_branch(&self, working_dir: &str) -> Option<String> {
-        // Try modern Git 2.22+ command first
         if let Ok(output) = Command::new("git")
             .args(["branch", "--show-current"])
             .current_dir(working_dir)
@@ -86,7 +87,6 @@ impl GitSegment {
             }
         }
 
-        // Fallback for older Git versions (< 2.22)
         if let Ok(output) = Command::new("git")
             .args(["symbolic-ref", "--short", "HEAD"])
             .current_dir(working_dir)
@@ -117,7 +117,6 @@ impl GitSegment {
                     return GitStatus::Clean;
                 }
 
-                // Check for merge conflict markers
                 if status_text.contains("UU")
                     || status_text.contains("AA")
                     || status_text.contains("DD")
@@ -170,50 +169,50 @@ impl GitSegment {
             None
         }
     }
-
-    fn format_git_status(&self, info: &GitInfo) -> String {
-        let mut parts = Vec::new();
-
-        // Branch name with Nerd Font branch icon
-        parts.push(format!("\u{f02a2} {}", info.branch));
-
-        // Status indicators using simple Unicode symbols
-        match info.status {
-            GitStatus::Clean => parts.push("✓".to_string()),
-            GitStatus::Dirty => parts.push("●".to_string()),
-            GitStatus::Conflicts => parts.push("⚠".to_string()),
-        }
-
-        // Remote tracking status with arrows
-        if info.ahead > 0 {
-            parts.push(format!("↑{}", info.ahead));
-        }
-        if info.behind > 0 {
-            parts.push(format!("↓{}", info.behind));
-        }
-
-        // Short SHA hash
-        if let Some(ref sha) = info.sha {
-            parts.push(sha.clone());
-        }
-
-        parts.join(" ")
-    }
 }
 
 impl Segment for GitSegment {
-    fn render(&self, input: &InputData) -> String {
-        if !self.enabled {
-            return String::new();
+    fn collect(&self, input: &InputData) -> Option<SegmentData> {
+        let git_info = self.get_git_info(&input.workspace.current_dir)?;
+
+        let mut metadata = HashMap::new();
+        metadata.insert("branch".to_string(), git_info.branch.clone());
+        metadata.insert("status".to_string(), format!("{:?}", git_info.status));
+        metadata.insert("ahead".to_string(), git_info.ahead.to_string());
+        metadata.insert("behind".to_string(), git_info.behind.to_string());
+
+        if let Some(ref sha) = git_info.sha {
+            metadata.insert("sha".to_string(), sha.clone());
         }
 
-        match self.get_git_info(&input.workspace.current_dir) {
-            Some(git_info) => self.format_git_status(&git_info),
-            None => String::new(), // Not in a Git repository
+        let primary = git_info.branch;
+        let mut status_parts = Vec::new();
+
+        match git_info.status {
+            GitStatus::Clean => status_parts.push("✓".to_string()),
+            GitStatus::Dirty => status_parts.push("●".to_string()),
+            GitStatus::Conflicts => status_parts.push("⚠".to_string()),
         }
+
+        if git_info.ahead > 0 {
+            status_parts.push(format!("↑{}", git_info.ahead));
+        }
+        if git_info.behind > 0 {
+            status_parts.push(format!("↓{}", git_info.behind));
+        }
+
+        if let Some(ref sha) = git_info.sha {
+            status_parts.push(sha.clone());
+        }
+
+        Some(SegmentData {
+            primary,
+            secondary: status_parts.join(" "),
+            metadata,
+        })
     }
 
-    fn enabled(&self) -> bool {
-        self.enabled
+    fn id(&self) -> SegmentId {
+        SegmentId::Git
     }
 }

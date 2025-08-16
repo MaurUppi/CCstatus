@@ -4,11 +4,20 @@ pub mod model;
 pub mod update;
 pub mod usage;
 
-use crate::config::InputData;
+use crate::config::{InputData, SegmentId};
+use std::collections::HashMap;
 
+// New Segment trait for data collection only
 pub trait Segment {
-    fn render(&self, input: &InputData) -> String;
-    fn enabled(&self) -> bool;
+    fn collect(&self, input: &InputData) -> Option<SegmentData>;
+    fn id(&self) -> SegmentId;
+}
+
+#[derive(Debug, Clone)]
+pub struct SegmentData {
+    pub primary: String,
+    pub secondary: String,
+    pub metadata: HashMap<String, String>,
 }
 
 // Re-export all segment types

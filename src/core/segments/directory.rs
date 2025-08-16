@@ -1,36 +1,33 @@
-use super::Segment;
-use crate::config::InputData;
-use std::path::Path;
+use super::{Segment, SegmentData};
+use crate::config::{InputData, SegmentId};
+use std::collections::HashMap;
 
-pub struct DirectorySegment {
-    enabled: bool,
-}
+#[derive(Default)]
+pub struct DirectorySegment;
 
 impl DirectorySegment {
-    pub fn new(enabled: bool) -> Self {
-        Self { enabled }
+    pub fn new() -> Self {
+        Self
     }
 }
 
 impl Segment for DirectorySegment {
-    fn render(&self, input: &InputData) -> String {
-        if !self.enabled {
-            return String::new();
-        }
+    fn collect(&self, input: &InputData) -> Option<SegmentData> {
+        let current_dir = &input.workspace.current_dir;
+        let dir_name = current_dir
+            .split('/')
+            .next_back()
+            .unwrap_or("root")
+            .to_string();
 
-        let dir_name = get_current_dir_name(&input.workspace.current_dir);
-        format!("\u{f024b} {}", dir_name)
+        Some(SegmentData {
+            primary: dir_name,
+            secondary: String::new(),
+            metadata: HashMap::new(),
+        })
     }
 
-    fn enabled(&self) -> bool {
-        self.enabled
+    fn id(&self) -> SegmentId {
+        SegmentId::Directory
     }
-}
-
-fn get_current_dir_name<P: AsRef<Path>>(path: P) -> String {
-    path.as_ref()
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("unknown")
-        .to_string()
 }

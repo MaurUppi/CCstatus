@@ -1,30 +1,27 @@
-use super::Segment;
-use crate::config::InputData;
+use super::{Segment, SegmentData};
+use crate::config::{InputData, SegmentId};
+use std::collections::HashMap;
 
-pub struct ModelSegment {
-    enabled: bool,
-}
+#[derive(Default)]
+pub struct ModelSegment;
 
 impl ModelSegment {
-    pub fn new(enabled: bool) -> Self {
-        Self { enabled }
+    pub fn new() -> Self {
+        Self
     }
 }
 
 impl Segment for ModelSegment {
-    fn render(&self, input: &InputData) -> String {
-        if !self.enabled {
-            return String::new();
-        }
-
-        format!(
-            "\u{e26d} {}",
-            self.format_model_name(&input.model.display_name)
-        )
+    fn collect(&self, input: &InputData) -> Option<SegmentData> {
+        Some(SegmentData {
+            primary: self.format_model_name(&input.model.display_name),
+            secondary: String::new(),
+            metadata: HashMap::new(),
+        })
     }
 
-    fn enabled(&self) -> bool {
-        self.enabled
+    fn id(&self) -> SegmentId {
+        SegmentId::Model
     }
 }
 

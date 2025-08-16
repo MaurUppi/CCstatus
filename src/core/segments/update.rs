@@ -1,32 +1,29 @@
-use crate::config::InputData;
-use crate::core::segments::Segment;
+use super::{Segment, SegmentData};
+use crate::config::{InputData, SegmentId};
 use crate::updater::UpdateState;
 
-/// Update notification segment
-pub struct UpdateSegment {
-    state: UpdateState,
-}
+#[derive(Default)]
+pub struct UpdateSegment;
 
 impl UpdateSegment {
     pub fn new() -> Self {
-        Self {
-            state: UpdateState::load(),
-        }
-    }
-}
-
-impl Default for UpdateSegment {
-    fn default() -> Self {
-        Self::new()
+        Self
     }
 }
 
 impl Segment for UpdateSegment {
-    fn render(&self, _input: &InputData) -> String {
-        self.state.status_text().unwrap_or_default()
+    fn collect(&self, _input: &InputData) -> Option<SegmentData> {
+        // Load update state and check for update status
+        let update_state = UpdateState::load();
+
+        update_state.status_text().map(|status_text| SegmentData {
+            primary: status_text,
+            secondary: String::new(),
+            metadata: std::collections::HashMap::new(),
+        })
     }
 
-    fn enabled(&self) -> bool {
-        self.state.status_text().is_some()
+    fn id(&self) -> SegmentId {
+        SegmentId::Update
     }
 }
