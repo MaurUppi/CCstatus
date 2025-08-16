@@ -1,46 +1,32 @@
 use clap::Parser;
 
 #[derive(Parser, Debug)]
-#[command(name = "CCometixLine (ccline)")]
-#[command(disable_version_flag = true)]
-#[command(
-    about = "CCometixLine (ccline) - High-performance Claude Code StatusLine tool written in Rust"
-)]
-#[command(
-    long_about = concat!(
-        "CCometixLine (ccline) v", env!("CARGO_PKG_VERSION"), "\n",
-        "A high-performance Claude Code StatusLine tool written in Rust.\n",
-        "Provides real-time usage tracking, Git integration, and customizable themes."
-    )
-)]
+#[command(name = "ccline")]
+#[command(version, about = "High-performance Claude Code StatusLine")]
 pub struct Cli {
-    /// Configuration file path
-    #[arg(short, long)]
-    pub config: Option<String>,
+    /// Enter TUI configuration mode
+    #[arg(short = 'c', long = "config")]
+    pub config: bool,
 
-    /// Theme selection
-    #[arg(short, long, default_value = "dark")]
-    pub theme: String,
+    /// Set theme
+    #[arg(short = 't', long = "theme")]
+    pub theme: Option<String>,
 
-    /// Enable TUI configuration mode
-    #[arg(long)]
-    pub configure: bool,
+    /// Print current configuration
+    #[arg(long = "print")]
+    pub print: bool,
 
-    /// Print default configuration
-    #[arg(long)]
-    pub print_config: bool,
+    /// Initialize config file
+    #[arg(long = "init")]
+    pub init: bool,
 
-    /// Validate configuration file
-    #[arg(long)]
-    pub validate: bool,
+    /// Check configuration
+    #[arg(long = "check")]
+    pub check: bool,
 
-    /// Update to the latest version
-    #[arg(long)]
+    /// Check for updates
+    #[arg(short = 'u', long = "update")]
     pub update: bool,
-
-    /// Show current version
-    #[arg(short = 'v', long = "version")]
-    pub version: bool,
 }
 
 impl Cli {
