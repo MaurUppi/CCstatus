@@ -1,25 +1,11 @@
-use super::types::{Config, SegmentsConfig};
+// Legacy defaults - now using ui/themes/presets.rs for configuration
+// This file kept for backward compatibility
 
-pub const DEFAULT_CONFIG: Config = Config {
-    theme: String::new(), // Set to "dark" at runtime
-    segments: SegmentsConfig {
-        directory: true,
-        git: true,
-        model: true,
-        usage: true,
-    },
-};
+use super::types::Config;
 
 impl Default for Config {
     fn default() -> Self {
-        Config {
-            theme: "dark".to_string(),
-            segments: SegmentsConfig {
-                directory: true,
-                git: true,
-                model: true,
-                usage: true,
-            },
-        }
+        // Use the theme presets as the source of truth
+        crate::ui::themes::ThemePresets::get_default()
     }
 }
