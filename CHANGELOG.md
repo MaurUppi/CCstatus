@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2025-08-17
+
+### Fixed
+- **Windows PowerShell Compatibility**: Fixed double key event triggering in TUI interface
+  - Resolved issue #18 where keystrokes were registered twice on Windows PowerShell
+  - Added proper KeyEventKind filtering to only process key press events
+  - Maintained cross-platform compatibility with Unix/Linux/macOS systems
+
+### Technical Details
+- Import KeyEventKind from crossterm::event module  
+- Filter out KeyUp events to prevent double triggering on Windows Console API
+- Uses efficient continue statement to skip non-press events
+- No impact on existing behavior on Unix-based systems
+
 ## [1.0.1] - 2025-08-17
 
 ### Fixed
