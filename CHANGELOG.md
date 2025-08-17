@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2025-08-17
+
+### Fixed
+- NPM package publishing workflow compatibility issues
+- Cargo.lock version synchronization with package version
+- GitHub Actions release pipeline for NPM distribution
+
+### Changed
+- Enhanced npm postinstall script with improved binary lookup for different package managers
+- Better error handling and user feedback in installation process
+- Improved cross-platform compatibility for npm package installation
+
+### Technical
+- Updated dependency versions (bitflags, proc-macro2)
+- Resolved NPM version conflict preventing 1.0.0 re-publication
+- Ensured proper version alignment across all distribution channels
+
 ## [1.0.0] - 2025-08-16
 
 ### Added
