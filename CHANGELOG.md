@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2025-08-17
+
+### Fixed
+- **TUI Preview Display**: Complete redesign of preview system for cross-platform reliability
+  - Replaced environment-dependent segment collection with pure mock data generation
+  - Fixed Git segment not showing in preview on Windows and Linux systems
+  - Ensures consistent preview display across all supported platforms
+- **Documentation Accuracy**: Corrected CLI parameter reference from `--interactive` to `--config`
+  - Fixed changelog and documentation to reflect actual CLI parameters
+- **Preview Data Quality**: Enhanced mock data to better represent actual usage
+  - Usage segment now displays proper format: "78.2% · 156.4k"
+  - Update segment displays dynamic version number from Cargo.toml
+  - All segments show realistic and informative preview data
+
+### Changed
+- **Preview Architecture**: Complete rewrite of preview component for better maintainability
+  - Removed dependency on real file system and Git repository detection
+  - Implemented `generate_mock_segments_data()` for environment-independent previews
+  - Simplified code structure and improved performance
+  - Preview now works reliably in any environment without external dependencies
+
+### Technical Details
+- Environment-independent mock data generation for all segment types
+- Dynamic version display using `env!("CARGO_PKG_VERSION")`
+- Optimized preview rendering without file system calls or Git operations
+- Consistent cross-platform display: "Sonnet 4 | CCometixLine | main ✓ | 78.2% · 156.4k"
+
 ## [1.0.2] - 2025-08-17
 
 ### Fixed
@@ -61,7 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Usage segment with better token calculation accuracy
   - Update segment for version management and notifications
 - **CLI Interface Enhancements**: Improved command-line experience
-  - `--interactive` flag for launching TUI configuration mode
+  - `--config` flag for launching TUI configuration mode
   - Enhanced argument parsing with better error messages
   - Theme selection via command line options
   - Comprehensive help and version information
@@ -75,7 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - ratatui for terminal user interface components
   - crossterm for cross-platform terminal manipulation
   - ansi_term and ansi-to-tui for color processing
-- **Configuration**: Enhanced config structure for theme and interactive mode support
+- **Configuration**: Enhanced config structure for theme and TUI mode support
   - Expanded config types to support new features
   - Improved validation and default value handling
   - Better error messages for configuration issues

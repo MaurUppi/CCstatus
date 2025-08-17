@@ -1,12 +1,13 @@
-use crate::config::Config;
-// Use core module's unified exports directly
-use crate::core::{collect_all_segments, StatusLineGenerator};
+use crate::config::{Config, SegmentId};
+use crate::core::segments::SegmentData;
+use crate::core::StatusLineGenerator;
 use ratatui::{
     layout::Rect,
     text::{Line, Text},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
+use std::collections::HashMap;
 
 pub struct PreviewComponent {
     preview_cache: String,
@@ -32,18 +33,9 @@ impl PreviewComponent {
     }
 
     pub fn update_preview_with_width(&mut self, config: &Config, width: u16) {
-        // Generate preview mock data
-        let mock_input = crate::config::InputData {
-            model: crate::config::Model {
-                display_name: "claude-4-sonnet-20250512".to_string(),
-            },
-            workspace: crate::config::Workspace {
-                current_dir: "/Users/haleclipse/WorkSpace/CCometixLine".to_string(),
-            },
-            transcript_path: "mock_preview".to_string(),
-        };
-        // Collect segment data
-        let segments_data = collect_all_segments(config, &mock_input);
+        // Generate mock segments data directly for preview
+        let segments_data = self.generate_mock_segments_data(config);
+
         // Generate both string and TUI text versions
         let renderer = StatusLineGenerator::new(config.clone());
 
@@ -87,5 +79,81 @@ impl PreviewComponent {
 
     pub fn get_preview_cache(&self) -> &str {
         &self.preview_cache
+    }
+
+    /// Generate mock segments data for preview display
+    /// This creates perfect preview data without depending on real environment
+    fn generate_mock_segments_data(
+        &self,
+        config: &Config,
+    ) -> Vec<(crate::config::SegmentConfig, SegmentData)> {
+        let mut segments_data = Vec::new();
+
+        for segment_config in &config.segments {
+            if !segment_config.enabled {
+                continue;
+            }
+
+            let mock_data = match segment_config.id {
+                SegmentId::Model => SegmentData {
+                    primary: "Sonnet 4".to_string(),
+                    secondary: "".to_string(),
+                    metadata: {
+                        let mut map = HashMap::new();
+                        map.insert("model".to_string(), "claude-4-sonnet-20250512".to_string());
+                        map
+                    },
+                },
+                SegmentId::Directory => SegmentData {
+                    primary: "CCometixLine".to_string(),
+                    secondary: "".to_string(),
+                    metadata: {
+                        let mut map = HashMap::new();
+                        map.insert("current_dir".to_string(), "~/CCometixLine".to_string());
+                        map
+                    },
+                },
+                SegmentId::Git => SegmentData {
+                    primary: "master".to_string(),
+                    secondary: "✓".to_string(),
+                    metadata: {
+                        let mut map = HashMap::new();
+                        map.insert("branch".to_string(), "master".to_string());
+                        map.insert("status".to_string(), "Clean".to_string());
+                        map.insert("ahead".to_string(), "0".to_string());
+                        map.insert("behind".to_string(), "0".to_string());
+                        map
+                    },
+                },
+                SegmentId::Usage => SegmentData {
+                    primary: "78.2%".to_string(),
+                    secondary: "· 156.4k".to_string(),
+                    metadata: {
+                        let mut map = HashMap::new();
+                        map.insert("total_tokens".to_string(), "156400".to_string());
+                        map.insert("percentage".to_string(), "78.2".to_string());
+                        map.insert("session_tokens".to_string(), "48200".to_string());
+                        map
+                    },
+                },
+                SegmentId::Update => SegmentData {
+                    primary: format!("v{}", env!("CARGO_PKG_VERSION")),
+                    secondary: "".to_string(),
+                    metadata: {
+                        let mut map = HashMap::new();
+                        map.insert(
+                            "current_version".to_string(),
+                            env!("CARGO_PKG_VERSION").to_string(),
+                        );
+                        map.insert("update_available".to_string(), "false".to_string());
+                        map
+                    },
+                },
+            };
+
+            segments_data.push((segment_config.clone(), mock_data));
+        }
+
+        segments_data
     }
 }
