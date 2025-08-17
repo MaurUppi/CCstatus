@@ -11,7 +11,7 @@ use crate::ui::components::{
     theme_selector::ThemeSelectorComponent,
 };
 use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
+    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -97,6 +97,11 @@ impl App {
             terminal.draw(|f| app.ui(f))?;
 
             if let Event::Key(key) = event::read()? {
+                // Only handle KeyDown events to prevent double triggering on Windows
+                if key.kind != KeyEventKind::Press {
+                    continue;
+                }
+
                 // Handle popup events first
                 if app.name_input.is_open {
                     match key.code {
