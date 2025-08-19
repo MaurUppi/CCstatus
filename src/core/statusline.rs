@@ -97,40 +97,121 @@ impl StatusLineGenerator {
         use ansi_to_tui::IntoText;
         use ratatui::text::{Line, Span, Text};
 
-        // For simplicity, use the main generate method and wrap intelligently
-        let full_output = self.generate(segments);
+        let enabled_segments: Vec<_> = segments
+            .into_iter()
+            .filter(|(config, _)| config.enabled)
+            .collect();
 
-        let mut lines = Vec::new();
-        let output_width = visible_width(&full_output);
+        if enabled_segments.is_empty() {
+            return Text::from(vec![Line::default()]);
+        }
 
-        if output_width <= max_width as usize {
-            // Fits in one line
-            if let Ok(text) = full_output.into_text() {
-                if let Some(line) = text.lines.into_iter().next() {
-                    lines.push(line);
-                } else {
-                    lines.push(Line::from(vec![Span::raw(full_output)]));
-                }
-            } else {
-                lines.push(Line::from(vec![Span::raw(full_output)]));
-            }
-        } else {
-            // Need to wrap - for now, just use the full output and let ratatui handle it
-            if let Ok(text) = full_output.into_text() {
-                for line in text.lines {
-                    lines.push(line);
-                }
-            } else {
-                lines.push(Line::from(vec![Span::raw(full_output)]));
+        // Render each segment individually
+        let mut rendered_segments = Vec::new();
+        let mut segment_configs = Vec::new();
+
+        for (config, data) in &enabled_segments {
+            let rendered = self.render_segment(config, data);
+            if !rendered.is_empty() {
+                rendered_segments.push(rendered);
+                segment_configs.push(config.clone());
             }
         }
 
-        // If no lines were created, create an empty line
-        if lines.is_empty() {
-            lines.push(Line::default());
+        if rendered_segments.is_empty() {
+            return Text::from(vec![Line::default()]);
         }
 
-        Text::from(lines)
+        // Pre-calculate separators between segments
+        let mut separators = Vec::new();
+        for i in 0..rendered_segments.len().saturating_sub(1) {
+            let separator = if self.config.style.separator == "\u{e0b0}" {
+                // Powerline arrows with color transition
+                let prev_bg = segment_configs
+                    .get(i)
+                    .and_then(|config| config.colors.background.as_ref());
+                let curr_bg = segment_configs
+                    .get(i + 1)
+                    .and_then(|config| config.colors.background.as_ref());
+                self.create_powerline_arrow(prev_bg, curr_bg)
+            } else {
+                // Regular separators with white color
+                format!("\x1b[37m{}\x1b[0m", self.config.style.separator)
+            };
+            separators.push(separator);
+        }
+
+        // Intelligent line wrapping by segment
+        let mut lines: Vec<String> = Vec::new();
+        let mut current_line = String::new();
+        let mut current_width = 0usize;
+        let max_w = max_width as usize;
+
+        for i in 0..rendered_segments.len() {
+            let segment = &rendered_segments[i];
+            let segment_width = visible_width(segment);
+
+            // Check if adding this segment would exceed max_width
+            if current_width > 0 && current_width + segment_width > max_w {
+                // Current line would overflow, start a new line
+                lines.push(current_line.clone());
+                current_line.clear();
+                current_width = 0;
+            }
+
+            // Add the segment to current line
+            current_line.push_str(segment);
+            current_width += segment_width;
+
+            // Handle separator if not the last segment
+            if i < separators.len() {
+                let separator = &separators[i];
+                let separator_width = visible_width(separator);
+
+                // Check if next segment exists
+                if i + 1 < rendered_segments.len() {
+                    let next_segment = &rendered_segments[i + 1];
+                    let next_width = visible_width(next_segment);
+
+                    // Check if separator AND next segment both fit
+                    if current_width + separator_width + next_width <= max_w {
+                        // Both fit, add separator and continue on same line
+                        current_line.push_str(separator);
+                        current_width += separator_width;
+                    } else {
+                        // Separator and/or next segment don't fit
+                        // Don't add separator, just break line
+                        lines.push(current_line.clone());
+                        current_line.clear();
+                        current_width = 0;
+                    }
+                }
+            }
+        }
+
+        // Add the last line if it's not empty
+        if !current_line.is_empty() {
+            lines.push(current_line);
+        }
+
+        // Convert string lines to ratatui Text
+        let mut tui_lines = Vec::new();
+        for line in lines {
+            if let Ok(text) = line.into_text() {
+                for tui_line in text.lines {
+                    tui_lines.push(tui_line);
+                }
+            } else {
+                tui_lines.push(Line::from(vec![Span::raw(line)]));
+            }
+        }
+
+        // Ensure we have at least one line
+        if tui_lines.is_empty() {
+            tui_lines.push(Line::default());
+        }
+
+        Text::from(tui_lines)
     }
 
     fn render_segment(&self, config: &SegmentConfig, data: &SegmentData) -> String {

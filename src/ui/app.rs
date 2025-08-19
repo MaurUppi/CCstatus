@@ -282,30 +282,68 @@ impl App {
     }
 
     fn calculate_help_height(&self, total_width: u16) -> u16 {
-        // Get help text content
-        let help_text = if self.color_picker.is_open {
-            "Color Picker: [↑↓] Navigate  [Tab] Mode  [Enter] Select  [Esc] Cancel"
+        // Use same help_items as in help.render
+        let help_items = if self.color_picker.is_open {
+            vec![
+                "[↑↓] Navigate",
+                "[Tab] Mode",
+                "[Enter] Select",
+                "[Esc] Cancel",
+            ]
         } else if self.icon_selector.is_open {
-            "Icon Selector: [↑↓] Navigate  [Tab] Style  [C] Custom  [Enter] Select  [Esc] Cancel"
+            vec![
+                "[↑↓] Navigate",
+                "[Tab] Style",
+                "[C] Custom",
+                "[Enter] Select",
+                "[Esc] Cancel",
+            ]
         } else {
-            let status = self.status_message.as_deref().unwrap_or("");
-            &format!(
-                "[Tab] Switch Panel  [Enter] Toggle/Edit  [Shift+↑↓] Reorder  [1-4] Theme  [P] Cycle  [R] Reset  [E] Edit Separator  [S] Save  [Shift+S] Save Theme  [Esc] Quit  {}",
-                status
-            )
+            vec![
+                "[Tab] Switch Panel",
+                "[Enter] Toggle/Edit",
+                "[Shift+↑↓] Reorder",
+                "[1-4] Theme",
+                "[P] Switch Theme",
+                "[R] Reset",
+                "[E] Edit Separator",
+                "[S] Save Config",
+                "[W] Write Theme",
+                "[Ctrl+S] Save Theme",
+                "[Esc] Quit",
+            ]
         };
 
         let content_width = total_width.saturating_sub(2); // Remove borders
+        let mut lines_needed = 1u16;
+        let mut current_width = 0usize;
 
-        // Calculate lines needed for help text
-        let line_count = if help_text.len() <= content_width as usize {
-            1
-        } else {
-            help_text.len().div_ceil(content_width as usize)
-        };
+        // Use same logic as help.render for line wrapping
+        for (i, item) in help_items.iter().enumerate() {
+            let item_width = item.chars().count();
+            let needs_separator = i > 0 && current_width > 0;
+            let separator_width = if needs_separator { 2 } else { 0 };
+            let total_width = item_width + separator_width;
 
-        // Return height: content lines + borders
-        ((line_count + 2).max(3) as u16).min(6) // Minimum height of 3, max 6
+            if current_width + total_width > content_width as usize {
+                // Need new line
+                lines_needed += 1;
+                current_width = item_width;
+            } else {
+                if needs_separator {
+                    current_width += 2;
+                }
+                current_width += item_width;
+            }
+        }
+
+        // Add line for status message if present
+        if self.status_message.is_some() {
+            lines_needed += 1;
+        }
+
+        // Return height: content lines + borders, max 6
+        (lines_needed + 2).clamp(3, 6)
     }
 
     fn ui(&mut self, f: &mut Frame) {

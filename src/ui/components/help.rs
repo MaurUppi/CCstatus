@@ -57,24 +57,38 @@ impl HelpComponent {
         let content_width = area.width.saturating_sub(2); // Remove borders
         let mut lines = Vec::new();
         let mut current_line = String::new();
+        let mut current_width = 0usize;
 
         for (i, item) in help_items.iter().enumerate() {
-            let separator = if i == 0 { "" } else { "  " };
-            let item_with_sep = format!("{}{}", separator, item);
+            // Calculate item display width (character count)
+            let item_width = item.chars().count();
 
-            // Check if this item fits in current line
-            let would_fit = current_line.len() + item_with_sep.len() <= content_width as usize;
+            // Add separator for non-first items on the same line
+            let needs_separator = i > 0 && !current_line.is_empty();
+            let separator_width = if needs_separator { 2 } else { 0 };
+            let total_width = item_width + separator_width;
 
-            if would_fit || current_line.is_empty() {
-                current_line.push_str(&item_with_sep);
+            // Check if item fits on current line
+            if current_width + total_width <= content_width as usize {
+                // Item fits, add to current line
+                if needs_separator {
+                    current_line.push_str("  ");
+                    current_width += 2;
+                }
+                current_line.push_str(item);
+                current_width += item_width;
             } else {
-                // Start new line
-                lines.push(current_line);
-                current_line = item.to_string(); // No separator for first item on new line
+                // Item doesn't fit, start new line
+                if !current_line.is_empty() {
+                    lines.push(current_line);
+                }
+                current_line = item.to_string();
+                current_width = item_width;
             }
         }
 
-        if !current_line.trim().is_empty() {
+        // Add last line if not empty
+        if !current_line.is_empty() {
             lines.push(current_line);
         }
 
