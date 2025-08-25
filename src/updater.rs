@@ -353,14 +353,14 @@ pub mod github {
         let url = "https://api.github.com/repos/Haleclipse/CCometixLine/releases/latest";
 
         let response = ureq::get(url)
-            .set(
+            .header(
                 "User-Agent",
                 &format!("CCometixLine/{}", env!("CARGO_PKG_VERSION")),
             )
             .call()?;
 
         if response.status() == 200 {
-            let release: GitHubRelease = response.into_json()?;
+            let release: GitHubRelease = response.json()?;
 
             let current_version = env!("CARGO_PKG_VERSION");
             let latest_version = release.version();
@@ -375,7 +375,7 @@ pub mod github {
                 Ok(None)
             }
         } else {
-            Err(format!("HTTP {}: {}", response.status(), response.status_text()).into())
+            Err(format!("HTTP {}", response.status()).into())
         }
     }
 }
