@@ -11,7 +11,7 @@ fn test_error_tracker_creation() {
 fn test_record_error() {
     let mut tracker = ErrorTracker::new();
     
-    tracker.record_error(500, "ServerError".to_string(), "Internal Server Error".to_string());
+    tracker.record_error(500, "Internal Server Error".to_string());
     
     let latest = tracker.get_latest_error();
     assert!(latest.is_some());
@@ -55,7 +55,7 @@ fn test_red_window_decision() {
     assert!(!tracker.has_recent_errors(current_time));
     
     // Record recent error - should enter RED window
-    tracker.record_error(500, "ServerError".to_string(), "Server Error".to_string());
+    tracker.record_error(500, "Server Error".to_string());
     assert!(tracker.has_recent_errors(current_time));
     
     // Test with old timestamp - should not enter RED window
@@ -82,6 +82,7 @@ fn test_http_status_classification() {
     
     // Server errors
     assert_eq!(tracker.classify_http_status(500), "api_error");
+    assert_eq!(tracker.classify_http_status(502), "server_error"); // New: Bad Gateway classification
     assert_eq!(tracker.classify_http_status(504), "socket_hang_up");
     assert_eq!(tracker.classify_http_status(529), "overloaded_error");
     
@@ -196,11 +197,11 @@ fn test_error_statistics() {
         .as_millis() as u64;
     
     // Record various types of errors
-    tracker.record_error(401, "Authentication".to_string(), "Unauthorized".to_string());
-    tracker.record_error(429, "RateLimit".to_string(), "Too Many Requests".to_string());
-    tracker.record_error(500, "InternalServerError".to_string(), "Server Error".to_string());
-    tracker.record_error(502, "BadGateway".to_string(), "Bad Gateway".to_string());
-    tracker.record_error(529, "Overloaded".to_string(), "Overloaded".to_string());
+    tracker.record_error(401, "Unauthorized".to_string());
+    tracker.record_error(429, "Too Many Requests".to_string());
+    tracker.record_error(500, "Server Error".to_string());
+    tracker.record_error(502, "Bad Gateway".to_string());
+    tracker.record_error(529, "Overloaded".to_string());
     
     let stats = tracker.get_error_stats(5); // Last 5 minutes
     
@@ -218,7 +219,7 @@ fn test_error_statistics_time_window() {
     // Simulate old error by manipulating the internal timestamp
     // Since we can't directly manipulate timestamps in the current API,
     // we test with a reasonable expectation that recent errors are counted
-    tracker.record_error(500, "ServerError".to_string(), "Recent Error".to_string());
+    tracker.record_error(500, "Recent Error".to_string());
     
     // Get stats for last 1 minute
     let stats_1min = tracker.get_error_stats(1);
@@ -236,8 +237,8 @@ fn test_cleanup_old_errors() {
     let mut tracker = ErrorTracker::new();
     
     // Record some errors
-    tracker.record_error(500, "ServerError".to_string(), "Error 1".to_string());
-    tracker.record_error(502, "BadGateway".to_string(), "Error 2".to_string());
+    tracker.record_error(500, "Error 1".to_string());
+    tracker.record_error(502, "Error 2".to_string());
     
     // Initially should have errors
     assert_eq!(tracker.get_error_stats(60).total_errors, 2);
@@ -257,11 +258,7 @@ fn test_max_history_limit() {
     
     // Record more than max history (50 errors)
     for i in 0..60 {
-        tracker.record_error(
-            500, 
-            "ServerError".to_string(), 
-            format!("Error {}", i)
-        );
+        tracker.record_error(500, format!("Error {}", i));
     }
     
     // Should not exceed max history
@@ -293,9 +290,9 @@ fn test_mixed_error_scenarios() {
         .as_millis() as u64;
     
     // Scenario: Rate limiting followed by server errors
-    tracker.record_error(429, "RateLimit".to_string(), "Rate Limited".to_string());
-    tracker.record_error(500, "ServerError".to_string(), "Server Error".to_string());
-    tracker.record_error(502, "BadGateway".to_string(), "Bad Gateway".to_string());
+    tracker.record_error(429, "Rate Limited".to_string());
+    tracker.record_error(500, "Server Error".to_string());
+    tracker.record_error(502, "Bad Gateway".to_string());
     
     // Should enter RED window due to recent errors
     assert!(tracker.has_recent_errors(current_time));
@@ -309,4 +306,102 @@ fn test_mixed_error_scenarios() {
     let latest = tracker.get_latest_error().unwrap();
     assert_eq!(latest.http_status, 502);
     assert_eq!(latest.error_type, "server_error");
+}
+
+#[test]
+fn test_connection_error_classification_production_patterns() {
+    // Test patterns from actual production error logs
+    
+    // Original patterns from API-error.png
+    assert_eq!(ErrorTracker::classify_connection_error("API Error (Connection error.)"), "connection_error");
+    assert_eq!(ErrorTracker::classify_connection_error("TypeError (fetch failed)"), "connection_error");
+    assert_eq!(ErrorTracker::classify_connection_error("network error occurred"), "connection_error");
+    assert_eq!(ErrorTracker::classify_connection_error("timeout during request"), "connection_error");
+    assert_eq!(ErrorTracker::classify_connection_error("connection refused by server"), "connection_error");
+    
+    // New timeout patterns from CC-ErrorCode-1.png
+    assert_eq!(ErrorTracker::classify_connection_error("Request timed out."), "connection_error");
+    assert_eq!(ErrorTracker::classify_connection_error("API Error (Request timed out.)"), "connection_error");
+    assert_eq!(ErrorTracker::classify_connection_error("Retrying in 1 seconds... (attempt 1/10)"), "connection_error");
+    
+    // New SSL/Certificate patterns from CC-ErrorCode-1.png
+    assert_eq!(ErrorTracker::classify_connection_error("unknown certificate verification error"), "connection_error");
+    assert_eq!(ErrorTracker::classify_connection_error("Error (unknown certificate verification error)"), "connection_error");
+    assert_eq!(ErrorTracker::classify_connection_error("TLS handshake failed"), "connection_error");
+    assert_eq!(ErrorTracker::classify_connection_error("SSL connection error"), "connection_error");
+    
+    // New usage policy patterns from CC-ErrorCode-1.png  
+    assert_eq!(ErrorTracker::classify_connection_error("Claude Code is unable to respond to this request, which appears to violate our Usage Policy"), "invalid_request_error");
+    assert_eq!(ErrorTracker::classify_connection_error("usage policy violation detected"), "invalid_request_error");
+    
+    // Test fallback - was "network_error", now "unknown_error" for spec compliance
+    assert_eq!(ErrorTracker::classify_connection_error("some random error message"), "unknown_error");
+    assert_eq!(ErrorTracker::classify_connection_error("unexpected system failure"), "unknown_error");
+    
+    // Test case insensitivity
+    assert_eq!(ErrorTracker::classify_connection_error("CONNECTION ERROR"), "connection_error");
+    assert_eq!(ErrorTracker::classify_connection_error("FETCH FAILED"), "connection_error");
+    assert_eq!(ErrorTracker::classify_connection_error("REQUEST TIMED OUT"), "connection_error");
+    assert_eq!(ErrorTracker::classify_connection_error("CERTIFICATE VERIFICATION"), "connection_error");
+    assert_eq!(ErrorTracker::classify_connection_error("USAGE POLICY"), "invalid_request_error");
+    assert_eq!(ErrorTracker::classify_connection_error("SSL ERROR"), "connection_error");
+    assert_eq!(ErrorTracker::classify_connection_error("TLS HANDSHAKE"), "connection_error");
+}
+
+#[test]
+fn test_connection_error_message_classification_integration() {
+    let mut tracker = ErrorTracker::new();
+    
+    // Test connection error (status 0) uses message-based classification
+    tracker.record_error(0, "Request timed out.".to_string());
+    let latest = tracker.get_latest_error().unwrap();
+    assert_eq!(latest.http_status, 0);
+    assert_eq!(latest.error_type, "connection_error");
+    assert_eq!(latest.message, "Request timed out.");
+    
+    // Test SSL error classification
+    tracker.record_error(0, "unknown certificate verification error".to_string());
+    let latest = tracker.get_latest_error().unwrap();
+    assert_eq!(latest.http_status, 0);
+    assert_eq!(latest.error_type, "connection_error");
+    assert_eq!(latest.message, "unknown certificate verification error");
+    
+    // Test policy violation classification  
+    tracker.record_error(0, "violate our Usage Policy".to_string());
+    let latest = tracker.get_latest_error().unwrap();
+    assert_eq!(latest.http_status, 0);
+    assert_eq!(latest.error_type, "invalid_request_error");
+    assert_eq!(latest.message, "violate our Usage Policy");
+    
+    // Test HTTP error still uses status classification
+    tracker.record_error(502, "Bad Gateway Error".to_string());
+    let latest = tracker.get_latest_error().unwrap();
+    assert_eq!(latest.http_status, 502);
+    assert_eq!(latest.error_type, "server_error"); // Uses HTTP status, not message
+    assert_eq!(latest.message, "Bad Gateway Error");
+}
+
+#[test]  
+fn test_red_gating_safety_diagnostic_only() {
+    let mut tracker = ErrorTracker::new();
+    let current_time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    
+    // Test that has_recent_errors is diagnostic-only and should NOT be used for RED gating
+    // The method uses a 60-second window which conflicts with JsonlMonitor's 10s/1s window
+    
+    // No errors initially
+    assert!(!tracker.has_recent_errors(current_time));
+    
+    // Add error and test within diagnostic window
+    tracker.record_error(500, "Server error for diagnostics".to_string());
+    
+    // Within 60s diagnostic window  
+    let time_30s_later = current_time + 30_000;
+    assert!(tracker.has_recent_errors(time_30s_later));
+    
+    // This test validates that the method works for diagnostics but emphasizes
+    // that RED gating should use JsonlMonitor::scan_tail() with proper 10s/1s windows
 }

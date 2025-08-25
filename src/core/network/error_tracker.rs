@@ -1,4 +1,5 @@
 // Error tracking and classification for network monitoring
+
 use crate::core::segments::network::types::{JsonlError, NetworkStatus};
 use std::collections::VecDeque;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -44,14 +45,19 @@ impl ErrorTracker {
     }
 
     /// Record a new error event
-    pub fn record_error(&mut self, http_status: u16, _error_type: String, message: String) {
+    pub fn record_error(&mut self, http_status: u16, message: String) {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or(Duration::ZERO)
             .as_millis() as u64;
 
         // Use official classification based on HTTP status for consistency with stats filtering
-        let classified_error_type = self.classify_http_status(http_status);
+        let classified_error_type = if http_status == 0 {
+            // For connection-level errors, use message-based classification
+            Self::classify_connection_error(&message)
+        } else {
+            self.classify_http_status(http_status)
+        };
 
         let event = ErrorEvent {
             timestamp,
@@ -88,10 +94,14 @@ impl ErrorTracker {
         }
     }
 
-    /// Check if there are recent errors (auxiliary signal for monitoring decisions)
+    /// Check if there are recent errors (DIAGNOSTICS ONLY - DO NOT USE FOR RED GATING)
     /// 
-    /// Note: This is an auxiliary signal only. The primary RED window trigger should be
-    /// immediate error detection from JsonlMonitor to avoid architectural conflicts.
+    /// **WARNING**: This method uses a 60-second lookback window which conflicts with 
+    /// the RED monitoring specification. For RED gating decisions, use JsonlMonitor::scan_tail() 
+    /// exclusively, which implements the correct 10s/1s frequency window per specification.
+    /// 
+    /// This method serves as an auxiliary diagnostic signal only. The primary RED window 
+    /// trigger should be immediate error detection from JsonlMonitor to avoid architectural conflicts.
     pub fn has_recent_errors(&self, current_time_ms: u64) -> bool {
         // Look for errors in the last 60 seconds that happened before or at current_time
         let cutoff_time = current_time_ms.saturating_sub(60_000);
@@ -116,6 +126,7 @@ impl ErrorTracker {
             413 => "request_too_large".to_string(),
             429 => "rate_limit_error".to_string(),
             500 => "api_error".to_string(),
+            502 => "server_error".to_string(),
             504 => "socket_hang_up".to_string(),
             529 => "overloaded_error".to_string(),
             400..=499 => "client_error".to_string(), // Fallback for other 4xx
@@ -137,14 +148,26 @@ impl ErrorTracker {
            message_lower.contains("fetch failed") ||
            message_lower.contains("network error") ||
            message_lower.contains("timeout") ||
-           message_lower.contains("connection refused") {
+           message_lower.contains("request timed out") ||
+           message_lower.contains("connection refused") ||
+           message_lower.contains("certificate verification") ||
+           message_lower.contains("unknown certificate") ||
+           message_lower.contains("tls") ||
+           message_lower.contains("ssl") {
             "connection_error".to_string()
+        } else if message_lower.contains("usage policy") ||
+                 message_lower.contains("violate our usage policy") {
+            "invalid_request_error".to_string()
         } else {
-            "network_error".to_string()
+            "unknown_error".to_string()
         }
     }
 
     /// Determine network status based on HTTP response
+    /// 
+    /// **DEPRECATED**: This method duplicates logic that should be centralized in HttpMonitor/StatusRenderer.
+    /// Use shared utilities from the canonical HttpMonitor implementation instead.
+    #[deprecated(note = "Use HttpMonitor utilities for status determination to maintain single source of truth")]
     pub fn determine_status(
         &self, 
         status_code: u16, 
@@ -176,6 +199,10 @@ impl ErrorTracker {
     /// 
     /// Uses the nearest-rank method: idx = max(0, ceil(p * n) - 1)
     /// This avoids off-by-one issues and provides better estimates for small samples.
+    /// 
+    /// **DEPRECATED**: This method duplicates percentile calculation logic that should be 
+    /// centralized in HttpMonitor. Use shared utilities to avoid architectural drift.
+    #[deprecated(note = "Use HttpMonitor utilities for percentile calculations to maintain single source of truth")]
     pub fn calculate_percentiles(&self, rolling_totals: &[u32]) -> (u32, u32) {
         if rolling_totals.is_empty() {
             return (0, 0);
