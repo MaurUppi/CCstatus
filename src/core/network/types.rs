@@ -2,10 +2,10 @@
 use std::path::PathBuf;
 
 // Re-export credential types from existing module (don't move them)
-pub use super::credential::{CredentialManager, ShellType};
+// pub use super::credential::{CredentialManager, ShellType};
 
 /// Network monitoring status levels
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default)]
 pub enum NetworkStatus {
     /// API is responding normally within P80 threshold
     Healthy,
@@ -14,11 +14,12 @@ pub enum NetworkStatus {
     /// API errors, timeouts, or latency above P95
     Error,
     /// No credentials configured or monitoring disabled
+    #[default]
     Unknown,
 }
 
 /// State tracking for monitoring windows and probe deduplication
-/// 
+///
 /// This structure maintains window-based deduplication to prevent redundant probes
 /// within the same timing windows, plus session-based COLD probe deduplication.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -73,7 +74,7 @@ pub struct JsonlError {
 }
 
 /// Gate types for timing-driven probe execution priority
-/// 
+///
 /// Implements COLD > RED > GREEN priority logic where only one gate type
 /// executes per collect() call, ensuring optimal resource usage and avoiding
 /// redundant network probes.
@@ -131,11 +132,7 @@ impl From<serde_json::Error> for NetworkError {
 }
 
 // Default implementations
-impl Default for NetworkStatus {
-    fn default() -> Self {
-        NetworkStatus::Unknown
-    }
-}
+
 
 impl Default for MonitoringState {
     fn default() -> Self {
@@ -164,24 +161,24 @@ impl Default for NetworkMetrics {
 
 // Timestamp standardization utilities
 /// Generate standardized local timezone ISO-8601 timestamp
-/// 
+///
 /// This function provides consistent timestamp formatting across all network monitoring
 /// components. All persistent timestamps should use this function to ensure uniformity.
-/// 
+///
 /// # Returns
-/// 
+///
 /// A string in RFC3339/ISO-8601 format with local timezone offset.
-/// 
+///
 /// # Example Format
-/// 
+///
 /// ```text
 /// "2025-01-25T10:30:45-08:00"  // Pacific Time (PST)
 /// "2025-01-25T18:30:45+00:00"  // UTC
 /// "2025-01-25T19:30:45+01:00"  // Central European Time (CET)
 /// ```
-/// 
+///
 /// # Usage
-/// 
+///
 /// Used for:
 /// - `MonitoringState.last_cold_probe_at` field
 /// - Error tracking timestamps  
@@ -189,7 +186,7 @@ impl Default for NetworkMetrics {
 /// - Debug logging with consistent time format
 pub fn get_local_timestamp() -> String {
     use std::time::SystemTime;
-    
+
     // Get current local time and format as ISO-8601 with timezone offset
     let now = SystemTime::now();
     let datetime: chrono::DateTime<chrono::Local> = now.into();
