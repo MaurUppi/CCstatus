@@ -925,3 +925,289 @@ async fn test_comprehensive_enhancements_integration() {
     
     std::env::remove_var("CCSTATUS_TIMEOUT_MS");
 }
+
+// Session Deduplication Tests
+
+#[tokio::test]
+async fn test_session_id_tracking_and_persistence() {
+    let temp_dir = TempDir::new().unwrap();
+    let state_path = temp_dir.path().join("test-session-tracking.json");
+    
+    let mock_client = TestHttpClient::new();
+    mock_client.add_success(200, 1500).await;
+    
+    let mock_clock = TestClock::new();
+    
+    let mut monitor = HttpMonitor::new(Some(state_path.clone()))
+        .unwrap()
+        .with_http_client(Box::new(mock_client.clone()))
+        .with_clock(Box::new(mock_clock));
+
+    // Set session ID and execute COLD probe
+    let test_session_id = "session_abc123_test";
+    monitor.set_session_id(test_session_id.to_string());
+    
+    let creds = ApiCredentials {
+        base_url: "https://api.anthropic.com".to_string(),
+        auth_token: "test-token".to_string(),
+        source: CredentialSource::Environment,
+    };
+    
+    let result = monitor.probe(ProbeMode::Cold, creds, None).await.unwrap();
+    
+    assert!(matches!(result.status, NetworkStatus::Healthy));
+    assert_eq!(result.mode, ProbeMode::Cold);
+    
+    // Verify session ID is persisted in state
+    let state = monitor.load_state().await.unwrap();
+    assert_eq!(
+        state.monitoring_state.last_cold_session_id, 
+        Some(test_session_id.to_string())
+    );
+    assert!(state.monitoring_state.last_cold_probe_at.is_some());
+}
+
+#[tokio::test]
+async fn test_cold_probe_without_session_id() {
+    let temp_dir = TempDir::new().unwrap();
+    let state_path = temp_dir.path().join("test-cold-no-session.json");
+    
+    let mock_client = TestHttpClient::new();
+    mock_client.add_success(200, 1200).await;
+    
+    let mock_clock = TestClock::new();
+    
+    let mut monitor = HttpMonitor::new(Some(state_path.clone()))
+        .unwrap()
+        .with_http_client(Box::new(mock_client.clone()))
+        .with_clock(Box::new(mock_clock));
+
+    // Execute COLD probe without setting session ID
+    let creds = ApiCredentials {
+        base_url: "https://api.anthropic.com".to_string(),
+        auth_token: "test-token".to_string(),
+        source: CredentialSource::Environment,
+    };
+    
+    let result = monitor.probe(ProbeMode::Cold, creds, None).await.unwrap();
+    
+    assert!(matches!(result.status, NetworkStatus::Healthy));
+    assert_eq!(result.mode, ProbeMode::Cold);
+    
+    // Verify session deduplication fields are NOT updated when session ID is missing
+    let state = monitor.load_state().await.unwrap();
+    assert_eq!(state.monitoring_state.last_cold_session_id, None);
+    assert_eq!(state.monitoring_state.last_cold_probe_at, None);
+}
+
+#[tokio::test] 
+async fn test_session_id_update_and_overwrite() {
+    let temp_dir = TempDir::new().unwrap();
+    let state_path = temp_dir.path().join("test-session-overwrite.json");
+    
+    let mock_client = TestHttpClient::new();
+    mock_client.add_success(200, 1000).await;
+    mock_client.add_success(200, 1100).await;
+    
+    let mock_clock = TestClock::new();
+    
+    let mut monitor = HttpMonitor::new(Some(state_path.clone()))
+        .unwrap()
+        .with_http_client(Box::new(mock_client.clone()))
+        .with_clock(Box::new(mock_clock));
+
+    let creds = ApiCredentials {
+        base_url: "https://api.anthropic.com".to_string(),
+        auth_token: "test-token".to_string(),
+        source: CredentialSource::Environment,
+    };
+    
+    // First COLD probe with session ID 1
+    let session_id_1 = "session_first";
+    monitor.set_session_id(session_id_1.to_string());
+    
+    let _result1 = monitor.probe(ProbeMode::Cold, creds.clone(), None).await.unwrap();
+    
+    let state1 = monitor.load_state().await.unwrap();
+    assert_eq!(
+        state1.monitoring_state.last_cold_session_id,
+        Some(session_id_1.to_string())
+    );
+    
+    // Update to session ID 2 and execute another COLD probe
+    let session_id_2 = "session_second";
+    monitor.set_session_id(session_id_2.to_string());
+    
+    let _result2 = monitor.probe(ProbeMode::Cold, creds, None).await.unwrap();
+    
+    let state2 = monitor.load_state().await.unwrap();
+    assert_eq!(
+        state2.monitoring_state.last_cold_session_id,
+        Some(session_id_2.to_string())
+    );
+    
+    // Ensure the new session ID overwrote the old one
+    assert_ne!(state2.monitoring_state.last_cold_session_id, Some(session_id_1.to_string()));
+}
+
+#[tokio::test]
+async fn test_session_deduplication_different_probe_modes() {
+    let temp_dir = TempDir::new().unwrap();
+    let state_path = temp_dir.path().join("test-session-probe-modes.json");
+    
+    let mock_client = TestHttpClient::new();
+    mock_client.add_success(200, 1000).await; // COLD
+    mock_client.add_success(200, 1100).await; // GREEN
+    mock_client.add_success(429, 800).await;  // RED
+    
+    let mock_clock = TestClock::new();
+    
+    let mut monitor = HttpMonitor::new(Some(state_path.clone()))
+        .unwrap()
+        .with_http_client(Box::new(mock_client.clone()))
+        .with_clock(Box::new(mock_clock));
+
+    let test_session_id = "session_mixed_modes";
+    monitor.set_session_id(test_session_id.to_string());
+    
+    let creds = ApiCredentials {
+        base_url: "https://api.anthropic.com".to_string(),
+        auth_token: "test-token".to_string(),
+        source: CredentialSource::Environment,
+    };
+    
+    // Execute COLD probe - should update session ID
+    let _cold_result = monitor.probe(ProbeMode::Cold, creds.clone(), None).await.unwrap();
+    
+    let state_after_cold = monitor.load_state().await.unwrap();
+    assert_eq!(
+        state_after_cold.monitoring_state.last_cold_session_id,
+        Some(test_session_id.to_string())
+    );
+    let cold_timestamp = state_after_cold.monitoring_state.last_cold_probe_at.clone();
+    assert!(cold_timestamp.is_some());
+    
+    // Execute GREEN probe - should NOT update session deduplication fields
+    let _green_result = monitor.probe(ProbeMode::Green, creds.clone(), None).await.unwrap();
+    
+    let state_after_green = monitor.load_state().await.unwrap();
+    assert_eq!(
+        state_after_green.monitoring_state.last_cold_session_id,
+        Some(test_session_id.to_string())
+    );
+    assert_eq!(state_after_green.monitoring_state.last_cold_probe_at, cold_timestamp);
+    
+    // Execute RED probe - should NOT update session deduplication fields
+    let error_event = JsonlError {
+        timestamp: "2025-01-25T10:30:45.123Z".to_string(),
+        code: 429,
+        message: "Rate limit exceeded".to_string(),
+    };
+    let _red_result = monitor.probe(ProbeMode::Red, creds, Some(error_event)).await.unwrap();
+    
+    let state_after_red = monitor.load_state().await.unwrap();
+    assert_eq!(
+        state_after_red.monitoring_state.last_cold_session_id,
+        Some(test_session_id.to_string())
+    );
+    assert_eq!(state_after_red.monitoring_state.last_cold_probe_at, cold_timestamp);
+    
+    // Verify only COLD mode updated the session deduplication fields
+}
+
+#[tokio::test]
+async fn test_session_id_edge_cases() {
+    let temp_dir = TempDir::new().unwrap();
+    let state_path = temp_dir.path().join("test-session-edge-cases.json");
+    
+    let mock_client = TestHttpClient::new();
+    mock_client.add_success(200, 1000).await;
+    mock_client.add_success(500, 2000).await;
+    
+    let mock_clock = TestClock::new();
+    
+    let mut monitor = HttpMonitor::new(Some(state_path.clone()))
+        .unwrap()
+        .with_http_client(Box::new(mock_client.clone()))
+        .with_clock(Box::new(mock_clock));
+
+    let creds = ApiCredentials {
+        base_url: "https://api.anthropic.com".to_string(),
+        auth_token: "test-token".to_string(),
+        source: CredentialSource::Environment,
+    };
+    
+    // Test empty string session ID
+    monitor.set_session_id("".to_string());
+    let _result1 = monitor.probe(ProbeMode::Cold, creds.clone(), None).await.unwrap();
+    
+    let state1 = monitor.load_state().await.unwrap();
+    assert_eq!(state1.monitoring_state.last_cold_session_id, Some("".to_string()));
+    
+    // Test very long session ID
+    let long_session_id = "a".repeat(1000);
+    monitor.set_session_id(long_session_id.clone());
+    let _result2 = monitor.probe(ProbeMode::Cold, creds.clone(), None).await.unwrap();
+    
+    let state2 = monitor.load_state().await.unwrap();
+    assert_eq!(state2.monitoring_state.last_cold_session_id, Some(long_session_id));
+    
+    // Test session ID with special characters
+    let special_session_id = "session-with_special.chars@123#$%^&*()";
+    monitor.set_session_id(special_session_id.to_string());
+    let _result3 = monitor.probe(ProbeMode::Cold, creds, None).await.unwrap();
+    
+    let state3 = monitor.load_state().await.unwrap();
+    assert_eq!(
+        state3.monitoring_state.last_cold_session_id,
+        Some(special_session_id.to_string())
+    );
+}
+
+#[tokio::test]
+async fn test_session_persistence_across_monitor_instances() {
+    let temp_dir = TempDir::new().unwrap();
+    let state_path = temp_dir.path().join("test-session-persistence.json");
+    
+    let mock_client = TestHttpClient::new();
+    mock_client.add_success(200, 1200).await;
+    
+    let mock_clock = TestClock::new();
+    
+    let test_session_id = "persistent_session_123";
+    let creds = ApiCredentials {
+        base_url: "https://api.anthropic.com".to_string(),
+        auth_token: "test-token".to_string(),
+        source: CredentialSource::Environment,
+    };
+    
+    // First monitor instance - set session and execute COLD probe
+    {
+        let mut monitor1 = HttpMonitor::new(Some(state_path.clone()))
+            .unwrap()
+            .with_http_client(Box::new(mock_client.clone()))
+            .with_clock(Box::new(mock_clock.clone()));
+
+        monitor1.set_session_id(test_session_id.to_string());
+        let _result = monitor1.probe(ProbeMode::Cold, creds.clone(), None).await.unwrap();
+    }
+    
+    // Second monitor instance - should see persisted session data
+    let monitor2 = HttpMonitor::new(Some(state_path.clone()))
+        .unwrap()
+        .with_http_client(Box::new(mock_client.clone()))
+        .with_clock(Box::new(mock_clock));
+
+    let loaded_state = monitor2.load_state().await.unwrap();
+    
+    // Verify session data persisted across monitor instances
+    assert_eq!(
+        loaded_state.monitoring_state.last_cold_session_id,
+        Some(test_session_id.to_string())
+    );
+    assert!(loaded_state.monitoring_state.last_cold_probe_at.is_some());
+    
+    // Verify the state file contains the session data
+    let file_content = tokio::fs::read_to_string(&state_path).await.unwrap();
+    assert!(file_content.contains(test_session_id));
+}

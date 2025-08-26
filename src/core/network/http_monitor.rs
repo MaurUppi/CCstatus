@@ -155,6 +155,8 @@ pub struct HttpMonitor {
     clock: Box<dyn ClockTrait>,
     /// Optional timeout override for testing
     timeout_override_ms: Option<u32>,
+    /// Current session ID for COLD probe deduplication
+    current_session_id: Option<String>,
 }
 
 impl HttpMonitor {
@@ -187,6 +189,7 @@ impl HttpMonitor {
             http_client,
             clock: Box::new(SystemClock),
             timeout_override_ms: None,
+            current_session_id: None,
         })
     }
 
@@ -209,6 +212,24 @@ impl HttpMonitor {
     pub fn with_timeout_override_ms(mut self, timeout_ms: u32) -> Self {
         self.timeout_override_ms = Some(timeout_ms);
         self
+    }
+
+    /// Set session ID for COLD probe deduplication
+    ///
+    /// This method allows NetworkSegment to provide the actual session_id for proper
+    /// COLD probe deduplication. Should be called before executing COLD probes to
+    /// ensure accurate session tracking.
+    ///
+    /// # Arguments
+    ///
+    /// - `session_id`: Unique session identifier from the orchestrating component
+    ///
+    /// # Usage
+    ///
+    /// NetworkSegment should call `monitor.set_session_id("session_abc123")` before
+    /// executing COLD probes to enable proper session deduplication.
+    pub fn set_session_id(&mut self, session_id: String) {
+        self.current_session_id = Some(session_id);
     }
 
     /// Execute HTTP probe and update monitoring state
@@ -591,9 +612,10 @@ impl HttpMonitor {
 
                 // COLD mode: Update session deduplication fields
                 if mode == ProbeMode::Cold {
-                    // TODO: Get actual session_id from NetworkSegment
-                    state.monitoring_state.last_cold_session_id = Some("placeholder".to_string());
-                    state.monitoring_state.last_cold_probe_at = Some(self.clock.local_timestamp());
+                    if let Some(ref session_id) = self.current_session_id {
+                        state.monitoring_state.last_cold_session_id = Some(session_id.clone());
+                        state.monitoring_state.last_cold_probe_at = Some(self.clock.local_timestamp());
+                    }
                 }
 
                 (status, p95, rolling_len)
