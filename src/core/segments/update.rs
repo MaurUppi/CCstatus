@@ -25,7 +25,7 @@ impl Segment for UpdateSegment {
                 metadata: std::collections::HashMap::new(),
             })
         }
-        
+
         #[cfg(not(feature = "self-update"))]
         None
     }

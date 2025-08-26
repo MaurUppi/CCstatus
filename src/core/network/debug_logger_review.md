@@ -6,81 +6,73 @@ Target file: `src/core/network/debug_logger.rs`
 ---
 
 #### Classification Overview
-- Critical: 1 finding
-- Medium: 3 findings
-- Low: 2 findings
+- Critical: 0 findings
+- Medium: 0 findings
+- Low: 6 findings
 
 ---
 
 ### Critical
-- Log truncation on process start wipes history
-  - Behavior: the log file is cleared once per process lifetime; the statusline runs as short-lived processes, effectively erasing prior logs repeatedly.
-  - Evidence:
-```rust
-// Session refresh - clear log file at start of each session
-LOG_INIT.call_once(|| {
-    if enabled {
-        let _ = std::fs::write(&log_path, "");
-    }
-});
-```
-  - Impact: Unable to correlate multi-event flows; defeats purpose of persistent sidecar logging.
-  - Requirement mismatch: Spec expects an append-only sidecar with persistent history; no truncation specified.
-
----
-
-### Medium
-- Environment variable precedence deviates from spec
-  - Spec: `CCSTATUS_DEBUG` gates logging. Implementation prioritizes `ccstatus_debug` and treats empty `CCSTATUS_DEBUG` as enabled.
-  - Risk: Surprise activations or suppression; inconsistent with documented envs.
-
-- Logs are not structured (machine-parseable)
-  - Current: bracketed free-form strings.
-  - Spec intent: "结构化日志" suitable for downstream analysis. Recommend JSON Lines with stable keys: `timestamp`, `level`, `component`, `event`, `fields`.
-
-- No default redaction guardrails on generic APIs
-  - `debug/error/performance` accept arbitrary strings; callers may accidentally log secrets. Only `credential_info` is safe by design.
-  - Recommend: typed helpers that accept fields and perform redaction; deny-list for headers like `authorization`, values longer than N, etc.
+- None. Previous truncation behavior is removed; logging is append-only with size-based rotation.
 
 ---
 
 ### Low
-- Timestamps omit timezone offset
-  - State file requires local ISO-8601 with offset; debug log not mandated but aligning helps correlation across artifacts.
+- Use error message in `jsonl_error_summary`
+  - Evidence:
+```337:345:src/core/network/debug_logger.rs
+pub fn jsonl_error_summary(&self, error_code: &str, _error_message: &str, timestamp: &str) {
+    /* logs code and timestamp; ignores message */
+}
+```
+  - Recommendation: include the parsed error message in `message` and/or `fields`.
 
-- Missing typed helpers for key events (consistency)
-  - Suggested helpers per spec "日志要点":
-    - `probe_start(mode, timeout_ms)` / `probe_end(status, breakdown, http_status)`
-    - `state_write_summary(status, p95, rolling_len)`
-    - `jsonl_error_summary(code, message, timestamp)`
-    - `render_summary(emoji, status)`
+- Hardcoded rotation settings (optional configurability)
+  - Evidence:
+```16:20:src/core/network/debug_logger.rs
+const LOG_ROTATION_SIZE_MB: u64 = 8;
+const MAX_ARCHIVES: u32 = 5;
+const ROTATION_CHECK_INTERVAL: u32 = 200;
+```
+  - Recommendation: allow env overrides (e.g., `CCSTATUS_DEBUG_ROTATE_MB`, `CCSTATUS_DEBUG_MAX_ARCHIVES`).
+
+- No redaction on structured fields
+  - Message text is redacted; `fields` are written verbatim.
+  - Recommendation: either apply redaction to string-like field values or document that typed helpers must be used for any sensitive data.
+
+- Backward-compat alias missing
+  - Tests/imports may still refer to `DebugLogger` while code exports `EnhancedDebugLogger`.
+  - Recommendation: add `pub type DebugLogger = EnhancedDebugLogger;` for compatibility, or re-export under that name.
+
+- Rotation lock file cleanup on error
+  - `try_lock_exclusive` uses a `.lock` file and removes it on success path.
+  - Recommendation: best-effort cleanup on early-return error paths to avoid stale lock files (low impact).
+
+- Minor test/docs alignment
+  - Performance log now stores duration in `fields.duration_ms`; some older docs/tests expect "X took Yms" in message. Consider clarifying docs or adjusting message for human readability.
 
 ---
 
 ### Meets Requirements
-- Off by default; enabled via env gating.
-- Log path: `~/.claude/ccstatus/ccstatus-debug.log`; parents created.
-- Sidecar behavior: async file writes via blocking thread; no control-flow decisions; errors ignored.
-- `credential_info` avoids secret leakage (logs only source and token length).
+- Off by default; enabled via `CCSTATUS_DEBUG` with flexible booleans (true/1/yes/on).
+- Path: `~/.claude/ccstatus/ccstatus-debug.log`; parents created; falls back to current dir if HOME missing.
+- Append-only JSON Lines with fixed schema and local-time ISO-8601 timestamps with offset.
+- Size-based rotation with gzip archives and bounded retention; basic inter-process rotation lock.
+- Redaction guardrails on message content; typed helpers for key events (`probe_start/end`, `state_write_summary`, `jsonl_error_summary`, `render_summary`, `credential_info_safe`).
+- No influence on control flow; logging failures are non-fatal.
 
 ---
 
 ### Recommendations (Ordered)
-1. Remove log truncation; always append-only.
-   - Acceptance: multiple statusline invocations append without loss.
-2. Align gating with spec: honor `CCSTATUS_DEBUG` exclusively (or make lowercase alias secondary and documented). Treat empty value as `false`.
-   - Acceptance: `CCSTATUS_DEBUG=true|1|on|yes` enables; others disable.
-3. Emit JSONL records with fixed schema and local-time ISO-8601 timestamps with offset.
-   - Example record:
-```json
-{"ts":"2025-08-25T15:31:02.123+08:00","level":"DEBUG","component":"HttpMonitor","event":"probe_start","fields":{"mode":"GREEN","timeout_ms":3500}}
-```
-4. Provide typed helpers with built-in redaction for "日志要点" events; restrict generic `debug/error` for internal use.
-5. Add simple redaction utility (mask long strings, scrub known secret keys) and unit tests covering redaction and JSONL shape.
+1. Include error message in `jsonl_error_summary` output for richer diagnostics.
+2. Allow optional env overrides for rotation size/archives/check interval.
+3. Apply redaction to string-like `fields` or document safe usage of typed helpers.
+4. Add a compatibility alias `pub type DebugLogger = EnhancedDebugLogger;` (or re-export) to avoid breaking callers.
+5. Add best-effort lock file cleanup in rotation error paths.
+6. Align docs/tests with JSONL schema and current message formatting.
 
 ---
 
 ### Risk/Impact
-- Addressing the Critical issue restores debuggability across sessions.
-- Structured JSONL enables downstream grep/jq tooling and future automated analysis.
-- Redaction reduces accidental sensitive-data leakage.
+- Changes since last review significantly improve compliance and observability: persistent JSONL, rotation, redaction, typed helpers.
+- Remaining items are niceties and polish; low operational risk.

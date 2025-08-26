@@ -39,7 +39,7 @@ semver = { version = "1.0", optional = true }
 
 # 网络监控依赖
 isahc = { version = "1.7", features = ["json"], optional = true }
-tokio = { version = "1.47.1", features = ["rt", "rt-multi-thread", "time", "sync", "fs", "macros"], optional = true }
+tokio = { version = "1.47.1", features = ["rt", "rt-multi-thread", "time", "sync", "fs", "macros", "io-util"], optional = true }
 thiserror = "2.0.15"
 
 [features]

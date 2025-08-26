@@ -1,4 +1,7 @@
-use ccstatus::core::segments::network::{StatusRenderer, types::{NetworkStatus, NetworkMetrics}};
+use ccstatus::core::segments::network::{
+    types::{NetworkMetrics, NetworkStatus},
+    StatusRenderer,
+};
 
 #[test]
 fn test_status_renderer_creation() {
@@ -6,10 +9,10 @@ fn test_status_renderer_creation() {
     assert!(true); // Just verify creation works
 }
 
-#[test] 
+#[test]
 fn test_healthy_status_rendering() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 150,
         breakdown: "DNS:5ms|TCP:10ms|TLS:15ms|TTFB:120ms|Total:150ms".to_string(),
@@ -18,9 +21,9 @@ fn test_healthy_status_rendering() {
         rolling_totals: vec![100, 120, 150],
         p95_latency_ms: 145,
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
-    
+
     // Should show green circle and P95 latency
     assert!(result.starts_with("🟢"));
     assert!(result.contains("P95:145ms"));
@@ -29,7 +32,7 @@ fn test_healthy_status_rendering() {
 #[test]
 fn test_degraded_status_rendering() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 800,
         breakdown: "DNS:10ms|TCP:20ms|TLS:30ms|TTFB:740ms|Total:800ms".to_string(),
@@ -38,9 +41,9 @@ fn test_degraded_status_rendering() {
         rolling_totals: vec![600, 700, 800],
         p95_latency_ms: 750,
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
-    
+
     // Should show yellow circle, P95, and breakdown (no error_type)
     assert!(result.starts_with("🟡"));
     assert!(result.contains("P95:750ms"));
@@ -52,7 +55,7 @@ fn test_degraded_status_rendering() {
 #[test]
 fn test_degraded_rate_limit_rendering() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 200,
         breakdown: "Total:200ms".to_string(),
@@ -61,9 +64,9 @@ fn test_degraded_rate_limit_rendering() {
         rolling_totals: vec![150, 180, 200],
         p95_latency_ms: 190,
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
-    
+
     // Should show yellow circle, P95, and breakdown (no error_type)
     assert!(result.starts_with("🟡"));
     assert!(result.contains("P95:190ms"));
@@ -75,7 +78,7 @@ fn test_degraded_rate_limit_rendering() {
 #[test]
 fn test_error_status_rendering() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 1500,
         breakdown: "Total:1500ms|Error:Timeout".to_string(),
@@ -84,9 +87,9 @@ fn test_error_status_rendering() {
         rolling_totals: vec![1200, 1300, 1500],
         p95_latency_ms: 1400,
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
-    
+
     // Should show red circle and breakdown (no P95, no error_type)
     assert!(result.starts_with("🔴"));
     assert!(result.contains("Total:1500ms|Error:Timeout"));
@@ -95,10 +98,10 @@ fn test_error_status_rendering() {
     assert!(!result.contains("P95:"));
 }
 
-#[test] 
+#[test]
 fn test_error_timeout_rendering() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 3000,
         breakdown: "Total:3000ms".to_string(),
@@ -107,9 +110,9 @@ fn test_error_timeout_rendering() {
         rolling_totals: vec![2000, 2500, 3000],
         p95_latency_ms: 2800,
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
-    
+
     // Should show red circle and breakdown (no timeout indication)
     assert!(result.starts_with("🔴"));
     assert!(result.contains("Total:3000ms"));
@@ -120,7 +123,7 @@ fn test_error_timeout_rendering() {
 #[test]
 fn test_error_http_status_rendering() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 500,
         breakdown: "DNS:5ms|TCP:10ms|TLS:15ms|TTFB:470ms|Total:500ms".to_string(),
@@ -129,9 +132,9 @@ fn test_error_http_status_rendering() {
         rolling_totals: vec![400, 450, 500],
         p95_latency_ms: 475,
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
-    
+
     // Should show red circle and breakdown (no error_type)
     assert!(result.starts_with("🔴"));
     assert!(result.contains("DNS:5ms|TCP:10ms|TLS:15ms|TTFB:470ms|Total:500ms"));
@@ -142,7 +145,7 @@ fn test_error_http_status_rendering() {
 #[test]
 fn test_unknown_status_rendering() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 0,
         breakdown: "".to_string(),
@@ -151,9 +154,9 @@ fn test_unknown_status_rendering() {
         rolling_totals: vec![],
         p95_latency_ms: 0,
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Unknown, &metrics);
-    
+
     // Should show white circle and "Env varis NOT Found"
     assert_eq!(result, "⚪ Env varis NOT Found");
 }
@@ -161,7 +164,7 @@ fn test_unknown_status_rendering() {
 #[test]
 fn test_empty_breakdown_handling() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 200,
         breakdown: "".to_string(), // Empty breakdown
@@ -170,9 +173,9 @@ fn test_empty_breakdown_handling() {
         rolling_totals: vec![180, 190, 200],
         p95_latency_ms: 195,
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
-    
+
     // Should handle empty breakdown gracefully (no error_type display)
     assert!(result.starts_with("🟡"));
     assert!(result.contains("P95:195ms"));
@@ -184,7 +187,7 @@ fn test_empty_breakdown_handling() {
 #[test]
 fn test_no_error_type_handling() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 300,
         breakdown: "Total:300ms".to_string(),
@@ -193,9 +196,9 @@ fn test_no_error_type_handling() {
         rolling_totals: vec![250, 275, 300],
         p95_latency_ms: 285,
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
-    
+
     // Should handle missing error type gracefully
     assert!(result.starts_with("🟡"));
     assert!(result.contains("P95:285ms"));
@@ -207,7 +210,7 @@ fn test_no_error_type_handling() {
 #[test]
 fn test_edge_case_zero_p95() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 100,
         breakdown: "Total:100ms".to_string(),
@@ -216,9 +219,9 @@ fn test_edge_case_zero_p95() {
         rolling_totals: vec![100],
         p95_latency_ms: 0, // Zero P95 (not enough samples)
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
-    
+
     // Should show P95:N/A for zero P95 (insufficient samples)
     assert!(result.starts_with("🟢"));
     assert!(result.contains("P95:N/A"));
@@ -227,7 +230,7 @@ fn test_edge_case_zero_p95() {
 #[test]
 fn test_very_high_latencies() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 9999,
         breakdown: "Total:9999ms".to_string(),
@@ -236,9 +239,9 @@ fn test_very_high_latencies() {
         rolling_totals: vec![8000, 9000, 9999],
         p95_latency_ms: 9500,
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
-    
+
     // Should handle high latencies correctly
     assert!(result.starts_with("🟢"));
     assert!(result.contains("P95:9500ms"));
@@ -247,7 +250,7 @@ fn test_very_high_latencies() {
 #[test]
 fn test_special_characters_in_error_type() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 500,
         breakdown: "Total:500ms".to_string(),
@@ -256,9 +259,9 @@ fn test_special_characters_in_error_type() {
         rolling_totals: vec![400, 450, 500],
         p95_latency_ms: 475,
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
-    
+
     // Should handle special characters gracefully (no error_type display)
     assert!(result.starts_with("🔴"));
     // Should NOT contain error_type display
@@ -268,9 +271,10 @@ fn test_special_characters_in_error_type() {
 #[test]
 fn test_long_breakdown_strings() {
     let renderer = StatusRenderer::new();
-    
-    let long_breakdown = "DNS:50ms|TCP:100ms|TLS:150ms|TTFB:1200ms|Processing:800ms|Transfer:200ms|Total:2500ms";
-    
+
+    let long_breakdown =
+        "DNS:50ms|TCP:100ms|TLS:150ms|TTFB:1200ms|Processing:800ms|Transfer:200ms|Total:2500ms";
+
     let metrics = NetworkMetrics {
         latency_ms: 2500,
         breakdown: long_breakdown.to_string(),
@@ -279,9 +283,9 @@ fn test_long_breakdown_strings() {
         rolling_totals: vec![2000, 2250, 2500],
         p95_latency_ms: 2400,
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
-    
+
     // Should handle long breakdown strings (may wrap to next line)
     assert!(result.starts_with("🟡"));
     assert!(result.contains("P95:2400ms"));
@@ -294,10 +298,10 @@ fn test_long_breakdown_strings() {
 fn test_status_renderer_default() {
     // Test Default trait implementation
     let renderer = StatusRenderer::default();
-    
+
     let metrics = NetworkMetrics::default();
     let result = renderer.render_status(&NetworkStatus::Unknown, &metrics);
-    
+
     assert_eq!(result, "⚪ Env varis NOT Found");
 }
 
@@ -305,18 +309,18 @@ fn test_status_renderer_default() {
 fn test_all_emoji_combinations() {
     let renderer = StatusRenderer::new();
     let metrics = NetworkMetrics::default();
-    
+
     // Test all status emoji outputs
     let healthy = renderer.render_status(&NetworkStatus::Healthy, &metrics);
     let degraded = renderer.render_status(&NetworkStatus::Degraded, &metrics);
     let error = renderer.render_status(&NetworkStatus::Error, &metrics);
     let unknown = renderer.render_status(&NetworkStatus::Unknown, &metrics);
-    
+
     assert!(healthy.starts_with("🟢"));
     assert!(degraded.starts_with("🟡"));
     assert!(error.starts_with("🔴"));
     assert!(unknown.starts_with("⚪"));
-    
+
     // Each should be different
     assert_ne!(healthy, degraded);
     assert_ne!(degraded, error);
@@ -327,10 +331,10 @@ fn test_all_emoji_combinations() {
 #[test]
 fn test_line_wrapping_behavior() {
     let renderer = StatusRenderer::new();
-    
+
     // Create a very long breakdown that should trigger line wrapping
     let long_breakdown = "DNS:50ms|TCP:100ms|TLS:150ms|TTFB:1200ms|Processing:800ms|Transfer:200ms|Authentication:300ms|Validation:400ms|Total:3200ms";
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 3200,
         breakdown: long_breakdown.to_string(),
@@ -339,16 +343,16 @@ fn test_line_wrapping_behavior() {
         rolling_totals: vec![3000, 3100, 3200],
         p95_latency_ms: 3100,
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
-    
+
     // Should wrap to next line due to length (80+ chars)
     assert!(result.starts_with("🟡"));
     assert!(result.contains("P95:3100ms"));
     assert!(result.contains(long_breakdown));
     // Should contain newline due to line wrapping
     assert!(result.contains("\n"));
-    
+
     // Test error status line wrapping too
     let error_result = renderer.render_status(&NetworkStatus::Error, &metrics);
     assert!(error_result.starts_with("🔴"));
@@ -359,9 +363,9 @@ fn test_line_wrapping_behavior() {
 #[test]
 fn test_no_line_wrapping_for_short_content() {
     let renderer = StatusRenderer::new();
-    
+
     let short_breakdown = "Total:150ms";
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 150,
         breakdown: short_breakdown.to_string(),
@@ -370,9 +374,9 @@ fn test_no_line_wrapping_for_short_content() {
         rolling_totals: vec![120, 135, 150],
         p95_latency_ms: 145,
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
-    
+
     // Should NOT wrap - content should fit on one line
     assert!(result.starts_with("🟡"));
     assert!(result.contains("P95:145ms"));
@@ -386,7 +390,7 @@ fn test_no_line_wrapping_for_short_content() {
 #[test]
 fn test_zero_p95_in_degraded_status() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 200,
         breakdown: "Total:200ms".to_string(),
@@ -395,9 +399,9 @@ fn test_zero_p95_in_degraded_status() {
         rolling_totals: vec![200],
         p95_latency_ms: 0, // Zero P95 (insufficient samples)
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
-    
+
     // Should show P95:N/A for degraded status with zero P95
     assert!(result.starts_with("🟡"));
     assert!(result.contains("P95:N/A"));
@@ -405,10 +409,10 @@ fn test_zero_p95_in_degraded_status() {
     assert!(!result.contains("err:"));
 }
 
-#[test] 
+#[test]
 fn test_empty_breakdown_in_error_status() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 1000,
         breakdown: "".to_string(), // Empty breakdown
@@ -417,9 +421,9 @@ fn test_empty_breakdown_in_error_status() {
         rolling_totals: vec![900, 950, 1000],
         p95_latency_ms: 980,
     };
-    
+
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
-    
+
     // Should handle empty breakdown in error status
     assert!(result.starts_with("🔴"));
     // Should not contain any additional text beyond the emoji
