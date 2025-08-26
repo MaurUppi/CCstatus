@@ -8,7 +8,7 @@ Spec: `project/network/1-network_monitoring-Requirement-Final.md` (v2, 2025-08-2
 - Stdin-driven, no background threads: Met. Uses single async flow, no persistent tasks.
 - Inputs parsed: Met. Parses `session_id`, `transcript_path`, `cost.total_duration_ms`.
 - Credential resolution: Met. Calls `CredentialManager::get_credentials()` each run; no caching.
-- No-credential path: Met. Calls `HttpMonitor::write_unknown(false)`, then renders and returns.
+- No-credential path: Met in module logic. Calls `HttpMonitor::write_unknown(false)`, then renders and returns. Note: Not exercised in app because `NetworkSegment` is not yet wired into the main statusline pipeline (see Integration gap below).
 - Windowing: Met.
   - COLD: `(total_duration_ms < COLD_WINDOW_MS)` with `ccstatus_COLD_WINDOW_MS` override (also accepts `CCSTATUS_COLD_WINDOW_MS`).
   - RED: `(total_duration_ms % 10_000) < 1_000` gated by JSONL error detection.
@@ -50,7 +50,7 @@ Spec: `project/network/1-network_monitoring-Requirement-Final.md` (v2, 2025-08-2
   - Segment accepts both `ccstatus_COLD_WINDOW_MS` and `CCSTATUS_COLD_WINDOW_MS`; the spec names the former. Keeping both is fine; consider documenting dual support in module docs for clarity.
 
 ## Overall assessment
-- Functional parity with the core orchestration requirements is high. The main gaps are optimization/robustness items: per-window dedup for GREEN/RED, avoiding double JSONL scans, and aligning COLD with “no valid state” semantics. None break correctness, but addressing Medium findings will reduce redundant probes and better match the spec’s intent and schema.
+- Functional parity within the module is high. The primary E2E blocker is integration: `NetworkSegment` is not currently executed by the app. Address that wiring first; then implement per-window dedup, single JSONL scan, and refined COLD semantics for optimal behavior.
 
 ## Suggested acceptance criteria adjustments
 - Add per-window dedup to ensure ≤1 probe per window

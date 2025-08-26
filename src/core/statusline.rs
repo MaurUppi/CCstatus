@@ -44,30 +44,68 @@ impl StatusLineGenerator {
     }
 
     pub fn generate(&self, segments: Vec<(SegmentConfig, SegmentData)>) -> String {
-        let mut output = Vec::new();
         let enabled_segments: Vec<_> = segments
             .into_iter()
             .filter(|(config, _)| config.enabled)
             .collect();
 
-        for (config, data) in enabled_segments.iter() {
-            let rendered = self.render_segment(config, data);
-            if !rendered.is_empty() {
-                output.push(rendered);
-            }
-        }
-
-        if output.is_empty() {
+        if enabled_segments.is_empty() {
             return String::new();
         }
 
-        // Handle Powerline arrow separators with color transition
-        if self.config.style.separator == "\u{e0b0}" {
-            self.join_with_powerline_arrows(&output, &enabled_segments)
-        } else {
-            // For all other separators, use white color and simple join
-            self.join_with_white_separators(&output)
+        // Separate network segments from other segments
+        let (network_segments, other_segments): (Vec<_>, Vec<_>) = enabled_segments
+            .into_iter()
+            .partition(|(config, _)| {
+                #[cfg(feature = "network-monitoring")]
+                return matches!(config.id, crate::config::SegmentId::Network);
+                #[cfg(not(feature = "network-monitoring"))]
+                false
+            });
+
+        let mut lines = Vec::new();
+
+        // Render first line (non-network segments)
+        if !other_segments.is_empty() {
+            let mut first_line_output = Vec::new();
+            for (config, data) in other_segments.iter() {
+                let rendered = self.render_segment(config, data);
+                if !rendered.is_empty() {
+                    first_line_output.push(rendered);
+                }
+            }
+
+            if !first_line_output.is_empty() {
+                let first_line = if self.config.style.separator == "\u{e0b0}" {
+                    self.join_with_powerline_arrows(&first_line_output, &other_segments)
+                } else {
+                    self.join_with_white_separators(&first_line_output)
+                };
+                lines.push(first_line);
+            }
         }
+
+        // Render second line (network segments)
+        if !network_segments.is_empty() {
+            let mut second_line_output = Vec::new();
+            for (config, data) in network_segments.iter() {
+                let rendered = self.render_segment(config, data);
+                if !rendered.is_empty() {
+                    second_line_output.push(rendered);
+                }
+            }
+
+            if !second_line_output.is_empty() {
+                let second_line = if self.config.style.separator == "\u{e0b0}" {
+                    self.join_with_powerline_arrows(&second_line_output, &network_segments)
+                } else {
+                    self.join_with_white_separators(&second_line_output)
+                };
+                lines.push(second_line);
+            }
+        }
+
+        lines.join("\n")
     }
 
     /// Generate statusline for TUI preview with proper width calculation
