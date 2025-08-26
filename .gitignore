@@ -1,7 +1,12 @@
-/target
+# Build files
+target/
 
 # Documentation and development files
-claude-powerline-features.md
-CLAUDE.md
+claude*.md
 PRD.md
 .claude/
+project/
+tests/
+.serena/
+.cursor/
+.idea/

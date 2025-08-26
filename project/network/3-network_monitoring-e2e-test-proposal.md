@@ -2,7 +2,7 @@
 
 - **Goal**: Verify the full pipeline works as designed: stdin → orchestration (COLD/RED/GREEN) → probe → state persistence → rendering, with correct frequency gating, classification, and debug observability.
 - **Spec basis**: `project/network/1-network_monitoring-Requirement-Final.md` (COLD/GREEN/RED sequence diagrams, stdin JSON, error mapping, debug logger behavior).
-- **Real transcript anchor**: `transcript_path="/Users/ouzy/.claude/projects/-Users-ouzy-Documents-DevProjects-CCstatus/6ed29d2f-35f2-4cab-9aae-d72eb7907a78.jsonl"` (sessionId: `6ed29d2f-35f2-4cab-9aae-d72eb7907a78`).
+- **Real transcript anchor**: `transcript_path="/Users/ouzy/.claude/projects/-Users-ouzy-Documents-DevProjects-CCstatus/2129c2b8-0f7a-43d6-866c-ea87e2862e26.jsonl"` (sessionId: `6ed29d2f-35f2-4cab-9aae-d72eb7907a78`).
 
 ---
 
@@ -11,7 +11,7 @@
 - **Artifacts/paths**
   - State file (single writer): `~/.claude/ccstatus/ccstatus-monitoring.json`
   - Debug log (sidecar): `~/.claude/ccstatus/ccstatus-debug.log`
-  - Transcript (real): `/Users/ouzy/.claude/projects/-Users-ouzy-Documents-DevProjects-CCstatus/6ed29d2f-35f2-4cab-9aae-d72eb7907a78.jsonl`
+  - Transcript (real): `/Users/ouzy/.claude/projects/-Users-ouzy-Documents-DevProjects-CCstatus/2129c2b8-0f7a-43d6-866c-ea87e2862e26.jsonl`
 - **Env toggles**
   - `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` (env > shell > config)
   - `CCSTATUS_DEBUG=true` to assert sidecar lines
@@ -23,7 +23,7 @@
 ```json
 {
   "session_id": "6ed29d2f-35f2-4cab-9aae-d72eb7907a78",
-  "transcript_path": "/Users/ouzy/.claude/projects/-Users-ouzy-Documents-DevProjects-CCstatus/6ed29d2f-35f2-4cab-9aae-d72eb7907a78.jsonl",
+  "transcript_path": "/Users/ouzy/.claude/projects/-Users-ouzy-Documents-DevProjects-CCstatus/2129c2b8-0f7a-43d6-866c-ea87e2862e26.jsonl",
   "cwd": "/Users/ouzy/Documents/DevProjects/CCstatus",
   "model": {"id": "claude-sonnet-4-20250514", "display_name": "Sonnet 4"},
   "workspace": {"current_dir": "/Users/ouzy/Documents/DevProjects/CCstatus", "project_dir": "/Users/ouzy/Documents/DevProjects/CCstatus"},
@@ -190,7 +190,7 @@ jq '.cost.total_duration_ms=602500' stdin.template.json | your_binary_under_test
 ```bash
 export CCSTATUS_DEBUG=true
 append_jsonl_error_event \
-  "/Users/ouzy/.claude/projects/-Users-ouzy-Documents-DevProjects-CCstatus/6ed29d2f-35f2-4cab-9aae-d72eb7907a78.jsonl"
+  "/Users/ouzy/.claude/projects/-Users-ouzy-Documents-DevProjects-CCstatus/2129c2b8-0f7a-43d6-866c-ea87e2862e26.jsonl"
 jq '.cost.total_duration_ms=100500' stdin.template.json | your_binary_under_test
 ```
 

@@ -536,9 +536,9 @@ impl NetworkSegment {
     /// Output goes to stdout for Claude Code statusline display.
     async fn render_and_output(&self) -> Result<(), NetworkError> {
         let state = self.http_monitor.load_state().await.unwrap_or_default();
-        let status_text = self.status_renderer.render_status(&state.status, &state.network);
+        let _status_text = self.status_renderer.render_status(&state.status, &state.network);
         
-        println!("{}", status_text);
+        // Note: status_text output is handled by the segment wrapper for statusline integration
         Ok(())
     }
 

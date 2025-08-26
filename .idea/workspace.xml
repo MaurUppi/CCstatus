@@ -12,19 +12,25 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="6ce65814-3068-4bbb-97f1-85756855d77e" name="更改" comment="">
-      <change beforePath="$PROJECT_DIR$/src/core/network/debug_logger.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/network/debug_logger.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/network/error_tracker.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/network/error_tracker.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/network/jsonl_monitor.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/network/jsonl_monitor.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/network/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/network/mod.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/network/types.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/network/types.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/core/network/common/mod.rs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.serena/cache/rust/document_symbols_cache_v23-06-25.pkl" beforeDir="false" afterPath="$PROJECT_DIR$/.serena/cache/rust/document_symbols_cache_v23-06-25.pkl" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/project/Network-feature-dev.md" beforeDir="false" afterPath="$PROJECT_DIR$/project/Network-feature-dev.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/project/network/1-network_monitoring-Requirement-Final.md" beforeDir="false" afterPath="$PROJECT_DIR$/project/network/1-network_monitoring-Requirement-Final.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/project/network/3-network_monitoring-e2e-test-proposal.md" beforeDir="false" afterPath="$PROJECT_DIR$/project/network/3-network_monitoring-e2e-test-proposal.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/network/http_monitor.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/network/http_monitor.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/network/network_segment.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/network/network_segment.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/themes/presets.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/themes/presets.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/core/network/http_monitor_test.rs" beforeDir="false" afterPath="$PROJECT_DIR$/tests/core/network/http_monitor_test.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="ExecutionTargetManager" SELECTED_TARGET="RsBuildProfile:dev" />
+  <component name="ExecutionTargetManager" SELECTED_TARGET="RsBuildProfile:release" />
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
@@ -42,7 +48,7 @@
       <option value="100" />
       <option value="200" />
     </hideBySeverity>
-    <option name="selectedTabId" value="ProjectErrors" />
+    <option name="selectedTabId" value="CurrentFile" />
   </component>
   <component name="ProjectColorInfo"><![CDATA[{
   "customColor": "",
@@ -75,9 +81,14 @@
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/tests/core/network" />
+    </key>
+  </component>
   <component name="RunManager" selected="Cargo.Run ccometixline">
     <configuration name="Run ccometixline" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-      <option name="buildProfileId" value="dev" />
+      <option name="buildProfileId" value="release" />
       <option name="command" value="run --package ccometixline --bin ccometixline" />
       <option name="workingDirectory" value="file://$PROJECT_DIR$" />
       <envs />
@@ -122,7 +133,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1756127551716</updated>
-      <workItem from="1756127553051" duration="22993000" />
+      <workItem from="1756127553051" duration="54193000" />
     </task>
     <servers />
   </component>

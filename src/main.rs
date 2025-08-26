@@ -7,7 +7,7 @@ use std::io;
 use ccstatus::core::network::StatuslineInput;
 
 #[cfg(feature = "network-monitoring")]
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     main_impl().await
 }

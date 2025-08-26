@@ -189,6 +189,7 @@ render_from_state()
     curl -X POST {ANTHROPIC_BASE_URL}/v1/messages \
       -H "Content-Type: application/json" \
       -H "x-api-key: {ANTHROPIC_AUTH_TOKEN}" \
+      -H "User-Agent: claude-cli/1.0.80 (external, cli)" \
       -d '{
         "model": "claude-3-haiku-20240307",
         "max_tokens": 1,

@@ -299,6 +299,8 @@ I remain noticed http_monitor_improvements_tests,
 ---------------------------------------------------------------------------
 echo '{"model": {"display_name": "Sonnet"}, "workspace": {"current_dir": "/test"}, "transcript_path":"/test/transcript.json"}'  timeout 5 ./target/release/ccstatus
 
+echo '{"session_id":"test123","transcript_path":"/tmp/test.jsonl","cwd":"/tmp","model":{"id":"claude-3"},"workspace":{"type":"test"},"version":"1.0.0","output_style":{},"cost":{"total_cost_usd":0.01,"total_duration_ms":1000,"total_api_duration_ms":500,"total_lines_added":0,"total_lines_removed":0},"exceeds_200_tokens":false}' | ./target/release/ccstatus
+
 
 Can you have a try below mock stdin (but transcript_path and file are real) and figure out why all three files not been created at "~/.claude/ccstatus"?
 echo '{"model": {"display_name": "Claude Sonnet"}, "workspace": {"current_dir":"/Users/ouzy/Documents/DevProjects/CCstatus"}, "transcript_path": "/Users/ouzy/.claude/projects/-Users-ouzy-Documents-DevProjects-CCstatus/b7c2025d-d927-48ad-9b21-94679e4271ff.jsonl"}' | export CCSTATUS_DEBUG=true ./target/release/ccstatus &
@@ -354,33 +356,7 @@ exposes a clean, reusable API suitable for integration
 
 /sc:implement "NetworkSegment stdin orchestration" --type component --with-tests --ultrathink
 Read @project/network/1-network_monitoring-Requirement-Final.md to have a overview. I need you develop NetworkSegment modulel, list requirement below. 
-### NetworkSegment（stdin orchestration）
-- 读取 stdin 输入，解析 `total_duration_ms`、`transcript_path` 等。
-- 调用 `CredentialManager` 解析凭证，仅负责编排；不写状态。
-- 调用 `JsonlMonitor` 进行错误检测（仅用于 RED 触发门控）。
-- 计算 GREEN/RED 频率窗口：
-  - GREEN：每 300 秒的前 3 秒
-  - RED：每 10 秒的前 1 秒（且仅在检测到错误时）
-- 计算 COLD 窗口并优先评估：
-  - COLD：`total_duration_ms < COLD_WINDOW_MS` 命中即触发一次性探测（默认 `5000ms`；可由 `ccstatus_COLD_WINDOW_MS` 覆盖）
-  - 去重与并发：若当前 `session_id` 等于上次冷启动标记或存在进行中探测，则不再发起新的 COLD
-- 在命中窗口时调用 `HttpMonitor::probe(mode, creds)`；未命中窗口则不写状态、仅使用上次状态进行渲染。
-- 调用 `StatusRenderer` 输出状态文本。
 
-#### NetworkSegment 集成契约（调用与协调）
-- 输入（每次 stdin 事件）：`total_duration_ms`, `transcript_path`, `session_id`。
-- 调用次序与参数：
-  1) `CredentialManager::get_credentials()` → `Option<ApiCredentials>`（无缓存、每次解析）
-  2) 无凭证 → `HttpMonitor::write_unknown(monitoring_enabled=false)`；随后渲染并结束
-  3) 非冷启动：`(error_detected, last_error_event) = JsonlMonitor::scan_tail(transcript_path)`
-  4) 命中 COLD 优先：`HttpMonitor::probe(COLD, creds, None)`（本轮跳过 RED/GREEN）
-  5) 命中 RED 窗口且 `error_detected`：`HttpMonitor::probe(RED, creds, Some(last_error_event))`
-  6) 命中 GREEN 窗口：`HttpMonitor::probe(GREEN, creds, None)`
-  7) 渲染：读取上次状态并 `StatusRenderer` 输出单行状态
-- 去重与并发：
-  - COLD：通过 `monitoring_state.last_cold_session_id` 与 `last_cold_probe_at` 去重；同一 `session_id` 本会话仅一次
-  - 单次 stdin 内只触发至多一次 `probe`（COLD > RED > GREEN 优先级）
-  - 不引入后台线程；所有调用均为同步链路上的“即发即收”
 
 // TODO: check if HttpMonitor will get the actual session_id from NetworkSegment when stdin is processed
 
@@ -398,27 +374,106 @@ Per requirment doc, evaluate @src/core/network/network_segment.rs if functionali
 /sc:analyze @src/core/network/network_segment.rs --focus functionality "NetworkSegment stdin orchestration" --ultrathink --seq --serena
 read @src/core/network/network_segment_review.md review assessment report if valid. ONLY eys on "Medium" risk THEN think out your enhancement plan.  think out your enhancement plan. 
 
+/sc:improve @src/core/network/network_segment.rs "HNetworkSegment Enhancement" --tests-required --serena --morph --task-manage
+Approved all 3 phases plan. do it now. 
+
+
+/sc:analyze  @src/core/network/network_segment.rs#L247-252 and @src/core/network/http_monitor.rs --focus functionality "NetworkSegment & HttpMonitor integration"  --ultrathink --seq --serena
+Remember NetworkSegment is stdin orchestration, HttpMonitor is respones for probe and save status. 
+
+  // Set window IDs for persistence (Phase 2: Per-window deduplication)
+    // Note: HttpMonitor integration pending - methods set_green_window_id/set_red_window_id
+    // to be implemented in HttpMonitor to persist window IDs
+    if let Some(_green_id) = window_decision.green_window_id {
+        // self.http_monitor.set_green_window_id(green_id); // TODO: Implement in HttpMonitor
+    }
+    if let Some(_red_id) = window_decision.red_window_id {
+        // self.http_monitor.set_red_window_id(red_id); // TODO: Implement in HttpMonitor  
+    }
+
+
+
 
 GOAL: Knowing if the whole pipeline will work as designed. 
 Given all modules and corresponding test files had been developed, thus, I want you
-1. @project/network/1-network_monitoring-Requirement-Final.md to recall COLD/GREED/RED `sequenceDiagram` , `StdIN Input JSON Structure example` . 
+1. Reload @project/network/1-network_monitoring-Requirement-Final.md to recall COLD/GREED/RED `sequenceDiagram` , `StdIN Input JSON Structure example` . 
 2. Use a real Jonsl log as `/Users/ouzy/.claude/projects/-Users-ouzy-Documents-DevProjects-CCstatus/6ed29d2f-35f2-4cab-9aae-d72eb7907a78.jsonl`
 TO develop a end 2 end test proposal with classifications, including debug function. THEN save it at @project/network folder
 
 
 
+```
+ANTHROPIC_BASE_URL="https://as038guxithtu.imds.ai/api" \
+ANTHROPIC_AUTH_TOKEN="cr_75748a91d28eda2d0ad0973e634c1f13462528b1a350746ba291a2b452f7bfa0" \
+tests/run_e2e_ccstatus.sh cold
+```
+ANTHROPIC_BASE_URL="https://as038guxithtu.imds.ai/api" \
+ANTHROPIC_AUTH_TOKEN="cr_75748a91d28eda2d0ad0973e634c1f13462528b1a350746ba291a2b452f7bfa0" \
+CCSTATUS_DEBUG=true \
+tests/run_e2e_ccstatus.sh red-hit
+
+Run all scenarios:
+```bash
+cd ~/Documents/DevProjects/CCstatus
+chmod +x ./run_e2e_ccstatus.sh
+./run_e2e_ccstatus.sh
+```
+
+Run one scenario:
+```bash
+./run_e2e_ccstatus.sh unknown
+./run_e2e_ccstatus.sh cold
+./run_e2e_ccstatus.sh green
+./run_e2e_ccstatus.sh green-skip
+./run_e2e_ccstatus.sh red-hit
+./run_e2e_ccstatus.sh red-skip
+./run_e2e_ccstatus.sh priority
+./run_e2e_ccstatus.sh timeout
+./run_e2e_ccstatus.sh env-source
+./run_e2e_ccstatus.sh rolling-cap
+./run_e2e_ccstatus.sh renderer
+```
+
+
+
+/sc:analyze @src/core/network/network_segment.rs  --focus architecture "NetworkSegment Integration gap"  --ultrathink --seq --serena
+Review @tests/NetworkSegment-Integration-gap.md assessment report THEN workout a enhancement plan.
+
+/sc:improve @src/core/network/network_segment.rs "NetworkSegment Integration Enhancement Plan" --tests-required --serena --morph --task-manage
+Approved all 5 phases plan. do it now.
 
 
 
 
+curl -X POST https://as038guxithtu.imds.ai/api/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: cr_75748a91d28eda2d0ad0973e634c1f13462528b1a350746ba291a2b452f7bfa0" \
+  -H "User-Agent: claude-cli/1.0.69 (external, cli)" \
+  -d '{
+    "model": "claude-3-5-haiku-20241022",
+    "max_tokens": 1,
+    "messages": [
+      {"role": "user", "content": "Hi"}
+    ]
+  }'
+
+{"id":"msg_01GKX18CLrMMLXcQcgosgNVt","type":"message","role":"assistant","model":"claude-3-5-haiku-20241022","content":[{"type":"text","text":"Hello"}],"stop_reason":"max_tokens","stop_sequence":null,"usage":{"input_tokens":22,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"output_tokens":1,"service_tier":"standard"}}%
+
+curl -X POST https://as038guxithtu.imds.ai/api/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: cr_75748a91d28eda2d0ad0973e634c1f13462528b1a350746ba291a2b452f7bfa0" \
+  -d '{
+    "model": "claude-3-5-haiku-20241022",
+    "max_tokens": 1,
+    "messages": [
+      {"role": "user", "content": "Hi"}
+    ]
+  }'
 
 
+{"id":"msg_011ubyzbZMQMC7Wag1SKTibS","type":"message","role":"assistant","model":"claude-3-5-haiku-20241022","content":[{"type":"text","text":"Hello"}],"stop_reason":"max_tokens","stop_sequence":null,"usage":{"input_tokens":22,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"output_tokens":1,"service_tier":"standard"}}%
 
 
-
-
-
-
-
-
+/sc:analyze @src/core/network/http_monitor.rs  --focus functionality "phase timings function"  --ultrathink --seq --serena
+Read project/network/4-dns_tcp_tls_phase_timings-dev-plan.md , evaluate and develop a dev plan. 
 

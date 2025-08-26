@@ -77,14 +77,12 @@ impl HttpClientTrait for TestHttpClient {
 /// Test-specific mock clock with controllable time
 #[derive(Clone)]
 struct TestClock {
-    current_time: Arc<Mutex<Instant>>,
     timestamp_sequence: Arc<Mutex<Vec<String>>>,
 }
 
 impl TestClock {
     fn new() -> Self {
         Self {
-            current_time: Arc::new(Mutex::new(Instant::now())),
             timestamp_sequence: Arc::new(Mutex::new(vec![])),
         }
     }

@@ -36,7 +36,10 @@ use std::time::{Duration, Instant};
 #[cfg(feature = "network-monitoring")]
 use isahc::config::Configurable;
 #[cfg(feature = "network-monitoring")]
-use isahc::{AsyncReadResponseExt, HttpClient, Request};
+use isahc::{HttpClient, Request};
+
+#[cfg(feature = "network-monitoring")]
+use futures::io::{copy, sink};
 
 /// HTTP client abstraction for dependency injection and testing
 #[async_trait::async_trait]
@@ -94,7 +97,7 @@ impl HttpClientTrait for IsahcHttpClient {
             request.headers_mut().insert(header_name, header_value);
         }
 
-        let mut response = self
+        let response = self
             .client
             .send_async(request)
             .await
@@ -103,8 +106,9 @@ impl HttpClientTrait for IsahcHttpClient {
 
         let status = response.status().as_u16();
 
-        // Consume response body to complete the request
-        let _ = response.text().await.unwrap_or_default();
+        // Drain response body without allocating (zero-copy to sink)
+        let mut body = response.into_body();
+        let _ = copy(&mut body, &mut sink()).await.map_err(|e| format!("Failed to drain response body: {}", e))?;
 
         // Generate timing breakdown with stable numeric format
         let total_ms = ttfb_duration.as_millis() as u32;

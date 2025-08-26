@@ -122,12 +122,17 @@ impl ThemePresets {
                 mode: StyleMode::Plain,
                 separator: " | ".to_string(),
             },
-            segments: vec![
-                Self::model_segment(),
-                Self::directory_segment(),
-                Self::git_segment(),
-                Self::usage_segment(),
-            ],
+            segments: {
+                let mut segments = vec![
+                    Self::model_segment(),
+                    Self::directory_segment(),
+                    Self::git_segment(),
+                    Self::usage_segment(),
+                ];
+                #[cfg(feature = "network-monitoring")]
+                segments.push(Self::network_segment());
+                segments
+            },
             theme: "default".to_string(),
         }
     }
@@ -208,18 +213,42 @@ impl ThemePresets {
         }
     }
 
+    #[cfg(feature = "network-monitoring")]
+    fn network_segment() -> SegmentConfig {
+        SegmentConfig {
+            id: SegmentId::Network,
+            enabled: true,
+            icon: IconConfig {
+                plain: "📶".to_string(),
+                nerd_font: "\u{f1eb}".to_string(), // Wi-Fi icon
+            },
+            colors: ColorConfig {
+                icon: Some(AnsiColor::Color16 { c16: 10 }), // Green
+                text: Some(AnsiColor::Color16 { c16: 10 }),
+                background: None,
+            },
+            styles: TextStyleConfig::default(),
+            options: HashMap::new(),
+        }
+    }
+
     pub fn get_minimal() -> Config {
         Config {
             style: StyleConfig {
                 mode: StyleMode::Plain,
                 separator: " │ ".to_string(), // Thin vertical bar
             },
-            segments: vec![
-                Self::minimal_model_segment(),
-                Self::minimal_directory_segment(),
-                Self::minimal_git_segment(),
-                Self::minimal_usage_segment(),
-            ],
+            segments: {
+                let mut segments = vec![
+                    Self::minimal_model_segment(),
+                    Self::minimal_directory_segment(),
+                    Self::minimal_git_segment(),
+                    Self::minimal_usage_segment(),
+                ];
+                #[cfg(feature = "network-monitoring")]
+                segments.push(Self::minimal_network_segment());
+                segments
+            },
             theme: "minimal".to_string(),
         }
     }
@@ -230,12 +259,17 @@ impl ThemePresets {
                 mode: StyleMode::NerdFont,
                 separator: " | ".to_string(),
             },
-            segments: vec![
-                Self::gruvbox_model_segment(),
-                Self::gruvbox_directory_segment(),
-                Self::gruvbox_git_segment(),
-                Self::gruvbox_usage_segment(),
-            ],
+            segments: {
+                let mut segments = vec![
+                    Self::gruvbox_model_segment(),
+                    Self::gruvbox_directory_segment(),
+                    Self::gruvbox_git_segment(),
+                    Self::gruvbox_usage_segment(),
+                ];
+                #[cfg(feature = "network-monitoring")]
+                segments.push(Self::gruvbox_network_segment());
+                segments
+            },
             theme: "gruvbox".to_string(),
         }
     }
@@ -246,12 +280,17 @@ impl ThemePresets {
                 mode: StyleMode::NerdFont,
                 separator: "".to_string(),
             },
-            segments: vec![
-                Self::nord_model_segment(),
-                Self::nord_directory_segment(),
-                Self::nord_git_segment(),
-                Self::nord_usage_segment(),
-            ],
+            segments: {
+                let mut segments = vec![
+                    Self::nord_model_segment(),
+                    Self::nord_directory_segment(),
+                    Self::nord_git_segment(),
+                    Self::nord_usage_segment(),
+                ];
+                #[cfg(feature = "network-monitoring")]
+                segments.push(Self::nord_network_segment());
+                segments
+            },
             theme: "nord".to_string(),
         }
     }
@@ -333,6 +372,25 @@ impl ThemePresets {
         }
     }
 
+    #[cfg(feature = "network-monitoring")]
+    fn minimal_network_segment() -> SegmentConfig {
+        SegmentConfig {
+            id: SegmentId::Network,
+            enabled: true,
+            icon: IconConfig {
+                plain: "•".to_string(),
+                nerd_font: "\u{f1eb}".to_string(), // Wi-Fi icon
+            },
+            colors: ColorConfig {
+                icon: Some(AnsiColor::Color16 { c16: 10 }), // Green
+                text: Some(AnsiColor::Color16 { c16: 10 }),
+                background: None,
+            },
+            styles: TextStyleConfig::default(),
+            options: HashMap::new(),
+        }
+    }
+
     // Gruvbox theme segments
     fn gruvbox_model_segment() -> SegmentConfig {
         SegmentConfig {
@@ -403,6 +461,25 @@ impl ThemePresets {
             colors: ColorConfig {
                 icon: Some(AnsiColor::Color16 { c16: 5 }),
                 text: Some(AnsiColor::Color16 { c16: 5 }),
+                background: None,
+            },
+            styles: TextStyleConfig { text_bold: true },
+            options: HashMap::new(),
+        }
+    }
+
+    #[cfg(feature = "network-monitoring")]
+    fn gruvbox_network_segment() -> SegmentConfig {
+        SegmentConfig {
+            id: SegmentId::Network,
+            enabled: true,
+            icon: IconConfig {
+                plain: "📶".to_string(),
+                nerd_font: "\u{f1eb}".to_string(), // Wi-Fi icon
+            },
+            colors: ColorConfig {
+                icon: Some(AnsiColor::Color16 { c16: 10 }), // Green
+                text: Some(AnsiColor::Color16 { c16: 10 }),
                 background: None,
             },
             styles: TextStyleConfig { text_bold: true },
@@ -535,6 +612,37 @@ impl ThemePresets {
         }
     }
 
+    #[cfg(feature = "network-monitoring")]
+    fn nord_network_segment() -> SegmentConfig {
+        SegmentConfig {
+            id: SegmentId::Network,
+            enabled: true,
+            icon: IconConfig {
+                plain: "📶".to_string(),
+                nerd_font: "\u{f1eb}".to_string(), // Wi-Fi icon
+            },
+            colors: ColorConfig {
+                icon: Some(AnsiColor::Rgb {
+                    r: 163,
+                    g: 190,
+                    b: 140,
+                }),
+                text: Some(AnsiColor::Rgb {
+                    r: 163,
+                    g: 190,
+                    b: 140,
+                }),
+                background: Some(AnsiColor::Rgb {
+                    r: 53,
+                    g: 57,
+                    b: 69,
+                }),
+            },
+            styles: TextStyleConfig::default(),
+            options: HashMap::new(),
+        }
+    }
+
     // Powerline Dark theme
     pub fn get_powerline_dark() -> Config {
         Config {
@@ -542,12 +650,17 @@ impl ThemePresets {
                 mode: StyleMode::NerdFont,
                 separator: "".to_string(),
             },
-            segments: vec![
-                Self::powerline_dark_model_segment(),
-                Self::powerline_dark_directory_segment(),
-                Self::powerline_dark_git_segment(),
-                Self::powerline_dark_usage_segment(),
-            ],
+            segments: {
+                let mut segments = vec![
+                    Self::powerline_dark_model_segment(),
+                    Self::powerline_dark_directory_segment(),
+                    Self::powerline_dark_git_segment(),
+                    Self::powerline_dark_usage_segment(),
+                ];
+                #[cfg(feature = "network-monitoring")]
+                segments.push(Self::powerline_dark_network_segment());
+                segments
+            },
             theme: "powerline-dark".to_string(),
         }
     }
@@ -676,6 +789,37 @@ impl ThemePresets {
         }
     }
 
+    #[cfg(feature = "network-monitoring")]
+    fn powerline_dark_network_segment() -> SegmentConfig {
+        SegmentConfig {
+            id: SegmentId::Network,
+            enabled: true,
+            icon: IconConfig {
+                plain: "📶".to_string(),
+                nerd_font: "\u{f1eb}".to_string(), // Wi-Fi icon
+            },
+            colors: ColorConfig {
+                icon: Some(AnsiColor::Rgb {
+                    r: 163,
+                    g: 190,
+                    b: 140,
+                }),
+                text: Some(AnsiColor::Rgb {
+                    r: 163,
+                    g: 190,
+                    b: 140,
+                }),
+                background: Some(AnsiColor::Rgb {
+                    r: 40,
+                    g: 44,
+                    b: 52,
+                }),
+            },
+            styles: TextStyleConfig::default(),
+            options: HashMap::new(),
+        }
+    }
+
     // Powerline Light theme
     pub fn get_powerline_light() -> Config {
         Config {
@@ -683,12 +827,17 @@ impl ThemePresets {
                 mode: StyleMode::NerdFont,
                 separator: "".to_string(),
             },
-            segments: vec![
-                Self::powerline_light_model_segment(),
-                Self::powerline_light_directory_segment(),
-                Self::powerline_light_git_segment(),
-                Self::powerline_light_usage_segment(),
-            ],
+            segments: {
+                let mut segments = vec![
+                    Self::powerline_light_model_segment(),
+                    Self::powerline_light_directory_segment(),
+                    Self::powerline_light_git_segment(),
+                    Self::powerline_light_usage_segment(),
+                ];
+                #[cfg(feature = "network-monitoring")]
+                segments.push(Self::powerline_light_network_segment());
+                segments
+            },
             theme: "powerline-light".to_string(),
         }
     }
@@ -809,6 +958,37 @@ impl ThemePresets {
         }
     }
 
+    #[cfg(feature = "network-monitoring")]
+    fn powerline_light_network_segment() -> SegmentConfig {
+        SegmentConfig {
+            id: SegmentId::Network,
+            enabled: true,
+            icon: IconConfig {
+                plain: "📶".to_string(),
+                nerd_font: "\u{f1eb}".to_string(), // Wi-Fi icon
+            },
+            colors: ColorConfig {
+                icon: Some(AnsiColor::Rgb {
+                    r: 255,
+                    g: 255,
+                    b: 255,
+                }),
+                text: Some(AnsiColor::Rgb {
+                    r: 255,
+                    g: 255,
+                    b: 255,
+                }),
+                background: Some(AnsiColor::Rgb {
+                    r: 76,
+                    g: 175,
+                    b: 80,
+                }),
+            },
+            styles: TextStyleConfig::default(),
+            options: HashMap::new(),
+        }
+    }
+
     // Powerline Rose Pine theme
     pub fn get_powerline_rose_pine() -> Config {
         Config {
@@ -816,12 +996,17 @@ impl ThemePresets {
                 mode: StyleMode::NerdFont,
                 separator: "".to_string(),
             },
-            segments: vec![
-                Self::powerline_rose_pine_model_segment(),
-                Self::powerline_rose_pine_directory_segment(),
-                Self::powerline_rose_pine_git_segment(),
-                Self::powerline_rose_pine_usage_segment(),
-            ],
+            segments: {
+                let mut segments = vec![
+                    Self::powerline_rose_pine_model_segment(),
+                    Self::powerline_rose_pine_directory_segment(),
+                    Self::powerline_rose_pine_git_segment(),
+                    Self::powerline_rose_pine_usage_segment(),
+                ];
+                #[cfg(feature = "network-monitoring")]
+                segments.push(Self::powerline_rose_pine_network_segment());
+                segments
+            },
             theme: "powerline-rose-pine".to_string(),
         }
     }
@@ -950,6 +1135,37 @@ impl ThemePresets {
         }
     }
 
+    #[cfg(feature = "network-monitoring")]
+    fn powerline_rose_pine_network_segment() -> SegmentConfig {
+        SegmentConfig {
+            id: SegmentId::Network,
+            enabled: true,
+            icon: IconConfig {
+                plain: "📶".to_string(),
+                nerd_font: "\u{f1eb}".to_string(), // Wi-Fi icon
+            },
+            colors: ColorConfig {
+                icon: Some(AnsiColor::Rgb {
+                    r: 156,
+                    g: 207,
+                    b: 216,
+                }),
+                text: Some(AnsiColor::Rgb {
+                    r: 156,
+                    g: 207,
+                    b: 216,
+                }),
+                background: Some(AnsiColor::Rgb {
+                    r: 87,
+                    g: 82,
+                    b: 104,
+                }),
+            },
+            styles: TextStyleConfig::default(),
+            options: HashMap::new(),
+        }
+    }
+
     // Powerline Tokyo Night theme
     pub fn get_powerline_tokyo_night() -> Config {
         Config {
@@ -957,12 +1173,17 @@ impl ThemePresets {
                 mode: StyleMode::NerdFont,
                 separator: "".to_string(),
             },
-            segments: vec![
-                Self::powerline_tokyo_night_model_segment(),
-                Self::powerline_tokyo_night_directory_segment(),
-                Self::powerline_tokyo_night_git_segment(),
-                Self::powerline_tokyo_night_usage_segment(),
-            ],
+            segments: {
+                let mut segments = vec![
+                    Self::powerline_tokyo_night_model_segment(),
+                    Self::powerline_tokyo_night_directory_segment(),
+                    Self::powerline_tokyo_night_git_segment(),
+                    Self::powerline_tokyo_night_usage_segment(),
+                ];
+                #[cfg(feature = "network-monitoring")]
+                segments.push(Self::powerline_tokyo_night_network_segment());
+                segments
+            },
             theme: "powerline-tokyo-night".to_string(),
         }
     }
@@ -1084,6 +1305,37 @@ impl ThemePresets {
                     r: 61,
                     g: 89,
                     b: 161,
+                }),
+            },
+            styles: TextStyleConfig::default(),
+            options: HashMap::new(),
+        }
+    }
+
+    #[cfg(feature = "network-monitoring")]
+    fn powerline_tokyo_night_network_segment() -> SegmentConfig {
+        SegmentConfig {
+            id: SegmentId::Network,
+            enabled: true,
+            icon: IconConfig {
+                plain: "📶".to_string(),
+                nerd_font: "\u{f1eb}".to_string(), // Wi-Fi icon
+            },
+            colors: ColorConfig {
+                icon: Some(AnsiColor::Rgb {
+                    r: 125,
+                    g: 207,
+                    b: 255,
+                }),
+                text: Some(AnsiColor::Rgb {
+                    r: 125,
+                    g: 207,
+                    b: 255,
+                }),
+                background: Some(AnsiColor::Rgb {
+                    r: 36,
+                    g: 40,
+                    b: 59,
                 }),
             },
             styles: TextStyleConfig::default(),
