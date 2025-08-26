@@ -4,3 +4,4 @@
 //! state persistence, and rolling statistics
 
 pub mod http_monitor_test;
+pub mod network_segment_tests;

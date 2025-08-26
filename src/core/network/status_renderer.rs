@@ -1,5 +1,5 @@
 // Statusline UI rendering for network monitoring
-use crate::core::segments::network::types::{NetworkStatus, NetworkMetrics};
+use crate::core::network::types::{NetworkStatus, NetworkMetrics};
 
 /// Renders network status for statusline display
 pub struct StatusRenderer;

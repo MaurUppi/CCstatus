@@ -21,16 +21,7 @@
 //! - **PowerShell**: $env: syntax and [Environment]::SetEnvironmentVariable calls
 //! - **Cross-platform**: Auto-detection with OS-specific defaults
 //!
-//! ## Usage
-//!
-//! ```rust
-//! use crate::core::segments::network::credential::CredentialManager;
-//!
-//! let credential_manager = CredentialManager::new()?;
-//! if let Some(creds) = credential_manager.get_credentials().await? {
-//!     println!("Found credentials from: {:?}", creds.source);
-//! }
-//! ```
+
 
 use std::env;
 use std::path::{Path, PathBuf};
@@ -38,7 +29,7 @@ use serde_json::Value;
 use regex::Regex;
 use tokio::fs;
 
-use crate::core::segments::network::types::{ApiCredentials, CredentialSource, NetworkError};
+use crate::core::network::types::{ApiCredentials, CredentialSource, NetworkError};
 
 /// Shell types supported for configuration parsing
 #[derive(Debug, Clone, PartialEq)]
@@ -84,7 +75,7 @@ impl CredentialManager {
     /// 3. Claude Code config files
     /// 4. None (fail silent)
     pub async fn get_credentials(&self) -> Result<Option<ApiCredentials>, NetworkError> {
-        use crate::core::segments::network::debug_logger::get_debug_logger;
+        use crate::core::network::debug_logger::get_debug_logger;
         let logger = get_debug_logger();
         
         logger.debug("CredentialManager", "Starting credential lookup from all sources").await;
