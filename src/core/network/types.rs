@@ -47,6 +47,10 @@ pub struct NetworkMetrics {
     pub error_type: Option<String>,
     pub rolling_totals: Vec<u32>, // Capacity: 12 samples (~60 min at 300s cadence)
     pub p95_latency_ms: u32,
+    #[serde(default)]
+    pub connection_reused: Option<bool>, // Connection reuse detection for display purposes
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub breakdown_source: Option<String>, // "heuristic" | "measured"
 }
 
 /// Credential source types (aligned with credential.md)
@@ -249,6 +253,8 @@ impl Default for NetworkMetrics {
             error_type: None,
             rolling_totals: Vec::with_capacity(12), // Max 60 minutes at 300s intervals
             p95_latency_ms: 0,
+            connection_reused: None,
+            breakdown_source: None,
         }
     }
 }

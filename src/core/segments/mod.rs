@@ -4,6 +4,9 @@ pub mod model;
 pub mod update;
 pub mod usage;
 
+#[cfg(feature = "network-monitoring")]
+pub mod network;
+
 use crate::config::{InputData, SegmentId};
 use std::collections::HashMap;
 
@@ -26,3 +29,6 @@ pub use git::GitSegment;
 pub use model::ModelSegment;
 pub use update::UpdateSegment;
 pub use usage::UsageSegment;
+
+#[cfg(feature = "network-monitoring")]
+pub use network::NetworkSegmentWrapper;

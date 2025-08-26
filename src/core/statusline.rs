@@ -1,6 +1,11 @@
 use crate::config::{AnsiColor, Config, SegmentConfig, StyleMode};
 use crate::core::segments::SegmentData;
 
+#[cfg(feature = "network-monitoring")]
+use crate::core::network::StatuslineInput;
+#[cfg(feature = "network-monitoring")]
+use crate::core::segments::NetworkSegmentWrapper;
+
 /// Strip ANSI escape sequences and return visible text length
 fn visible_width(text: &str) -> usize {
     let mut visible = String::new();
@@ -451,9 +456,13 @@ impl StatusLineGenerator {
     }
 }
 
-pub fn collect_all_segments(
+pub async fn collect_all_segments(
     config: &Config,
     input: &crate::config::InputData,
+    #[cfg(feature = "network-monitoring")]
+    full_input: Option<&StatuslineInput>,
+    #[cfg(not(feature = "network-monitoring"))]
+    _full_input: Option<&()>,
 ) -> Vec<(SegmentConfig, SegmentData)> {
     use crate::core::segments::*;
 
@@ -485,6 +494,17 @@ pub fn collect_all_segments(
             crate::config::SegmentId::Update => {
                 let segment = UpdateSegment::new();
                 segment.collect(input)
+            }
+            #[cfg(feature = "network-monitoring")]
+            crate::config::SegmentId::Network => {
+                if let Some(full_input) = full_input {
+                    match NetworkSegmentWrapper::new() {
+                        Ok(mut wrapper) => wrapper.collect_with_full_input(full_input).await,
+                        Err(_) => None,
+                    }
+                } else {
+                    None
+                }
             }
         };
 

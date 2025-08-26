@@ -16,31 +16,53 @@ impl Default for Config {
         {
             use crate::config::{AnsiColor, SegmentConfig, ColorConfig, IconConfig, SegmentId, TextStyleConfig, StyleConfig, StyleMode};
             
+            let mut segments = vec![
+                SegmentConfig {
+                    id: SegmentId::Model,
+                    enabled: true,
+                    icon: IconConfig {
+                        plain: "M".to_string(),
+                        nerd_font: "󰧑".to_string(),
+                    },
+                    colors: ColorConfig {
+                        icon: Some(AnsiColor::Color16 { c16: 6 }), // Cyan
+                        text: Some(AnsiColor::Color16 { c16: 7 }), // White
+                        background: None,
+                    },
+                    styles: TextStyleConfig {
+                        text_bold: false,
+                    },
+                    options: std::collections::HashMap::new(),
+                },
+            ];
+            
+            // Add network segment when network-monitoring feature is enabled
+            #[cfg(feature = "network-monitoring")]
+            segments.push(SegmentConfig {
+                id: SegmentId::Network,
+                enabled: true,
+                icon: IconConfig {
+                    plain: "".to_string(),
+                    nerd_font: "".to_string(),
+                },
+                colors: ColorConfig {
+                    icon: Some(AnsiColor::Color16 { c16: 10 }), // Green
+                    text: Some(AnsiColor::Color16 { c16: 10 }),
+                    background: None,
+                },
+                styles: TextStyleConfig {
+                    text_bold: false,
+                },
+                options: std::collections::HashMap::new(),
+            });
+            
             Config {
                 theme: "default".to_string(),
                 style: StyleConfig {
                     mode: StyleMode::Plain,
                     separator: "|".to_string(),
                 },
-                segments: vec![
-                    SegmentConfig {
-                        id: SegmentId::Model,
-                        enabled: true,
-                        icon: IconConfig {
-                            plain: "M".to_string(),
-                            nerd_font: "󰧑".to_string(),
-                        },
-                        colors: ColorConfig {
-                            icon: Some(AnsiColor::Color16 { c16: 6 }), // Cyan
-                            text: Some(AnsiColor::Color16 { c16: 7 }), // White
-                            background: None,
-                        },
-                        styles: TextStyleConfig {
-                            text_bold: false,
-                        },
-                        options: std::collections::HashMap::new(),
-                    },
-                ],
+                segments,
             }
         }
     }

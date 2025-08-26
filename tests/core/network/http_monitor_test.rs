@@ -1,3 +1,5 @@
+#![cfg(feature = "network-monitoring")]
+
 /*!
 Comprehensive unit tests for HttpMonitor component.
 

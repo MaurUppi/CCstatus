@@ -160,12 +160,7 @@ impl NetworkSegment {
     /// # Workflow
     ///
     /// 1. Parse stdin JSON input and validate required fields
-    /// 2. Resolve credentials with priority: env > shell > config
-    /// 3. Handle no-credentials case: write unknown status and exit
-    /// 4. Scan transcript for error detection (non-COLD only)
-    /// 5. Calculate window decisions with COLD > RED > GREEN priority
-    /// 6. Execute at most one probe per stdin event
-    /// 7. Render status to stdout for statusline display
+    /// 2-6. Delegate to orchestrate() method for monitoring workflow
     ///
     /// # Errors
     ///
@@ -183,6 +178,43 @@ impl NetworkSegment {
             "Parsed stdin: session_id={}, total_duration_ms={}, transcript_path={}",
             input.session_id, input.cost.total_duration_ms, input.transcript_path
         )).await;
+
+        // Steps 2-6: Execute orchestration workflow
+        self.orchestrate(input).await?;
+        
+        debug_logger.debug("NetworkSegment", "Stdin orchestration completed").await;
+        Ok(())
+    }
+
+    /// Public entry point for direct StatuslineInput monitoring
+    ///
+    /// Orchestrates the complete monitoring workflow using pre-parsed StatuslineInput.
+    /// This method is used by the wrapper integration to bridge the architectural gap
+    /// between NetworkSegment and the segment system.
+    ///
+    /// # Workflow
+    ///
+    /// 1. Resolve credentials with priority: env > shell > config
+    /// 2. Handle no-credentials case: write unknown status and exit
+    /// 3. Scan transcript for error detection (non-COLD only)
+    /// 4. Calculate window decisions with COLD > RED > GREEN priority
+    /// 5. Execute at most one probe per stdin event
+    /// 6. Render status to stdout for statusline display
+    ///
+    /// # Errors
+    ///
+    /// Returns `NetworkError::HomeDirNotFound` if required directories don't exist.
+    /// Other errors are logged but don't prevent status rendering.
+    pub async fn run(&mut self, input: StatuslineInput) -> Result<(), NetworkError> {
+        self.orchestrate(input).await
+    }
+
+    /// Core orchestration workflow shared by run_from_stdin() and run()
+    ///
+    /// Implements the complete monitoring workflow from credential resolution through
+    /// status rendering, maintaining identical behavior for both entry points.
+    async fn orchestrate(&mut self, input: StatuslineInput) -> Result<(), NetworkError> {
+        let debug_logger = get_debug_logger();
 
         // Step 2: Resolve credentials (env > shell > config priority)
         debug_logger.debug("NetworkSegment", "Resolving credentials...").await;
@@ -301,7 +333,6 @@ impl NetworkSegment {
         // Step 6: Render status to stdout
         self.render_and_output().await?;
         
-        debug_logger.debug("NetworkSegment", "Stdin orchestration completed").await;
         Ok(())
     }
 
@@ -343,7 +374,7 @@ impl NetworkSegment {
     ///
     /// # Window Logic
     ///
-    /// - **COLD**: `total_duration_ms < COLD_WINDOW_MS` AND (invalid state OR different session)
+    /// - **COLD**: Invalid state (status=Unknown) OR `total_duration_ms < COLD_WINDOW_MS` with session deduplication
     /// - **RED**: `(total_duration_ms % 10_000) < 1_000` AND error detected AND window deduplication
     /// - **GREEN**: `(total_duration_ms % 300_000) < 3_000` AND window deduplication
     ///
@@ -359,11 +390,15 @@ impl NetworkSegment {
     ) -> Result<WindowDecision, NetworkError> {
         let total_duration_ms = input.cost.total_duration_ms;
         
-        // Get COLD window threshold (default 5000ms, overrideable)  
+        // Load state early to check for invalid state (COLD startup condition)
+        let state = self.http_monitor.load_state().await.unwrap_or_default();
+        let is_invalid_state = matches!(state.status, crate::core::network::types::NetworkStatus::Unknown);
+        
+        // COLD window check (highest priority): Invalid state OR timing condition
         let cold_window_ms = Self::get_cold_window_threshold();
-
-        // COLD window check (highest priority)
-        let is_cold_window = total_duration_ms < cold_window_ms;
+        let is_cold_timing = total_duration_ms < cold_window_ms;
+        let is_cold_window = is_invalid_state || is_cold_timing;
+        
         if is_cold_window {
             // Check for session deduplication
             let should_skip_cold = self.should_skip_cold_probe(&input.session_id).await?;
@@ -406,8 +441,7 @@ impl NetworkSegment {
             };
             
             if error_detected {
-                // Check RED window deduplication
-                let state = self.http_monitor.load_state().await.unwrap_or_default();
+                // Check RED window deduplication (reuse state loaded earlier)
                 if state.monitoring_state.last_red_window_id == Some(red_window_id) {
                     // Skip RED probe due to window deduplication
                     return Ok(WindowDecision {
@@ -436,8 +470,7 @@ impl NetworkSegment {
         let green_window_id = total_duration_ms / 300_000;
         
         if is_green_window {
-            // Check GREEN window deduplication
-            let state = self.http_monitor.load_state().await.unwrap_or_default();
+            // Check GREEN window deduplication (reuse state loaded earlier)
             if state.monitoring_state.last_green_window_id == Some(green_window_id) {
                 // Skip GREEN probe due to window deduplication
                 return Ok(WindowDecision {

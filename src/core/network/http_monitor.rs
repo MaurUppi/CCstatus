@@ -106,11 +106,17 @@ impl HttpClientTrait for IsahcHttpClient {
         // Consume response body to complete the request
         let _ = response.text().await.unwrap_or_default();
 
-        // Generate timing breakdown (simplified for now)
+        // Generate timing breakdown with stable numeric format
         let total_ms = ttfb_duration.as_millis() as u32;
+        
+        // Keep breakdown numeric and parseable - always DNS|TCP|TLS|TTFB|Total format
+        // For now, we don't have individual timing phases from isahc, so estimate
+        let dns_ms = 0u32;  // Connection reuse = 0ms for DNS
+        let tcp_ms = 0u32;  // Connection reuse = 0ms for TCP  
+        let tls_ms = 0u32;  // Connection reuse = 0ms for TLS
         let breakdown = format!(
-            "DNS:0ms|TCP:0ms|TLS:0ms|TTFB:{}ms|Total:{}ms",
-            total_ms, total_ms
+            "DNS:{}ms|TCP:{}ms|TLS:{}ms|TTFB:{}ms|Total:{}ms",
+            dns_ms, tcp_ms, tls_ms, total_ms, total_ms
         );
 
         Ok((status, ttfb_duration, breakdown))
@@ -569,7 +575,7 @@ impl HttpMonitor {
 
         // Minimal Claude API payload for probing
         let payload = serde_json::json!({
-            "model": "claude-3-haiku-20240307",
+            "model": "claude-3-5-haiku-20241022",
             "max_tokens": 1,
             "messages": [
                 {"role": "user", "content": "Hi"}
@@ -582,6 +588,7 @@ impl HttpMonitor {
         let mut headers = std::collections::HashMap::new();
         headers.insert("Content-Type".to_string(), "application/json".to_string());
         headers.insert("x-api-key".to_string(), creds.auth_token.clone());
+        headers.insert("User-Agent".to_string(), "claude-cli/1.0.80 (external, cli)".to_string());
 
         let (status_code, duration, breakdown) = self
             .http_client
@@ -622,11 +629,34 @@ impl HttpMonitor {
     ) -> Result<ProbeOutcome, NetworkError> {
         let mut state = self.load_state_internal().await.unwrap_or_default();
 
-        // Update immediate metrics
+        // Connection reuse heuristic (heuristic-only, does not affect status/rolling stats)
+        let p95 = state.network.p95_latency_ms;
+        let base_thresh = if p95 > 0 && state.network.rolling_totals.len() >= 4 { p95 / 3 } else { 500 };
+        let mut reuse_thresh = base_thresh.max(350);
+        reuse_thresh = reuse_thresh.clamp(250, 1500);
+
+        let connection_reused = metrics.latency_ms <= reuse_thresh;
+
+        // Keep breakdown numeric; log reuse heuristics
+        let breakdown_numeric = format!(
+            "DNS:0ms|TCP:0ms|TLS:0ms|TTFB:{}ms|Total:{}ms",
+            metrics.latency_ms, metrics.latency_ms
+        );
+
+        let debug_logger = get_debug_logger();
+        debug_logger.debug(
+            "HttpMonitor",
+            &format!("reuse_heuristic: reused={} thresh={}ms total={}ms p95={}ms",
+                     connection_reused, reuse_thresh, metrics.latency_ms, p95),
+        ).await;
+
+        // Update immediate metrics with numeric breakdown
         state.network.latency_ms = metrics.latency_ms;
-        state.network.breakdown = metrics.breakdown.clone();
+        state.network.breakdown = breakdown_numeric; // Use computed numeric breakdown
         state.network.last_http_status = metrics.last_http_status;
         state.network.error_type = metrics.error_type.clone();
+        state.network.connection_reused = Some(connection_reused);
+        state.network.breakdown_source = Some("heuristic".to_string());
         state.timestamp = self.clock.local_timestamp();
 
         // Update API config

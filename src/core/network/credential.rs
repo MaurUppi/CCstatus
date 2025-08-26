@@ -74,9 +74,18 @@ impl CredentialManager {
     /// 2. Shell configuration files (.zshrc, .bashrc, PowerShell profiles)
     /// 3. Claude Code config files
     /// 4. None (fail silent)
+    /// 
+    /// Test-specific behavior:
+    /// - Set CCSTATUS_NO_CREDENTIALS=1 to force return None (for testing unknown scenarios)
     pub async fn get_credentials(&self) -> Result<Option<ApiCredentials>, NetworkError> {
         use crate::core::network::debug_logger::get_debug_logger;
         let logger = get_debug_logger();
+        
+        // Test override: force no credentials
+        if std::env::var("CCSTATUS_NO_CREDENTIALS").unwrap_or_default() == "1" {
+            logger.debug("CredentialManager", "CCSTATUS_NO_CREDENTIALS=1: forcing no credentials for testing").await;
+            return Ok(None);
+        }
         
         logger.debug("CredentialManager", "Starting credential lookup from all sources").await;
         

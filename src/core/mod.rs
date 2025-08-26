@@ -1,3 +1,4 @@
+#[cfg(feature = "network-monitoring")]
 pub mod network;
 pub mod segments;
 pub mod statusline;

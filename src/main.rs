@@ -3,7 +3,21 @@ use ccstatus::config::{Config, InputData};
 use ccstatus::core::{collect_all_segments, StatusLineGenerator};
 use std::io;
 
+#[cfg(feature = "network-monitoring")]
+use ccstatus::core::network::StatuslineInput;
+
+#[cfg(feature = "network-monitoring")]
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    main_impl().await
+}
+
+#[cfg(not(feature = "network-monitoring"))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    futures::executor::block_on(main_impl())
+}
+
+async fn main_impl() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse_args();
 
     // Handle configuration commands
@@ -76,12 +90,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("Warning: Theme override is only available with TUI feature enabled");
     }
 
-    // Read Claude Code data from stdin
+    // Read Claude Code data from stdin with two-tier data flow for network monitoring
     let stdin = io::stdin();
-    let input: InputData = serde_json::from_reader(stdin.lock())?;
+    
+    #[cfg(feature = "network-monitoring")]
+    let (input, full_input) = {
+        let full_input: StatuslineInput = serde_json::from_reader(stdin.lock())?;
+        let input = InputData::from(&full_input);
+        (input, Some(full_input))
+    };
+    
+    #[cfg(not(feature = "network-monitoring"))]
+    let (input, full_input) = {
+        let input: InputData = serde_json::from_reader(stdin.lock())?;
+        (input, None::<()>)
+    };
 
     // Collect segment data
-    let segments_data = collect_all_segments(&config, &input);
+    let segments_data = collect_all_segments(&config, &input, full_input.as_ref()).await;
 
     // Render statusline
     let generator = StatusLineGenerator::new(config);

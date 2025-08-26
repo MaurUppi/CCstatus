@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+#[cfg(feature = "network-monitoring")]
+use crate::core::network::StatuslineInput;
+
 // Main config structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -69,6 +72,8 @@ pub enum SegmentId {
     Git,
     Usage,
     Update,
+    #[cfg(feature = "network-monitoring")]
+    Network,
 }
 
 // Legacy compatibility structure
@@ -96,6 +101,25 @@ pub struct InputData {
     pub model: Model,
     pub workspace: Workspace,
     pub transcript_path: String,
+}
+
+// InputData conversion from StatuslineInput for network monitoring integration
+#[cfg(feature = "network-monitoring")]
+impl From<&StatuslineInput> for InputData {
+    fn from(input: &StatuslineInput) -> Self {
+        Self {
+            model: Model {
+                display_name: input.model.get("display_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Unknown")
+                    .to_string()
+            },
+            workspace: Workspace {
+                current_dir: input.cwd.clone()
+            },
+            transcript_path: input.transcript_path.clone(),
+        }
+    }
 }
 
 // OpenAI-style nested token details
