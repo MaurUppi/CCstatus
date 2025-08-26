@@ -11,7 +11,7 @@ A high-performance Claude Code statusline tool written in Rust with Git integrat
 
 ![CCometixLine](assets/img1.png)
 
-The statusline shows: Model | Directory | Git Branch Status | Context Window Information
+The statusline shows: Model | Directory | Git Branch Status | Context Window | Network Status
 
 ## Features
 
@@ -19,9 +19,11 @@ The statusline shows: Model | Directory | Git Branch Status | Context Window Inf
 - **Git integration** with branch, status, and tracking info  
 - **Model display** with simplified Claude model names
 - **Usage tracking** based on transcript analysis
+- **Network monitoring** with real-time Claude API connectivity status ⚡
 - **Directory display** showing current workspace
 - **Minimal design** using Nerd Font icons
 - **Simple configuration** via command line options
+- **Modular features** with configurable build options
 
 ## Installation
 
@@ -143,17 +145,36 @@ Add to your Claude Code `settings.json`:
 ```bash
 git clone https://github.com/Haleclipse/CCometixLine.git
 cd CCometixLine
+
+# Default build (foundation + network monitoring)
 cargo build --release
+
+# Optional: Add self-update feature
+cargo build --release --features "self-update"
+
+# Optional: Add TUI configuration interface  
+cargo build --release --features "tui"
+
+# Full build (all features)
+cargo build --release --features "tui,self-update"
 
 # Linux/macOS
 mkdir -p ~/.claude/ccline
-cp target/release/ccometixline ~/.claude/ccline/ccline
+cp target/release/ccstatus ~/.claude/ccline/ccline
 chmod +x ~/.claude/ccline/ccline
 
 # Windows (PowerShell)
 New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\ccline"
-copy target\release\ccometixline.exe "$env:USERPROFILE\.claude\ccline\ccline.exe"
+copy target\release\ccstatus.exe "$env:USERPROFILE\.claude\ccline\ccline.exe"
 ```
+
+**Build Options:**
+- **Default**: Core functionality + network monitoring (~1.8MB)
+- **+ self-update**: Auto-update notifications (~4.1MB) 
+- **+ tui**: Configuration interface (~2.5MB)
+- **Full**: All features (~4.8MB)
+
+See [BUILD-CONFIG.md](BUILD-CONFIG.md) for detailed build configuration options.
 
 ## Usage
 
@@ -173,7 +194,7 @@ ccline --configure
 
 ## Default Segments
 
-Displays: `Directory | Git Branch Status | Model | Context Window`
+Displays: `Directory | Git Branch Status | Model | Context Window | Network Status`
 
 ### Git Status Indicators
 
@@ -191,6 +212,26 @@ Shows simplified Claude model names:
 
 Token usage percentage based on transcript analysis with context limit tracking.
 
+### Network Monitoring ⚡
+
+**Real-time Claude API connectivity monitoring:**
+- 🟢 **Healthy**: API responding normally (P95 < 4s)
+- 🟡 **Degraded**: Slower responses or rate limits (P95 4-8s) 
+- 🔴 **Error**: Connection issues or API failures
+- ⚪ **Unknown**: Monitoring disabled or no credentials
+
+**Smart monitoring windows:**
+- **COLD**: Immediate check on startup or session changes
+- **GREEN**: Regular health checks every 5 minutes during active use
+- **RED**: Error-triggered checks when transcript shows API errors
+
+**Features:**
+- Automatic credential detection (environment, shell, Claude config)
+- P95 latency tracking with rolling 12-sample window
+- Frequency-gated probing to minimize API usage
+- Debug logging with `CCSTATUS_DEBUG=true`
+- State persistence across sessions
+
 ## Configuration
 
 Configuration support is planned for future releases. Currently uses sensible defaults for all segments.
@@ -199,7 +240,9 @@ Configuration support is planned for future releases. Currently uses sensible de
 
 - **Startup time**: < 50ms (vs ~200ms for TypeScript equivalents)
 - **Memory usage**: < 10MB (vs ~25MB for Node.js tools)
-- **Binary size**: ~2MB optimized release build
+- **Binary size**: 1.8MB default build (network monitoring included)
+- **Network overhead**: < 1 API call per 5 minutes (frequency-gated)
+- **Monitoring latency**: Smart windowing minimizes impact on Claude API usage
 
 ## Requirements
 

@@ -15,9 +15,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if cli.print {
         let mut config = Config::load().unwrap_or_else(|_| Config::default());
 
-        // Apply theme override if provided
+        // Apply theme override if provided (TUI only)
+        #[cfg(feature = "tui")]
         if let Some(theme) = cli.theme {
             config = ccstatus::ui::themes::ThemePresets::get_theme(&theme);
+        }
+        
+        #[cfg(not(feature = "tui"))]
+        if let Some(_theme) = cli.theme {
+            eprintln!("Warning: Theme override is only available with TUI feature enabled");
         }
 
         config.print()?;
@@ -59,9 +65,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load configuration
     let mut config = Config::load().unwrap_or_else(|_| Config::default());
 
-    // Apply theme override if provided
+    // Apply theme override if provided (TUI only)
+    #[cfg(feature = "tui")]
     if let Some(theme) = cli.theme {
         config = ccstatus::ui::themes::ThemePresets::get_theme(&theme);
+    }
+    
+    #[cfg(not(feature = "tui"))]
+    if let Some(_theme) = cli.theme {
+        eprintln!("Warning: Theme override is only available with TUI feature enabled");
     }
 
     // Read Claude Code data from stdin

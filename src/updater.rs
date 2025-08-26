@@ -352,7 +352,7 @@ pub mod github {
     pub fn check_for_updates() -> Result<Option<GitHubRelease>, Box<dyn std::error::Error>> {
         let url = "https://api.github.com/repos/Haleclipse/CCometixLine/releases/latest";
 
-        let response = ureq::get(url)
+        let mut response = ureq::get(url)
             .header(
                 "User-Agent",
                 &format!("CCometixLine/{}", env!("CARGO_PKG_VERSION")),
@@ -360,7 +360,7 @@ pub mod github {
             .call()?;
 
         if response.status() == 200 {
-            let release: GitHubRelease = response.json()?;
+            let release: GitHubRelease = response.body_mut().read_json()?;
 
             let current_version = env!("CARGO_PKG_VERSION");
             let latest_version = release.version();

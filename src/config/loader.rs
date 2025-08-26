@@ -16,6 +16,7 @@ impl ConfigLoader {
     }
 
     /// Initialize themes directory and create built-in theme files
+    #[cfg(feature = "tui")]
     pub fn init_themes() -> Result<(), Box<dyn std::error::Error>> {
         let themes_dir = Self::get_themes_path();
 
@@ -63,12 +64,20 @@ impl ConfigLoader {
     }
 
     /// Ensure themes directory exists and has built-in themes (silent mode)
+    #[cfg(feature = "tui")]
     pub fn ensure_themes_exist() {
         // Silently ensure themes exist without printing output
         let _ = Self::init_themes_silent();
     }
+    
+    /// No-op when TUI feature is disabled
+    #[cfg(not(feature = "tui"))]
+    pub fn ensure_themes_exist() {
+        // Do nothing when TUI is disabled
+    }
 
     /// Initialize themes directory and create built-in theme files (silent mode)
+    #[cfg(feature = "tui")]
     fn init_themes_silent() -> Result<(), Box<dyn std::error::Error>> {
         let themes_dir = Self::get_themes_path();
 
@@ -149,7 +158,8 @@ impl Config {
             fs::create_dir_all(parent)?;
         }
 
-        // Initialize themes directory and built-in themes
+        // Initialize themes directory and built-in themes (TUI only)
+        #[cfg(feature = "tui")]
         ConfigLoader::init_themes()?;
 
         // Create default config if it doesn't exist

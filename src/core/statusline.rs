@@ -89,6 +89,7 @@ impl StatusLineGenerator {
     }
 
     /// Generate TUI-optimized text with intelligent wrapping by segment for preview
+    #[cfg(feature = "tui")]
     pub fn generate_for_tui_preview(
         &self,
         segments: Vec<(SegmentConfig, SegmentData)>,

@@ -202,6 +202,7 @@ impl NormalizedUsage {
 
 impl Config {
     /// Check if current config matches the specified theme preset
+    #[cfg(feature = "tui")]
     pub fn matches_theme(&self, theme_name: &str) -> bool {
         let theme_preset = crate::ui::themes::ThemePresets::get_theme(theme_name);
 
@@ -228,11 +229,19 @@ impl Config {
     }
 
     /// Check if current config has been modified from the selected theme
+    #[cfg(feature = "tui")]
     pub fn is_modified_from_theme(&self) -> bool {
         !self.matches_theme(&self.theme)
     }
+    
+    /// No-op when TUI feature is disabled
+    #[cfg(not(feature = "tui"))]
+    pub fn is_modified_from_theme(&self) -> bool {
+        false
+    }
 
     /// Compare two segment configs for equality
+    #[cfg(feature = "tui")]
     fn segment_matches(&self, current: &SegmentConfig, preset: &SegmentConfig) -> bool {
         current.id == preset.id
             && current.enabled == preset.enabled
@@ -246,6 +255,7 @@ impl Config {
     }
 
     /// Compare two optional colors for equality
+    #[cfg(feature = "tui")]
     fn color_matches(&self, current: &Option<AnsiColor>, preset: &Option<AnsiColor>) -> bool {
         match (current, preset) {
             (None, None) => true,

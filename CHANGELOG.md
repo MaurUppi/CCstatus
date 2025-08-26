@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2025-08-26
+
+### Added
+- **Network Monitoring Feature ⚡**: Real-time Claude API connectivity status monitoring
+  - Smart monitoring windows: COLD (startup), GREEN (regular 5min), RED (error-triggered)
+  - Four status indicators: 🟢 Healthy, 🟡 Degraded, 🔴 Error, ⚪ Unknown
+  - P95 latency tracking with rolling 12-sample window for performance analysis
+  - Automatic credential detection from environment, shell, and Claude config
+  - Frequency-gated probing to minimize API usage impact
+  - State persistence across sessions with atomic file operations
+  - Debug logging support with `CCSTATUS_DEBUG=true`
+- **Modular Build System**: Configurable feature flags for optimized builds
+  - Default build: Foundation + network monitoring (~1.8MB)
+  - Optional features: `tui` (configuration interface), `self-update` (auto-updates)
+  - Full feature matrix with size optimization for different use cases
+  - BUILD-CONFIG.md documentation for detailed build options
+
+### Changed
+- **Default Features**: Updated from `["tui", "network-monitoring"]` to `["network-monitoring"]`
+  - Reduced default binary size from 2.6MB to 1.8MB (30% smaller)
+  - TUI and self-update features now optional, configurable at build time
+  - Maintains backward compatibility for users wanting full features
+- **Build Architecture**: Enhanced conditional compilation support
+  - Added feature gates throughout codebase for clean modular builds  
+  - Improved error handling for missing features
+  - Updated documentation to reflect new build options
+- **Binary Name**: Updated from `ccometixline` to `ccstatus` for consistency
+  - Reflects the project's focus on statusline and monitoring functionality
+  - Updated all build scripts and documentation accordingly
+
+### Fixed
+- **ureq v3.1.0 Compatibility**: Updated HTTP client API usage
+  - Fixed breaking changes in ureq v3.1.0 JSON response handling
+  - Changed from deprecated `.json()` to `.body_mut().read_json()` pattern
+  - Ensured self-update feature works correctly with new API
+- **NetworkSegment Enhancements**: Implemented priority-based monitoring windows
+  - Eliminated JSONL double-scan in RED path for better performance
+  - Added per-window deduplication with monotonic window ID tracking
+  - Enhanced COLD probe semantics with proper session tracking
+  - Implemented atomic state persistence with temp file + rename pattern
+
+### Technical Details
+- **Monitoring Windows**: 
+  - COLD: `startup_duration < 5000ms` OR new session_id
+  - GREEN: `(total_duration_ms % 300_000) < 3_000` (5min intervals)
+  - RED: `(total_duration_ms % 10_000) < 1_000` AND transcript has API errors
+- **API Endpoints**: `/v1/messages` for health checking with minimal payload
+- **Error Classification**: Comprehensive HTTP status code mapping to user-friendly states
+- **Performance Optimizations**: Single-probe guarantee per stdin event
+- **State Management**: JSON state file with versioning and migration support
+
 ## [1.0.3] - 2025-08-17
 
 ### Fixed
