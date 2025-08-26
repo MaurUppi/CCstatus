@@ -5,6 +5,7 @@ pub mod jsonl_monitor;
 pub mod network_segment;
 pub mod status_renderer;
 pub mod types;
+pub mod error_tracker;
 
 // Re-export commonly used items
 pub use credential::CredentialManager;

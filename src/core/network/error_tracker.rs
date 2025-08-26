@@ -1,6 +1,6 @@
 // Error tracking and classification for network monitoring
 
-use crate::core::segments::network::types::{JsonlError, NetworkStatus};
+use crate::core::network::types::{JsonlError, NetworkStatus};
 use std::collections::VecDeque;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 

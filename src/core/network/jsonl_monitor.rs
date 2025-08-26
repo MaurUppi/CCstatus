@@ -48,14 +48,7 @@ impl JsonlMonitor {
     /// Parse debug enabled status using flexible boolean parsing
     /// Supports: true/false, 1/0, yes/no, on/off (case insensitive)
     fn parse_debug_enabled() -> bool {
-        std::env::var("CCSTATUS_DEBUG")
-            .map(|v| match v.trim().to_lowercase().as_str() {
-                "true" | "1" | "yes" | "on" => true,
-                "false" | "0" | "no" | "off" => false,
-                "" => false,
-                _ => false,
-            })
-            .unwrap_or(false)
+        crate::core::network::types::parse_env_bool("CCSTATUS_DEBUG")
     }
 
     /// Scan transcript tail for API error detection - optimized for RED gate control

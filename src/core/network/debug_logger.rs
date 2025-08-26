@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Write};
 use std::path::PathBuf;
@@ -185,16 +184,9 @@ impl EnhancedDebugLogger {
     }
 
     /// Parse debug enabled status from CCSTATUS_DEBUG environment variable only
-    /// Supports: true/false, 1/0, yes/no, on/off (case insensitive)
+    /// Supports: true/false (case insensitive)
     fn parse_debug_enabled() -> bool {
-        env::var("CCSTATUS_DEBUG")
-            .map(|v| match v.trim().to_lowercase().as_str() {
-                "true" | "1" | "yes" | "on" => true,
-                "false" | "0" | "no" | "off" => false,
-                "" => false, // Empty value is disabled (no legacy behavior)
-                _ => false,
-            })
-            .unwrap_or(false)
+        crate::core::network::types::parse_env_bool("CCSTATUS_DEBUG")
     }
 
     fn get_log_path() -> PathBuf {

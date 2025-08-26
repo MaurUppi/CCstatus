@@ -250,6 +250,40 @@ impl Default for NetworkMetrics {
 
 
 
+// Environment variable utilities
+/// Parse boolean environment variables (strict true/false only)
+/// 
+/// Only accepts "true" or "false" (case insensitive). All other values default to false.
+///
+/// # Examples
+///
+/// ```rust
+/// use ccstatus::core::network::types::parse_env_bool;
+///
+/// // These return true
+/// std::env::set_var("TEST_VAR", "true");
+/// assert_eq!(parse_env_bool("TEST_VAR"), true);
+/// std::env::set_var("TEST_VAR", "TRUE");
+/// assert_eq!(parse_env_bool("TEST_VAR"), true);
+///
+/// // These all return false  
+/// std::env::set_var("TEST_VAR", "false");
+/// assert_eq!(parse_env_bool("TEST_VAR"), false);
+/// std::env::set_var("TEST_VAR", "1");      // Not accepted
+/// std::env::set_var("TEST_VAR", "yes");    // Not accepted  
+/// std::env::remove_var("TEST_VAR");        // Unset
+/// assert_eq!(parse_env_bool("TEST_VAR"), false);
+/// ```
+pub fn parse_env_bool(env_var: &str) -> bool {
+    std::env::var(env_var)
+        .map(|v| match v.trim().to_lowercase().as_str() {
+            "true" => true,
+            "false" => false,
+            _ => false,
+        })
+        .unwrap_or(false)
+}
+
 // Timestamp standardization utilities
 /// Generate standardized local timezone ISO-8601 timestamp
 ///

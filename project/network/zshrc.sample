@@ -1,0 +1,12 @@
+# ~/.zshrc: 优化的 zsh 配置
+
+
+# 优化的Claude Code启动配置
+function cc-env() {
+  local env_vars=(
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=true"
+    "ANTHROPIC_BASE_URL=https://as038guxithtu.imds.ai/api"
+    "ANTHROPIC_AUTH_TOKEN=YOUR-API-KEY"
+  )
+  env "${env_vars[@]}" claude "$@"
+}

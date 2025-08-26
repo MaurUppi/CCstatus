@@ -326,6 +326,10 @@ async fn test_cold_probe_behavior() {
     let temp_dir = TempDir::new().unwrap();
     let (mut monitor, http_client, clock) = create_test_monitor(&temp_dir);
 
+    // Set session ID for COLD probe tracking
+    let test_session_id = "test_cold_session_123";
+    monitor.set_session_id(test_session_id.to_string());
+
     // Execute COLD probe
     http_client.add_success(200, 1200).await;
     clock.add_timestamp("2025-01-25T10:30:00-08:00").await;
