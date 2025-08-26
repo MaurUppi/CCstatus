@@ -111,6 +111,10 @@ pub struct WindowDecision {
     pub is_green_window: bool,
     /// Selected probe mode based on priority and conditions
     pub probe_mode: Option<ProbeMode>,
+    /// GREEN window ID for deduplication (total_duration_ms / 300_000)
+    pub green_window_id: Option<u64>,
+    /// RED window ID for deduplication (total_duration_ms / 10_000)
+    pub red_window_id: Option<u64>,
 }
 
 /// NetworkSegment - primary orchestration component for network monitoring
@@ -198,30 +202,44 @@ impl NetworkSegment {
             "Found credentials from: {}", creds.source
         )).await;
 
-        // Step 3: Calculate window decisions
-        let window_decision = self.calculate_window_decision(&input).await?;
+        // Step 3: Scan transcript for error detection (non-COLD path only)
+        // This eliminates duplicate JSONL scans by performing it once before window calculation
+        let cold_window_ms = Self::get_cold_window_threshold();
+        
+        let (error_detected, last_error_event) = if input.cost.total_duration_ms >= cold_window_ms {
+            // Non-COLD path: scan transcript once for both window decision and probe
+            debug_logger.debug("NetworkSegment", "Scanning transcript for error detection...").await;
+            let (detected, event) = self
+                .jsonl_monitor
+                .scan_tail(&input.transcript_path)
+                .await?;
+            
+            debug_logger.debug("NetworkSegment", &format!(
+                "Error scan result: detected={}, error={:?}",
+                detected, event.as_ref().map(|e| &e.message)
+            )).await;
+            
+            (Some(detected), event)
+        } else {
+            // COLD path: skip transcript scan 
+            debug_logger.debug("NetworkSegment", "COLD path: skipping transcript scan").await;
+            (None, None)
+        };
+
+        // Step 4: Calculate window decisions
+        let window_decision = self.calculate_window_decision(&input, error_detected).await?;
         debug_logger.debug("NetworkSegment", &format!(
             "Window decision: cold={}, red={}, green={}, mode={:?}",
             window_decision.is_cold_window, window_decision.is_red_window, 
             window_decision.is_green_window, window_decision.probe_mode
         )).await;
 
-        // Step 4: Execute probe if window is active
+        // Step 5: Execute probe if window is active
         if let Some(probe_mode) = window_decision.probe_mode {
             self.http_monitor.set_session_id(input.session_id.clone());
             
             let last_error = if probe_mode == ProbeMode::Red {
-                // Only scan for errors in RED mode
-                let (error_detected, last_error_event) = self
-                    .jsonl_monitor
-                    .scan_tail(&input.transcript_path)
-                    .await?;
-                
-                debug_logger.debug("NetworkSegment", &format!(
-                    "Error scan result: detected={}, error={:?}",
-                    error_detected, last_error_event.as_ref().map(|e| &e.message)
-                )).await;
-                
+                // Use pre-computed last_error_event from single scan
                 last_error_event
             } else {
                 None
@@ -237,11 +255,50 @@ impl NetworkSegment {
                 "Probe completed: status={:?}, latency={}ms, written={}",
                 outcome.status, outcome.metrics.latency_ms, outcome.state_written
             )).await;
+            
+            // Phase 2: Per-window deduplication - persist window ID AFTER successful probe execution
+            // Only persist the window ID for the probe mode that actually ran
+            if outcome.state_written {
+                match probe_mode {
+                    ProbeMode::Green => {
+                        if let Some(green_id) = window_decision.green_window_id {
+                            if let Err(e) = self.http_monitor.set_green_window_id(green_id).await {
+                                debug_logger.debug("NetworkSegment", &format!(
+                                    "Failed to persist GREEN window ID {}: {}", green_id, e
+                                )).await;
+                            } else {
+                                debug_logger.debug("NetworkSegment", &format!(
+                                    "Persisted GREEN window ID: {}", green_id
+                                )).await;
+                            }
+                        }
+                    }
+                    ProbeMode::Red => {
+                        if let Some(red_id) = window_decision.red_window_id {
+                            if let Err(e) = self.http_monitor.set_red_window_id(red_id).await {
+                                debug_logger.debug("NetworkSegment", &format!(
+                                    "Failed to persist RED window ID {}: {}", red_id, e
+                                )).await;
+                            } else {
+                                debug_logger.debug("NetworkSegment", &format!(
+                                    "Persisted RED window ID: {}", red_id
+                                )).await;
+                            }
+                        }
+                    }
+                    ProbeMode::Cold => {
+                        // COLD probes don't use window ID persistence - session ID is handled internally by HttpMonitor
+                        debug_logger.debug("NetworkSegment", 
+                            "COLD probe completed - session deduplication handled by HttpMonitor"
+                        ).await;
+                    }
+                }
+            }
         } else {
             debug_logger.debug("NetworkSegment", "No active window - skipping probe").await;
         }
 
-        // Step 5: Render status to stdout
+        // Step 6: Render status to stdout
         self.render_and_output().await?;
         
         debug_logger.debug("NetworkSegment", "Stdin orchestration completed").await;
@@ -286,23 +343,24 @@ impl NetworkSegment {
     ///
     /// # Window Logic
     ///
-    /// - **COLD**: `total_duration_ms < COLD_WINDOW_MS` with session deduplication
-    /// - **RED**: `(total_duration_ms % 10_000) < 1_000` AND error detected in transcript  
-    /// - **GREEN**: `(total_duration_ms % 300_000) < 3_000`
+    /// - **COLD**: `total_duration_ms < COLD_WINDOW_MS` AND (invalid state OR different session)
+    /// - **RED**: `(total_duration_ms % 10_000) < 1_000` AND error detected AND window deduplication
+    /// - **GREEN**: `(total_duration_ms % 300_000) < 3_000` AND window deduplication
     ///
     /// # Priority Rules
     ///
     /// 1. COLD window takes absolute priority and skips RED/GREEN evaluation
     /// 2. RED window requires both timing condition AND error detection
     /// 3. GREEN window is only evaluated if COLD and RED are not active
-    pub async fn calculate_window_decision(&mut self, input: &StatuslineInput) -> Result<WindowDecision, NetworkError> {
+    pub async fn calculate_window_decision(
+        &mut self, 
+        input: &StatuslineInput,
+        error_detected: Option<bool>
+    ) -> Result<WindowDecision, NetworkError> {
         let total_duration_ms = input.cost.total_duration_ms;
         
         // Get COLD window threshold (default 5000ms, overrideable)  
-        let cold_window_ms = env::var("ccstatus_COLD_WINDOW_MS")
-            .or_else(|_| env::var("CCSTATUS_COLD_WINDOW_MS"))
-            .map(|s| s.parse::<u64>().unwrap_or(5000))
-            .unwrap_or(5000);
+        let cold_window_ms = Self::get_cold_window_threshold();
 
         // COLD window check (highest priority)
         let is_cold_window = total_duration_ms < cold_window_ms;
@@ -315,6 +373,8 @@ impl NetworkSegment {
                     is_red_window: false,
                     is_green_window: false,
                     probe_mode: None, // Skip due to deduplication
+                    green_window_id: None,
+                    red_window_id: None,
                 });
             }
             
@@ -323,35 +383,80 @@ impl NetworkSegment {
                 is_red_window: false,
                 is_green_window: false,
                 probe_mode: Some(ProbeMode::Cold),
+                green_window_id: None,
+                red_window_id: None,
             });
         }
 
         // RED window check (medium priority) - requires error detection
         let red_timing_condition = (total_duration_ms % 10_000) < 1_000;
+        let red_window_id = total_duration_ms / 10_000;
+        
         if red_timing_condition {
-            let (error_detected, _) = self
-                .jsonl_monitor
-                .scan_tail(&input.transcript_path)
-                .await?;
+            let error_detected = if let Some(detected) = error_detected {
+                // Use pre-computed error detection result
+                detected
+            } else {
+                // Fallback: scan transcript if not provided (for backward compatibility)
+                let (detected, _) = self
+                    .jsonl_monitor
+                    .scan_tail(&input.transcript_path)
+                    .await?;
+                detected
+            };
             
             if error_detected {
+                // Check RED window deduplication
+                let state = self.http_monitor.load_state().await.unwrap_or_default();
+                if state.monitoring_state.last_red_window_id == Some(red_window_id) {
+                    // Skip RED probe due to window deduplication
+                    return Ok(WindowDecision {
+                        is_cold_window: false,
+                        is_red_window: true,
+                        is_green_window: false,
+                        probe_mode: None, // Skip due to window deduplication
+                        green_window_id: None,
+                        red_window_id: Some(red_window_id),
+                    });
+                }
+                
                 return Ok(WindowDecision {
                     is_cold_window: false,
                     is_red_window: true,
                     is_green_window: false,
                     probe_mode: Some(ProbeMode::Red),
+                    green_window_id: None,
+                    red_window_id: Some(red_window_id),
                 });
             }
         }
 
         // GREEN window check (lowest priority)
         let is_green_window = (total_duration_ms % 300_000) < 3_000;
+        let green_window_id = total_duration_ms / 300_000;
+        
         if is_green_window {
+            // Check GREEN window deduplication
+            let state = self.http_monitor.load_state().await.unwrap_or_default();
+            if state.monitoring_state.last_green_window_id == Some(green_window_id) {
+                // Skip GREEN probe due to window deduplication
+                return Ok(WindowDecision {
+                    is_cold_window: false,
+                    is_red_window: false,
+                    is_green_window: true,
+                    probe_mode: None, // Skip due to window deduplication
+                    green_window_id: Some(green_window_id),
+                    red_window_id: None,
+                });
+            }
+            
             return Ok(WindowDecision {
                 is_cold_window: false,
                 is_red_window: false,
                 is_green_window: true,
                 probe_mode: Some(ProbeMode::Green),
+                green_window_id: Some(green_window_id),
+                red_window_id: None,
             });
         }
 
@@ -361,16 +466,33 @@ impl NetworkSegment {
             is_red_window: false,
             is_green_window: false,
             probe_mode: None,
+            green_window_id: None,
+            red_window_id: None,
         })
     }
 
-    /// Check if COLD probe should be skipped due to session deduplication
+    /// Check if COLD probe should be skipped due to session deduplication or valid state
     ///
-    /// Prevents duplicate COLD probes within the same session by checking the
-    /// `last_cold_session_id` field in the monitoring state.
-    async fn should_skip_cold_probe(&self, session_id: &str) -> Result<bool, NetworkError> {
+    /// COLD probe is triggered when:
+    /// 1. Time window condition: `total_duration_ms < COLD_WINDOW_MS` AND
+    /// 2. Either: 
+    ///    a) No valid state exists (file missing or status=Unknown) OR
+    ///    b) Valid state exists but different session_id (no session deduplication)
+    ///
+    /// This prevents:
+    /// - Duplicate COLD probes within the same session
+    /// - Unnecessary COLD probes when valid state already exists from previous runs
+    pub async fn should_skip_cold_probe(&self, session_id: &str) -> Result<bool, NetworkError> {
         let state = self.http_monitor.load_state().await.unwrap_or_default();
         
+        // Check if state is invalid (missing or Unknown status)
+        // If state is invalid, we should NOT skip the COLD probe
+        let is_state_invalid = matches!(state.status, crate::core::network::types::NetworkStatus::Unknown);
+        if is_state_invalid {
+            return Ok(false); // Don't skip - COLD probe is needed to establish valid state
+        }
+        
+        // State is valid, check session deduplication
         // Skip if the same session already triggered a COLD probe
         Ok(state.monitoring_state.last_cold_session_id.as_deref() == Some(session_id))
     }
@@ -385,6 +507,17 @@ impl NetworkSegment {
         
         println!("{}", status_text);
         Ok(())
+    }
+
+    /// Get COLD window threshold in milliseconds from environment variables
+    /// 
+    /// Checks both `CCSTATUS_COLD_WINDOW_MS` and `ccstatus_COLD_WINDOW_MS` 
+    /// with fallback to 5000ms default
+    fn get_cold_window_threshold() -> u64 {
+        env::var("CCSTATUS_COLD_WINDOW_MS")
+            .or_else(|_| env::var("ccstatus_COLD_WINDOW_MS"))
+            .map(|s| s.parse::<u64>().unwrap_or(5000))
+            .unwrap_or(5000)
     }
 }
 

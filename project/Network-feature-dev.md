@@ -395,5 +395,30 @@ Reload @project/network/1-network_monitoring-Requirement-Final.md
 Per requirment doc, evaluate @src/core/network/network_segment.rs if functionality met requirement. assessment results should be classified into critical, medium, Low level. save your assessment report alongside with code file, naming convension {module}_review.md
 
 
-/sc:analyze @src/core/network/network_segment.rs --focus functionality "HttpMonitor analysis" --ultrathink --seq --serena
-read @src/core/network/network_segment_review.md review assessment report if valid and think out your enhancement plan. 
+/sc:analyze @src/core/network/network_segment.rs --focus functionality "NetworkSegment stdin orchestration" --ultrathink --seq --serena
+read @src/core/network/network_segment_review.md review assessment report if valid. ONLY eys on "Medium" risk THEN think out your enhancement plan.  think out your enhancement plan. 
+
+
+GOAL: Knowing if the whole pipeline will work as designed. 
+Given all modules and corresponding test files had been developed, thus, I want you
+1. @project/network/1-network_monitoring-Requirement-Final.md to recall COLD/GREED/RED `sequenceDiagram` , `StdIN Input JSON Structure example` . 
+2. Use a real Jonsl log as `/Users/ouzy/.claude/projects/-Users-ouzy-Documents-DevProjects-CCstatus/6ed29d2f-35f2-4cab-9aae-d72eb7907a78.jsonl`
+TO develop a end 2 end test proposal with classifications, including debug function. THEN save it at @project/network folder
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

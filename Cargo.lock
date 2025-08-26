@@ -242,7 +242,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
- "thiserror 2.0.15",
  "tokio",
  "toml",
  "ureq",

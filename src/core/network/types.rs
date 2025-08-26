@@ -25,9 +25,9 @@ pub enum NetworkStatus {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MonitoringState {
     /// Last GREEN window ID that was processed (300s intervals)
-    pub last_green_window_id: u64,
+    pub last_green_window_id: Option<u64>,
     /// Last RED window ID that was processed (10s intervals)  
-    pub last_red_window_id: u64,
+    pub last_red_window_id: Option<u64>,
     /// Session ID of the last COLD probe to prevent duplicate session probes
     /// Used for deduplication: same session_id won't trigger multiple COLD probes
     pub last_cold_session_id: Option<String>,
@@ -205,6 +205,13 @@ impl std::fmt::Display for NetworkError {
     }
 }
 
+/// Window color types for deduplication persistence
+#[derive(Debug, Clone, Copy)]
+pub enum WindowColor {
+    Green,
+    Red,
+}
+
 impl std::error::Error for NetworkError {}
 
 impl From<std::io::Error> for NetworkError {
@@ -224,8 +231,8 @@ impl From<serde_json::Error> for NetworkError {
 impl Default for MonitoringState {
     fn default() -> Self {
         Self {
-            last_green_window_id: 0,
-            last_red_window_id: 0,
+            last_green_window_id: None,
+            last_red_window_id: None,
             last_cold_session_id: None,
             last_cold_probe_at: None,
             state: NetworkStatus::Unknown,

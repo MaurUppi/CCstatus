@@ -232,6 +232,91 @@ impl HttpMonitor {
         self.current_session_id = Some(session_id);
     }
 
+    /// Set last GREEN window ID for per-window deduplication
+    ///
+    /// Updates the persisted state with the GREEN window ID to prevent redundant
+    /// probes within the same 300-second window. Only persists if the ID is newer
+    /// than the currently stored ID (monotonic updates).
+    ///
+    /// # Arguments
+    ///
+    /// * `window_id` - The GREEN window ID to persist (calculated as total_duration_ms / 300_000)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if successfully persisted or skipped due to monotonic check
+    /// * `Err(NetworkError)` if persistence fails
+    pub async fn set_green_window_id(&self, window_id: u64) -> Result<(), NetworkError> {
+        self.set_last_window_id(WindowColor::Green, window_id).await
+    }
+
+    /// Set last RED window ID for per-window deduplication
+    ///
+    /// Updates the persisted state with the RED window ID to prevent redundant
+    /// probes within the same 10-second window. Only persists if the ID is newer
+    /// than the currently stored ID (monotonic updates).
+    ///
+    /// # Arguments
+    ///
+    /// * `window_id` - The RED window ID to persist (calculated as total_duration_ms / 10_000)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if successfully persisted or skipped due to monotonic check
+    /// * `Err(NetworkError)` if persistence fails
+    pub async fn set_red_window_id(&self, window_id: u64) -> Result<(), NetworkError> {
+        self.set_last_window_id(WindowColor::Red, window_id).await
+    }
+
+    /// Internal helper for monotonic window ID persistence
+    ///
+    /// Updates the specified window ID field atomically with monotonic enforcement.
+    /// Only persists if the new ID is strictly greater than the current stored ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `color` - Which window type to update (Green or Red)
+    /// * `window_id` - The window ID to persist
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if successfully persisted or skipped due to monotonic check
+    /// * `Err(NetworkError)` if loading state or persistence fails
+    async fn set_last_window_id(&self, color: WindowColor, window_id: u64) -> Result<(), NetworkError> {
+        // Load current state to get existing window IDs
+        let mut state = self.load_state().await?;
+        
+        // Get reference to the appropriate window ID field
+        let current_id = match color {
+            WindowColor::Green => state.monitoring_state.last_green_window_id,
+            WindowColor::Red => state.monitoring_state.last_red_window_id,
+        };
+        
+        // Monotonic check: only persist if new ID is greater than current
+        if let Some(current) = current_id {
+            if current >= window_id {
+                // Skip update - current ID is equal or newer
+                return Ok(());
+            }
+        }
+        
+        // Update the appropriate field
+        match color {
+            WindowColor::Green => {
+                state.monitoring_state.last_green_window_id = Some(window_id);
+            }
+            WindowColor::Red => {
+                state.monitoring_state.last_red_window_id = Some(window_id);
+            }
+        }
+        
+        // Update timestamp
+        state.timestamp = get_local_timestamp();
+        
+        // Persist atomically
+        self.write_state_atomic(&state).await
+    }
+
     /// Execute HTTP probe and update monitoring state
     ///
     /// This is the primary method for network monitoring. It executes a lightweight
