@@ -5,4 +5,4 @@
 //! targeted testing.
 
 mod common;
-mod network;
+mod core;

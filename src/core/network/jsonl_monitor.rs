@@ -66,14 +66,19 @@ impl JsonlMonitor {
     /// - `last_error_event`: Most recent error details for display (timestamp from transcript)
     ///
     /// **Usage Pattern:**
-    /// ```rust
-    /// let (error_detected, last_error_event) = monitor.scan_tail(path).await?;
+    /// ```rust,no_run
+    /// # use ccstatus::core::network::jsonl_monitor::JsonlMonitor;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let monitor = JsonlMonitor::new();
+    /// let (error_detected, last_error_event) = monitor.scan_tail("path/to/transcript.jsonl").await?;
     /// if error_detected {
     ///     // Trigger RED gate state
     ///     if let Some(error) = last_error_event {
     ///         // Display error details: error.message, error.code, error.timestamp
     ///     }
     /// }
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// **Performance:** Only reads tail N KB (configurable via CCSTATUS_JSONL_TAIL_KB, default 64KB)

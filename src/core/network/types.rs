@@ -39,7 +39,7 @@ pub struct MonitoringState {
 }
 
 /// Network metrics and measurements
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct NetworkMetrics {
     pub latency_ms: u32,
     pub breakdown: String, // Format: "DNS:20ms|TCP:30ms|TLS:40ms|TTFB:1324ms|Total:2650ms"
@@ -57,6 +57,16 @@ pub enum CredentialSource {
     ClaudeConfig(PathBuf),
 }
 
+impl std::fmt::Display for CredentialSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CredentialSource::Environment => write!(f, "environment"),
+            CredentialSource::ShellConfig(_) => write!(f, "shell"),
+            CredentialSource::ClaudeConfig(_) => write!(f, "claude_config"),
+        }
+    }
+}
+
 /// API credentials with source tracking
 #[derive(Debug, Clone)]
 pub struct ApiCredentials {
@@ -66,11 +76,87 @@ pub struct ApiCredentials {
 }
 
 /// Error metadata from JSONL transcript
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct JsonlError {
     pub timestamp: String,
     pub code: u16,
     pub message: String,
+}
+
+/// HTTP probe execution modes with different timeout and behavior strategies
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ProbeMode {
+    /// Cold startup probe - executed once per session when no valid state exists
+    /// Uses GREEN timeout strategy but includes session deduplication
+    Cold,
+    /// Regular monitoring probe every 300 seconds (first 3 seconds of window)
+    /// Uses adaptive timeout based on P95 + buffer
+    Green,
+    /// Error-driven probe every 10 seconds (first 1 second of window) when errors detected
+    /// Uses fixed 2000ms timeout for rapid error diagnosis
+    Red,
+}
+
+/// Complete result of an HTTP probe operation
+#[derive(Debug, Clone)]
+pub struct ProbeOutcome {
+    /// Final network status determination
+    pub status: NetworkStatus,
+    /// Timing and response metrics
+    pub metrics: ProbeMetrics,
+    /// Updated P95 latency after this probe
+    pub p95_latency_ms: u32,
+    /// Number of samples in rolling window
+    pub rolling_len: usize,
+    /// API configuration that was used
+    pub api_config: ApiConfig,
+    /// The probe mode that was executed
+    pub mode: ProbeMode,
+    /// Whether state was successfully written to disk
+    pub state_written: bool,
+    /// Local timezone timestamp of probe completion
+    pub timestamp_local: String,
+}
+
+/// Metrics from a single HTTP probe
+#[derive(Debug, Clone, Default)]
+pub struct ProbeMetrics {
+    /// Total request latency in milliseconds
+    pub latency_ms: u32,
+    /// Timing breakdown string (DNS|TCP|TLS|TTFB|Total format)
+    pub breakdown: String,
+    /// HTTP status code received
+    pub last_http_status: u16,
+    /// Standardized error type classification
+    pub error_type: Option<String>,
+}
+
+/// API configuration metadata
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+pub struct ApiConfig {
+    /// Full endpoint URL that was probed
+    pub endpoint: String,
+    /// Source of credentials (environment, shell, config)
+    pub source: String,
+}
+
+/// Complete monitoring state snapshot for read-only access
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+pub struct MonitoringSnapshot {
+    /// Current network status
+    pub status: NetworkStatus,
+    /// Whether monitoring is currently enabled
+    pub monitoring_enabled: bool,
+    /// API configuration details
+    pub api_config: Option<ApiConfig>,
+    /// Current network metrics and timing data
+    pub network: NetworkMetrics,
+    /// Monitoring state for window tracking
+    pub monitoring_state: MonitoringState,
+    /// Last JSONL error event if any
+    pub last_jsonl_error_event: Option<JsonlError>,
+    /// Timestamp of last state update
+    pub timestamp: String,
 }
 
 /// Gate types for timing-driven probe execution priority
@@ -133,7 +219,6 @@ impl From<serde_json::Error> for NetworkError {
 
 // Default implementations
 
-
 impl Default for MonitoringState {
     fn default() -> Self {
         Self {
@@ -158,6 +243,10 @@ impl Default for NetworkMetrics {
         }
     }
 }
+
+
+
+
 
 // Timestamp standardization utilities
 /// Generate standardized local timezone ISO-8601 timestamp
