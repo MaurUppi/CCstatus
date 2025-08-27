@@ -41,6 +41,34 @@ use isahc::{HttpClient, Request};
 #[cfg(feature = "network-monitoring")]
 use futures::io::{copy, sink};
 
+#[cfg(feature = "timings-curl")]
+use curl::easy::Easy;
+
+#[cfg(feature = "timings-curl")]
+/// Phase timings extracted from curl probe
+#[derive(Debug, Clone, PartialEq)]
+pub struct PhaseTimings {
+    pub status: u16,
+    pub dns_ms: u32,
+    pub tcp_ms: u32,
+    pub tls_ms: u32,
+    pub ttfb_ms: u32,
+    pub total_ms: u32,
+}
+
+#[cfg(feature = "timings-curl")]
+/// Curl probe runner abstraction for dependency injection
+#[async_trait::async_trait]
+pub trait CurlProbeRunner: Send + Sync {
+    async fn run(
+        &self,
+        url: &str,
+        headers: &[(&str, String)],
+        body: &[u8],
+        timeout_ms: u32,
+    ) -> Result<PhaseTimings, NetworkError>;
+}
+
 /// HTTP client abstraction for dependency injection and testing
 #[async_trait::async_trait]
 pub trait HttpClientTrait: Send + Sync {
@@ -150,6 +178,90 @@ impl ClockTrait for SystemClock {
     }
 }
 
+/// Production curl runner implementation
+#[cfg(feature = "timings-curl")]
+pub struct RealCurlRunner;
+
+#[cfg(feature = "timings-curl")]
+#[async_trait::async_trait]
+impl CurlProbeRunner for RealCurlRunner {
+    async fn run(
+        &self,
+        url: &str,
+        headers: &[(&str, String)],
+        body: &[u8],
+        timeout_ms: u32,
+    ) -> Result<PhaseTimings, NetworkError> {
+        let url = url.to_string();
+        let headers = headers.iter().map(|(k, v)| (k.to_string(), v.clone())).collect::<Vec<_>>();
+        let body = body.to_vec();
+        
+        let result = tokio::task::spawn_blocking(move || -> Result<PhaseTimings, String> {
+            let mut handle = Easy::new();
+            
+            // Configure request
+            handle.url(&url).map_err(|e| format!("URL set failed: {}", e))?;
+            handle.post(true).map_err(|e| format!("POST set failed: {}", e))?;
+            handle.post_fields_copy(&body).map_err(|e| format!("POST fields failed: {}", e))?;
+            handle.timeout(std::time::Duration::from_millis(timeout_ms as u64))
+                .map_err(|e| format!("Timeout set failed: {}", e))?;
+            
+            // Set headers
+            let mut header_list = curl::easy::List::new();
+            for (key, value) in headers {
+                header_list.append(&format!("{}: {}", key, value))
+                    .map_err(|e| format!("Header append failed: {}", e))?;
+            }
+            handle.http_headers(header_list).map_err(|e| format!("Headers set failed: {}", e))?;
+            
+            // Capture response body but don't store it
+            handle.write_function(|data| {
+                // Drain response body without storing
+                Ok(data.len())
+            }).map_err(|e| format!("Write function failed: {}", e))?;
+            
+            // Execute request and capture timings
+            handle.perform().map_err(|e| format!("Request perform failed: {}", e))?;
+            
+            // Extract phase timings from libcurl (in seconds, convert to ms)
+            let dns_time = handle.namelookup_time()
+                .map_err(|e| format!("DNS time failed: {}", e))?.as_secs_f64();
+            let connect_time = handle.connect_time()
+                .map_err(|e| format!("Connect time failed: {}", e))?.as_secs_f64();
+            let appconnect_time = handle.appconnect_time()
+                .map_err(|e| format!("App connect time failed: {}", e))?.as_secs_f64();
+            let starttransfer_time = handle.starttransfer_time()
+                .map_err(|e| format!("Start transfer time failed: {}", e))?.as_secs_f64();
+            let total_time = handle.total_time()
+                .map_err(|e| format!("Total time failed: {}", e))?.as_secs_f64();
+            
+            // Calculate phase durations and convert to milliseconds
+            let dns_ms = (dns_time * 1000.0).max(0.0) as u32;
+            let tcp_ms = ((connect_time - dns_time).max(0.0) * 1000.0) as u32;
+            let tls_ms = ((appconnect_time - connect_time).max(0.0) * 1000.0) as u32;
+            let ttfb_ms = ((starttransfer_time - appconnect_time).max(0.0) * 1000.0) as u32;
+            let total_ms = (total_time * 1000.0).max(0.0) as u32;
+            
+            // Get response status
+            let status = handle.response_code()
+                .map_err(|e| format!("Response code failed: {}", e))? as u16;
+            
+            Ok(PhaseTimings {
+                status,
+                dns_ms,
+                tcp_ms,
+                tls_ms,
+                ttfb_ms,
+                total_ms,
+            })
+        }).await
+        .map_err(|e| NetworkError::HttpError(format!("Curl task join failed: {}", e)))?
+        .map_err(|e| NetworkError::HttpError(e))?;
+
+        Ok(result)
+    }
+}
+
 /// HTTP monitoring component - single writer for network state
 ///
 /// HttpMonitor executes lightweight HTTP probes and maintains authoritative
@@ -167,6 +279,9 @@ pub struct HttpMonitor {
     timeout_override_ms: Option<u32>,
     /// Current session ID for COLD probe deduplication
     current_session_id: Option<String>,
+    /// Optional curl probe runner for phase timing measurement
+    #[cfg(feature = "timings-curl")]
+    curl_runner: Option<Box<dyn CurlProbeRunner>>,
 }
 
 impl HttpMonitor {
@@ -200,6 +315,8 @@ impl HttpMonitor {
             clock: Box::new(SystemClock),
             timeout_override_ms: None,
             current_session_id: None,
+            #[cfg(feature = "timings-curl")]
+            curl_runner: Some(Box::new(RealCurlRunner)),
         })
     }
 
@@ -212,6 +329,13 @@ impl HttpMonitor {
     /// Configure HttpMonitor with custom clock (for testing)
     pub fn with_clock(mut self, clock: Box<dyn ClockTrait>) -> Self {
         self.clock = clock;
+        self
+    }
+    
+    /// Configure HttpMonitor with custom curl runner (for testing with timings-curl feature)
+    #[cfg(feature = "timings-curl")]
+    pub fn with_curl_runner(mut self, runner: Box<dyn CurlProbeRunner>) -> Self {
+        self.curl_runner = Some(runner);
         self
     }
 
@@ -568,13 +692,58 @@ impl HttpMonitor {
         }
     }
 
+
+
     /// Execute HTTP probe with timing measurement
+    /// 
+    /// Uses curl-based probe for detailed phase timings when timings-curl feature is enabled
+    /// and a curl_runner is injected, otherwise falls back to isahc-based probe with heuristic timing breakdown.
     async fn execute_http_probe(
         &self,
         creds: &ApiCredentials,
         timeout_ms: u32,
         _probe_start: Instant,
     ) -> Result<(u16, Duration, String), NetworkError> {
+        // Check if curl runner is available for detailed timing measurements
+        #[cfg(feature = "timings-curl")]
+        if let Some(ref curl_runner) = self.curl_runner {
+            let endpoint = format!("{}/v1/messages", creds.base_url);
+
+            // Minimal Claude API payload for probing
+            let payload = serde_json::json!({
+                "model": "claude-3-5-haiku-20241022",
+                "max_tokens": 1,
+                "messages": [
+                    {"role": "user", "content": "Hi"}
+                ]
+            });
+
+            let body = serde_json::to_vec(&payload)
+                .map_err(|e| NetworkError::HttpError(format!("Payload serialization failed: {}", e)))?;
+
+            let headers = vec![
+                ("Content-Type", "application/json".to_string()),
+                ("x-api-key", creds.auth_token.clone()),
+                ("User-Agent", "claude-cli/1.0.80 (external, cli)".to_string()),
+                ("anthropic-version", "2023-06-01".to_string()),
+            ];
+
+            let phase_timings = curl_runner.run(&endpoint, &headers, &body, timeout_ms).await?;
+            
+            let duration = Duration::from_millis(phase_timings.ttfb_ms as u64);
+            let breakdown = format!(
+                "DNS:{}ms|TCP:{}ms|TLS:{}ms|TTFB:{}ms|Total:{}ms",
+                phase_timings.dns_ms,
+                phase_timings.tcp_ms,
+                phase_timings.tls_ms,
+                phase_timings.ttfb_ms,
+                phase_timings.total_ms
+            );
+
+            return Ok((phase_timings.status, duration, breakdown));
+        }
+
+        // Fallback to isahc-based probe with heuristic timing breakdown
         let endpoint = format!("{}/v1/messages", creds.base_url);
 
         // Minimal Claude API payload for probing
@@ -593,6 +762,7 @@ impl HttpMonitor {
         headers.insert("Content-Type".to_string(), "application/json".to_string());
         headers.insert("x-api-key".to_string(), creds.auth_token.clone());
         headers.insert("User-Agent".to_string(), "claude-cli/1.0.80 (external, cli)".to_string());
+        headers.insert("anthropic-version".to_string(), "2023-06-01".to_string());
 
         let (status_code, duration, breakdown) = self
             .http_client
@@ -633,34 +803,60 @@ impl HttpMonitor {
     ) -> Result<ProbeOutcome, NetworkError> {
         let mut state = self.load_state_internal().await.unwrap_or_default();
 
-        // Connection reuse heuristic (heuristic-only, does not affect status/rolling stats)
-        let p95 = state.network.p95_latency_ms;
-        let base_thresh = if p95 > 0 && state.network.rolling_totals.len() >= 4 { p95 / 3 } else { 500 };
-        let mut reuse_thresh = base_thresh.max(350);
-        reuse_thresh = reuse_thresh.clamp(250, 1500);
+        // Connection reuse calculation (only for heuristic path)
+        let _p95 = state.network.p95_latency_ms;
 
-        let connection_reused = metrics.latency_ms <= reuse_thresh;
+        // Determine breakdown source and connection reuse based on feature configuration
+        #[cfg(feature = "timings-curl")]
+        let breakdown_source = "measured";
+        #[cfg(not(feature = "timings-curl"))]
+        let breakdown_source = "heuristic";
+        
+        #[cfg(not(feature = "timings-curl"))]
+        {
+            // Keep breakdown numeric; log reuse heuristics (only for heuristic path)
+            let breakdown_numeric = format!(
+                "DNS:0ms|TCP:0ms|TLS:0ms|TTFB:{}ms|Total:{}ms",
+                metrics.latency_ms, metrics.latency_ms
+            );
 
-        // Keep breakdown numeric; log reuse heuristics
-        let breakdown_numeric = format!(
-            "DNS:0ms|TCP:0ms|TLS:0ms|TTFB:{}ms|Total:{}ms",
-            metrics.latency_ms, metrics.latency_ms
-        );
+            let debug_logger = get_debug_logger();
+            debug_logger.debug(
+                "HttpMonitor",
+                &format!("heuristic_breakdown: total={}ms p95={}ms", metrics.latency_ms, _p95),
+            ).await;
 
-        let debug_logger = get_debug_logger();
-        debug_logger.debug(
-            "HttpMonitor",
-            &format!("reuse_heuristic: reused={} thresh={}ms total={}ms p95={}ms",
-                     connection_reused, reuse_thresh, metrics.latency_ms, p95),
-        ).await;
+            // Update immediate metrics with computed heuristic breakdown
+            state.network.latency_ms = metrics.latency_ms;
+            state.network.breakdown = breakdown_numeric;
+            state.network.last_http_status = metrics.last_http_status;
+            state.network.error_type = metrics.error_type.clone();
+            state.network.breakdown_source = Some(breakdown_source.to_string());
+        }
 
-        // Update immediate metrics with numeric breakdown
-        state.network.latency_ms = metrics.latency_ms;
-        state.network.breakdown = breakdown_numeric; // Use computed numeric breakdown
-        state.network.last_http_status = metrics.last_http_status;
-        state.network.error_type = metrics.error_type.clone();
-        state.network.connection_reused = Some(connection_reused);
-        state.network.breakdown_source = Some("heuristic".to_string());
+        #[cfg(feature = "timings-curl")]
+        {
+            // Use measured timing breakdown directly from curl
+            state.network.latency_ms = metrics.latency_ms;
+            state.network.breakdown = metrics.breakdown.clone();
+            state.network.last_http_status = metrics.last_http_status;
+            state.network.error_type = metrics.error_type.clone();
+            
+            // Parse DNS timing from breakdown to determine connection reuse  
+            let dns_reused = if let Some(dns_part) = metrics.breakdown.split('|').next() {
+                if let Some(dns_ms_str) = dns_part.strip_prefix("DNS:").and_then(|s| s.strip_suffix("ms")) {
+                    // Treat DNS <= 2ms as reused connection to account for timing precision
+                    dns_ms_str.parse::<u32>().unwrap_or(0) <= 2
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+            
+            state.network.connection_reused = Some(dns_reused);
+            state.network.breakdown_source = Some(breakdown_source.to_string());
+        }
         state.timestamp = self.clock.local_timestamp();
 
         // Update API config

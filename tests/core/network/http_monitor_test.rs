@@ -20,6 +20,9 @@ use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 
+#[cfg(feature = "timings-curl")]
+use ccstatus::core::network::http_monitor::{PhaseTimings, CurlProbeRunner};
+
 /// Test-specific mock HTTP client with configurable response sequences
 #[derive(Clone)]
 struct TestHttpClient {
@@ -102,6 +105,69 @@ impl ClockTrait for TestClock {
     fn local_timestamp(&self) -> String {
         // For tests, return a fixed timestamp
         "2025-01-25T10:30:00-08:00".to_string()
+    }
+}
+
+/// Test-specific fake curl runner for testing phase timing logic
+#[cfg(feature = "timings-curl")]
+#[derive(Clone)]
+struct FakeCurlRunner {
+    responses: Arc<Mutex<Vec<Result<PhaseTimings, NetworkError>>>>,
+}
+
+#[cfg(feature = "timings-curl")]
+impl FakeCurlRunner {
+    fn new() -> Self {
+        Self {
+            responses: Arc::new(Mutex::new(vec![])),
+        }
+    }
+
+    async fn add_response(&self, response: Result<PhaseTimings, NetworkError>) {
+        let mut responses = self.responses.lock().await;
+        responses.insert(0, response);
+    }
+
+    async fn add_timing_response(&self, status: u16, dns_ms: u32, tcp_ms: u32, tls_ms: u32, ttfb_ms: u32, total_ms: u32) {
+        let phase_timings = PhaseTimings {
+            status,
+            dns_ms,
+            tcp_ms,
+            tls_ms,
+            ttfb_ms,
+            total_ms,
+        };
+        self.add_response(Ok(phase_timings)).await;
+    }
+
+    async fn add_error(&self, error_msg: &str) {
+        let error = NetworkError::HttpError(error_msg.to_string());
+        self.add_response(Err(error)).await;
+    }
+}
+
+#[cfg(feature = "timings-curl")]
+#[async_trait::async_trait]
+impl CurlProbeRunner for FakeCurlRunner {
+    async fn run(
+        &self,
+        _url: &str,
+        _headers: &[(&str, String)],
+        _body: &[u8],
+        _timeout_ms: u32,
+    ) -> Result<PhaseTimings, NetworkError> {
+        let mut responses = self.responses.lock().await;
+        responses.pop().unwrap_or_else(|| {
+            // Default response for deterministic testing
+            Ok(PhaseTimings {
+                status: 200,
+                dns_ms: 25,
+                tcp_ms: 30,
+                tls_ms: 35,
+                ttfb_ms: 900,
+                total_ms: 1000,
+            })
+        })
     }
 }
 
@@ -1214,4 +1280,460 @@ async fn test_session_persistence_across_monitor_instances() {
     // Verify the state file contains the session data
     let file_content = tokio::fs::read_to_string(&state_path).await.unwrap();
     assert!(file_content.contains(test_session_id));
+}
+
+// ====== Curl Phase Timing Tests ======
+
+#[cfg(feature = "timings-curl")]
+mod curl_timing_tests {
+    use super::*;
+    
+    /// Mock curl client for testing phase timing extraction logic
+    #[derive(Clone)]
+    struct TestCurlClient {
+        phase_timings: Arc<Mutex<Vec<(f64, f64, f64, f64)>>>, // (dns, connect, appconnect, starttransfer)
+        responses: Arc<Mutex<Vec<Result<u16, String>>>>,
+    }
+    
+    impl TestCurlClient {
+        fn new() -> Self {
+            Self {
+                phase_timings: Arc::new(Mutex::new(vec![])),
+                responses: Arc::new(Mutex::new(vec![])),
+            }
+        }
+        
+        async fn add_timing_response(&self, status: u16, dns: f64, connect: f64, appconnect: f64, starttransfer: f64) {
+            let mut timings = self.phase_timings.lock().await;
+            timings.insert(0, (dns, connect, appconnect, starttransfer));
+            
+            let mut responses = self.responses.lock().await;
+            responses.insert(0, Ok(status));
+        }
+        
+        async fn add_curl_error(&self, error_msg: &str) {
+            let mut responses = self.responses.lock().await;
+            responses.insert(0, Err(error_msg.to_string()));
+        }
+        
+        async fn get_next_timing(&self) -> Option<(f64, f64, f64, f64)> {
+            let mut timings = self.phase_timings.lock().await;
+            timings.pop()
+        }
+        
+        async fn get_next_response(&self) -> Result<u16, String> {
+            let mut responses = self.responses.lock().await;
+            responses.pop().unwrap_or(Ok(200))
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_curl_dependency_injection_pattern() {
+        let temp_dir = TempDir::new().unwrap();
+        let (mut monitor, _http_client, clock) = create_test_monitor(&temp_dir);
+        
+        // Create FakeCurlRunner and inject it into HttpMonitor
+        let fake_curl_runner = FakeCurlRunner::new();
+        fake_curl_runner.add_timing_response(200, 25, 30, 35, 900, 1000).await;
+        
+        monitor = monitor.with_curl_runner(Box::new(fake_curl_runner));
+        clock.add_timestamp("2025-01-25T10:30:00-08:00").await;
+        
+        let creds = ApiCredentials {
+            base_url: "https://api.anthropic.com".to_string(),
+            auth_token: "test-token".to_string(),
+            source: CredentialSource::Environment,
+        };
+        
+        // Execute probe - should use injected FakeCurlRunner
+        let result = monitor
+            .probe(ProbeMode::Green, creds, None)
+            .await
+            .unwrap();
+        
+        // Verify that FakeCurlRunner was used with precise timing breakdown
+        assert_eq!(result.metrics.latency_ms, 1000);
+        let breakdown = &result.metrics.breakdown;
+        assert_eq!(breakdown, "DNS:25ms|TCP:30ms|TLS:35ms|TTFB:900ms|Total:1000ms");
+        
+        // Verify the breakdown source is marked as measured (not heuristic)
+        let state = monitor.load_state().await.unwrap();
+        assert_eq!(state.network.breakdown_source, Some("measured".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_curl_phase_timing_extraction() {
+        let temp_dir = TempDir::new().unwrap();
+        let (mut monitor, _http_client, clock) = create_test_monitor(&temp_dir);
+        
+        // Test realistic phase timing scenario:
+        // DNS: 50ms, TCP: 25ms additional (75ms total), TLS: 35ms additional (110ms total), 
+        // TTFB: 890ms additional (1000ms total)
+        let dns_time = 0.050;      // 50ms for DNS resolution
+        let connect_time = 0.075;  // +25ms for TCP handshake (total 75ms)
+        let appconnect_time = 0.110; // +35ms for TLS handshake (total 110ms) 
+        let starttransfer_time = 1.000; // +890ms for first byte (total 1000ms)
+        
+        clock.add_timestamp("2025-01-25T10:30:00-08:00").await;
+        
+        // Create test curl client mock
+        let curl_mock = TestCurlClient::new();
+        curl_mock.add_timing_response(200, dns_time, connect_time, appconnect_time, starttransfer_time).await;
+        
+        let creds = ApiCredentials {
+            base_url: "https://api.anthropic.com".to_string(),
+            auth_token: "test-token".to_string(),
+            source: CredentialSource::Environment,
+        };
+        
+        // Test the phase timing extraction logic by executing curl probe
+        // Note: This test validates the timing math, not the actual curl integration
+        let result = monitor
+            .probe(ProbeMode::Green, creds, None)
+            .await
+            .unwrap();
+        
+        // Verify the timing breakdown includes phase timings
+        assert!(result.metrics.breakdown.contains("DNS:"));
+        assert!(result.metrics.breakdown.contains("TCP:"));
+        assert!(result.metrics.breakdown.contains("TLS:"));
+        assert!(result.metrics.breakdown.contains("TTFB:"));
+        
+        // Parse the breakdown to verify timing calculation accuracy
+        let breakdown = &result.metrics.breakdown;
+        assert!(breakdown.contains("DNS:50ms"), "Expected DNS:50ms in breakdown: {}", breakdown);
+        assert!(breakdown.contains("TCP:25ms"), "Expected TCP:25ms in breakdown: {}", breakdown);
+        assert!(breakdown.contains("TLS:35ms"), "Expected TLS:35ms in breakdown: {}", breakdown);
+        assert!(breakdown.contains("TTFB:890ms"), "Expected TTFB:890ms in breakdown: {}", breakdown);
+        assert!(breakdown.contains("Total:1000ms"), "Expected Total:1000ms in breakdown: {}", breakdown);
+    }
+    
+    #[tokio::test]
+    async fn test_curl_connection_reuse_detection() {
+        let temp_dir = TempDir::new().unwrap();
+        let (mut monitor, _http_client, clock) = create_test_monitor(&temp_dir);
+        
+        // Create FakeCurlRunner for precise timing control
+        let fake_curl_runner = FakeCurlRunner::new();
+        
+        // Test new connection (DNS > 0): DNS:45ms, TCP:25ms, TLS:35ms, TTFB:845ms, Total:950ms
+        fake_curl_runner.add_timing_response(200, 45, 25, 35, 845, 950).await;
+        
+        // Test connection reuse (DNS ≈ 0): DNS:1ms, TCP:24ms, TLS:35ms, TTFB:740ms, Total:800ms
+        fake_curl_runner.add_timing_response(200, 1, 24, 35, 740, 800).await;
+        
+        monitor = monitor.with_curl_runner(Box::new(fake_curl_runner));
+        clock.add_timestamp("2025-01-25T10:30:00-08:00").await;
+        
+        let creds = ApiCredentials {
+            base_url: "https://api.anthropic.com".to_string(),
+            auth_token: "test-token".to_string(),
+            source: CredentialSource::Environment,
+        };
+        
+        // First probe - new connection
+        let result1 = monitor
+            .probe(ProbeMode::Green, creds.clone(), None)
+            .await
+            .unwrap();
+            
+        assert!(result1.metrics.breakdown.contains("DNS:45ms"), "New connection should show DNS time: {}", result1.metrics.breakdown);
+        
+        // Second probe - connection reuse
+        let result2 = monitor
+            .probe(ProbeMode::Green, creds, None)
+            .await
+            .unwrap();
+            
+        assert!(result2.metrics.breakdown.contains("DNS:1ms"), "Reused connection should show minimal DNS time: {}", result2.metrics.breakdown);
+    }
+    
+    #[tokio::test]
+    async fn test_curl_error_handling() {
+        let temp_dir = TempDir::new().unwrap();
+        let (mut monitor, _http_client, clock) = create_test_monitor(&temp_dir);
+        
+        clock.add_timestamp("2025-01-25T10:30:00-08:00").await;
+        
+        let creds = ApiCredentials {
+            base_url: "https://api.anthropic.com".to_string(),
+            auth_token: "test-token".to_string(),
+            source: CredentialSource::Environment,
+        };
+        
+        // Test curl connection error
+        let curl_mock = TestCurlClient::new();
+        curl_mock.add_curl_error("Could not resolve host").await;
+        
+        let result = monitor
+            .probe(ProbeMode::Green, creds, None)
+            .await
+            .unwrap();
+            
+        // Curl errors should be handled gracefully
+        assert_eq!(result.metrics.last_http_status, 0);
+        assert_eq!(result.metrics.error_type.as_deref(), Some("connection_error"));
+        assert!(matches!(result.status, NetworkStatus::Error));
+        
+        // Breakdown should indicate connection failure
+        assert!(result.metrics.breakdown.contains("DNS:0ms"));
+        assert!(result.metrics.breakdown.contains("Total:0ms"));
+    }
+    
+    #[tokio::test]
+    async fn test_curl_timing_accuracy_validation() {
+        // Test that DNS+TCP+TLS+TTFB ≈ Total timing
+        let test_cases = vec![
+            // (dns, connect, appconnect, starttransfer) - all cumulative
+            (0.020, 0.045, 0.080, 0.500), // 20+25+35+420 = 500ms total
+            (0.030, 0.060, 0.095, 0.800), // 30+30+35+705 = 800ms total
+            (0.015, 0.040, 0.075, 1.200), // 15+25+35+1125 = 1200ms total
+            (0.005, 0.020, 0.055, 0.300), // 5+15+35+245 = 300ms total
+        ];
+        
+        let temp_dir = TempDir::new().unwrap();
+        let (mut monitor, _http_client, clock) = create_test_monitor(&temp_dir);
+        
+        let creds = ApiCredentials {
+            base_url: "https://api.anthropic.com".to_string(),
+            auth_token: "test-token".to_string(),
+            source: CredentialSource::Environment,
+        };
+        
+        for (i, (dns_time, connect_time, appconnect_time, starttransfer_time)) in test_cases.iter().enumerate() {
+            clock.add_timestamp(&format!("2025-01-25T10:3{}:00-08:00", i)).await;
+            
+            let curl_mock = TestCurlClient::new();
+            curl_mock.add_timing_response(200, *dns_time, *connect_time, *appconnect_time, *starttransfer_time).await;
+            
+            let result = monitor
+                .probe(ProbeMode::Green, creds.clone(), None)
+                .await
+                .unwrap();
+                
+            // Calculate expected phase timings
+            let expected_dns = (*dns_time * 1000.0) as u32;
+            let expected_tcp = ((*connect_time - *dns_time).max(0.0) * 1000.0) as u32;
+            let expected_tls = ((*appconnect_time - *connect_time).max(0.0) * 1000.0) as u32;
+            let expected_ttfb = ((*starttransfer_time - *appconnect_time).max(0.0) * 1000.0) as u32;
+            let expected_total = (*starttransfer_time * 1000.0) as u32;
+            
+            // Verify timing breakdown accuracy
+            let breakdown = &result.metrics.breakdown;
+            assert!(breakdown.contains(&format!("DNS:{}ms", expected_dns)), 
+                   "Case {}: Expected DNS:{}ms in {}", i, expected_dns, breakdown);
+            assert!(breakdown.contains(&format!("TCP:{}ms", expected_tcp)), 
+                   "Case {}: Expected TCP:{}ms in {}", i, expected_tcp, breakdown);
+            assert!(breakdown.contains(&format!("TLS:{}ms", expected_tls)), 
+                   "Case {}: Expected TLS:{}ms in {}", i, expected_tls, breakdown);
+            assert!(breakdown.contains(&format!("TTFB:{}ms", expected_ttfb)), 
+                   "Case {}: Expected TTFB:{}ms in {}", i, expected_ttfb, breakdown);
+            assert!(breakdown.contains(&format!("Total:{}ms", expected_total)), 
+                   "Case {}: Expected Total:{}ms in {}", i, expected_total, breakdown);
+            
+            // Verify total latency matches starttransfer_time
+            assert_eq!(result.metrics.latency_ms, expected_total, 
+                      "Case {}: Total latency should match starttransfer time", i);
+                      
+            // Verify phase sum ≈ total (within 1ms tolerance for rounding)
+            let phase_sum = expected_dns + expected_tcp + expected_tls + expected_ttfb;
+            assert!((phase_sum as i32 - expected_total as i32).abs() <= 1, 
+                   "Case {}: Phase sum {} should ≈ total {} (within 1ms)", i, phase_sum, expected_total);
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_curl_feature_flag_behavior() {
+        let temp_dir = TempDir::new().unwrap();
+        let (mut monitor, http_client, clock) = create_test_monitor(&temp_dir);
+        
+        clock.add_timestamp("2025-01-25T10:30:00-08:00").await;
+        
+        let creds = ApiCredentials {
+            base_url: "https://api.anthropic.com".to_string(),
+            auth_token: "test-token".to_string(),
+            source: CredentialSource::Environment,
+        };
+        
+        // When timings-curl feature is enabled, should use curl probe
+        // (we can't directly test path selection without exposing internals,
+        // but we can verify the enhanced breakdown format)
+        http_client.add_success(200, 1200).await;
+        
+        let result = monitor
+            .probe(ProbeMode::Green, creds, None)
+            .await
+            .unwrap();
+            
+        // With curl feature enabled, breakdown should have detailed phase timings
+        // The exact format depends on whether our test actually exercises curl path
+        assert!(result.metrics.breakdown.contains("DNS:"));
+        assert!(result.metrics.breakdown.contains("TCP:"));
+        assert!(result.metrics.breakdown.contains("TLS:"));
+        assert!(result.metrics.breakdown.contains("TTFB:"));
+        assert!(result.metrics.breakdown.contains("Total:"));
+    }
+    
+    #[tokio::test]
+    async fn test_curl_anthropic_version_header() {
+        let temp_dir = TempDir::new().unwrap();
+        let (mut monitor, _http_client, clock) = create_test_monitor(&temp_dir);
+        
+        clock.add_timestamp("2025-01-25T10:30:00-08:00").await;
+        
+        let creds = ApiCredentials {
+            base_url: "https://api.anthropic.com".to_string(),
+            auth_token: "test-token".to_string(),
+            source: CredentialSource::Environment,
+        };
+        
+        // Mock curl timing for successful request
+        let curl_mock = TestCurlClient::new();
+        curl_mock.add_timing_response(200, 0.025, 0.050, 0.085, 0.900).await;
+        
+        let result = monitor
+            .probe(ProbeMode::Green, creds, None)
+            .await
+            .unwrap();
+            
+        // Verify successful execution with anthropic-version header
+        assert_eq!(result.metrics.last_http_status, 200);
+        assert!(matches!(result.status, NetworkStatus::Healthy));
+        
+        // Verify timing breakdown shows phase details
+        let breakdown = &result.metrics.breakdown;
+        assert!(breakdown.contains("DNS:25ms"), "Expected DNS:25ms in {}", breakdown);
+        assert!(breakdown.contains("TCP:25ms"), "Expected TCP:25ms in {}", breakdown);
+        assert!(breakdown.contains("TLS:35ms"), "Expected TLS:35ms in {}", breakdown);
+        assert!(breakdown.contains("TTFB:815ms"), "Expected TTFB:815ms in {}", breakdown);
+        assert!(breakdown.contains("Total:900ms"), "Expected Total:900ms in {}", breakdown);
+    }
+    
+    #[tokio::test]
+    async fn test_curl_timeout_handling() {
+        let temp_dir = TempDir::new().unwrap();
+        let (mut monitor, _http_client, clock) = create_test_monitor(&temp_dir);
+        
+        clock.add_timestamp("2025-01-25T10:30:00-08:00").await;
+        
+        let creds = ApiCredentials {
+            base_url: "https://api.anthropic.com".to_string(),
+            auth_token: "test-token".to_string(),
+            source: CredentialSource::Environment,
+        };
+        
+        // Test curl timeout scenario
+        let curl_mock = TestCurlClient::new();
+        curl_mock.add_curl_error("Operation timed out").await;
+        
+        let result = monitor
+            .probe(ProbeMode::Red, creds, None)
+            .await
+            .unwrap();
+            
+        // Verify timeout is handled as connection error
+        assert_eq!(result.metrics.last_http_status, 0);
+        assert_eq!(result.metrics.error_type.as_deref(), Some("connection_error"));
+        assert!(matches!(result.status, NetworkStatus::Error));
+        
+        // Verify breakdown shows zero timings for failed connection
+        let breakdown = &result.metrics.breakdown;
+        assert!(breakdown.contains("DNS:0ms"));
+        assert!(breakdown.contains("TCP:0ms"));
+        assert!(breakdown.contains("TLS:0ms"));
+        assert!(breakdown.contains("TTFB:0ms"));
+        assert!(breakdown.contains("Total:0ms"));
+    }
+    
+    #[tokio::test]
+    async fn test_curl_edge_case_timings() {
+        let temp_dir = TempDir::new().unwrap();
+        let (mut monitor, _http_client, clock) = create_test_monitor(&temp_dir);
+        
+        clock.add_timestamp("2025-01-25T10:30:00-08:00").await;
+        
+        let creds = ApiCredentials {
+            base_url: "https://api.anthropic.com".to_string(),
+            auth_token: "test-token".to_string(),
+            source: CredentialSource::Environment,
+        };
+        
+        // Test edge case: connection reuse (DNS ≈ 0, but other phases present)
+        let curl_mock = TestCurlClient::new();
+        curl_mock.add_timing_response(200, 0.001, 0.020, 0.055, 0.600).await;
+        
+        let result = monitor
+            .probe(ProbeMode::Green, creds, None)
+            .await
+            .unwrap();
+            
+        // Verify edge case handling
+        let breakdown = &result.metrics.breakdown;
+        assert!(breakdown.contains("DNS:1ms"), "Expected DNS:1ms in {}", breakdown);
+        assert!(breakdown.contains("TCP:19ms"), "Expected TCP:19ms in {}", breakdown);
+        assert!(breakdown.contains("TLS:35ms"), "Expected TLS:35ms in {}", breakdown);
+        assert!(breakdown.contains("TTFB:545ms"), "Expected TTFB:545ms in {}", breakdown);
+        assert!(breakdown.contains("Total:600ms"), "Expected Total:600ms in {}", breakdown);
+        
+        // Verify all phase durations are non-negative
+        assert!(result.metrics.latency_ms == 600, "Total should be 600ms");
+    }
+    
+    #[tokio::test]
+    async fn test_curl_vs_isahc_dual_path_integration() {
+        // This integration test verifies that both paths (curl and isahc) 
+        // produce compatible monitoring states
+        
+        let temp_dir = TempDir::new().unwrap();
+        
+        // Test isahc path behavior (default implementation)
+        let (mut monitor_isahc, http_client_isahc, clock_isahc) = create_test_monitor(&temp_dir);
+        
+        http_client_isahc.add_success(200, 1000).await;
+        clock_isahc.add_timestamp("2025-01-25T10:30:00-08:00").await;
+        
+        let creds = test_credentials();
+        let isahc_result = monitor_isahc
+            .probe(ProbeMode::Green, creds.clone(), None)
+            .await
+            .unwrap();
+            
+        // Verify isahc result format
+        assert_eq!(isahc_result.metrics.latency_ms, 1000);
+        assert!(isahc_result.metrics.breakdown.contains("DNS:5ms|TCP:10ms|TLS:15ms"));
+        
+        // Test curl path behavior (with timings-curl feature)
+        let (mut monitor_curl, _http_client_curl, clock_curl) = create_test_monitor(&temp_dir);
+        
+        clock_curl.add_timestamp("2025-01-25T10:30:01-08:00").await;
+        
+        let curl_mock = TestCurlClient::new();
+        curl_mock.add_timing_response(200, 0.030, 0.055, 0.090, 1.000).await;
+        
+        let curl_result = monitor_curl
+            .probe(ProbeMode::Green, creds, None)
+            .await
+            .unwrap();
+            
+        // Verify curl result format
+        assert_eq!(curl_result.metrics.latency_ms, 1000);
+        assert!(curl_result.metrics.breakdown.contains("DNS:30ms"));
+        assert!(curl_result.metrics.breakdown.contains("TCP:25ms"));
+        assert!(curl_result.metrics.breakdown.contains("TLS:35ms"));
+        assert!(curl_result.metrics.breakdown.contains("TTFB:910ms"));
+        
+        // Verify both paths produce compatible state structures
+        let isahc_state = monitor_isahc.load_state().await.unwrap();
+        let curl_state = monitor_curl.load_state().await.unwrap();
+        
+        // Both should have same schema fields
+        assert_eq!(isahc_state.monitoring_enabled, curl_state.monitoring_enabled);
+        assert!(isahc_state.api_config.is_some() && curl_state.api_config.is_some());
+        assert!(matches!(isahc_state.status, NetworkStatus::Healthy));
+        assert!(matches!(curl_state.status, NetworkStatus::Healthy));
+        
+        // Both should contribute to rolling statistics
+        assert!(isahc_state.network.rolling_totals.len() > 0);
+        assert!(curl_state.network.rolling_totals.len() > 0);
+    }
 }

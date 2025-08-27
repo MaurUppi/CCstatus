@@ -278,7 +278,7 @@ Approved below tasks
 
 
 Made enhancement to @src/core/network/http_monitor.rs
-Read previouse assessment report @src/core/network/http_monitor_review.md and evaluate code gain, update if needed but keep same critical/medium/low structure.
+Read previouse assessment report @src/core/network/http_monitor_review.md and evaluate code again, update if needed but keep same critical/medium/low structure.
 
 /sc:analyze @src/core/network/http_monitor.rs --focus functionality "HttpMonitor analysis" --ultrathink --seq --serena
 read @src/core/network/http_monitor_review.md review assessment report. ONLY eys on "Medium" risk THEN think out your enhancement plan. 
@@ -476,4 +476,67 @@ curl -X POST https://as038guxithtu.imds.ai/api/v1/messages \
 
 /sc:analyze @src/core/network/http_monitor.rs  --focus functionality "phase timings function"  --ultrathink --seq --serena
 Read project/network/4-dns_tcp_tls_phase_timings-dev-plan.md , evaluate and develop a dev plan. 
+
+/sc:improve @src/core/network/ "phase timings function" --tests-required --serena --morph --task-manage
+Approved all 3 phases plan. do it now.
+
+
+  Excellent! Both builds succeed, confirming that:
+
+  1. With --features timings-curl: Full curl timing functionality is available
+  2. Without the feature: The system gracefully falls back to isahc-based probes
+
+
+Reload @project/network/4-dns_tcp_tls_phase_timings-dev-plan.md and @tests/curl_timings_test_architecture.md
+evaluate @src/core/network/http_monitor.rs if addtional phase timings functionality met requirement. assessment results should be classified into critical, medium, Low level. save your assessment report alongside with code file, naming convension {module}_review.md
+
+/sc:analyze @src/core/network/http_monitor.rs  --focus functionality "phase timings function enhancem"  --ultrathink --seq --serena
+evaluate @src/core/network/http_monitor_phase_timings-review.md and develop a dev plan. 
+
+made enhancement to @src/core/network/http_monitor.rs
+please Read previouse assessment report @src/core/network/http_monitor_phase_timings-review.md and evaluate code again, update if needed but keep same critical/medium/low structure.
+
+
+  What “Degraded” means here
+
+  • Current thresholds (from your state):
+    • P95: 1288 ms
+    • P80: 1130 ms (computed from your rolling samples)
+  • Classification rules:
+    • Healthy: latency ≤ P80
+    • Degraded: P80 < latency ≤ P95
+    • Error: latency > P95, or non-200 HTTP status (429 is a special case → Degraded)
+  • Important nuance: on each successful probe (HTTP 200), the sample is added to the
+    rolling window first, then P80/P95 are recomputed, then the sample is classified
+    against those updated thresholds. That means a single new high outlier often becomes
+    Degraded (not Error) because it lifts P95 to itself.
+  
+  With your example (typical ~3000 ms)
+
+  • Right now (P95 = 1288 ms), the first 3000 ms success will be classified Degraded (it
+    pushes P95 ≈ 3000 ms when added).
+  • If you keep seeing ~3000 ms, P80 and P95 will climb; eventually 3000 ms can become
+    Healthy once P80 ≈ 3000 ms.
+  • Only if a successful latency is greater than the current P95 after recompute would it
+    be Error; non-200 statuses are Error (except 429 → Degraded).
+
+  So yes, the “Degraded threshold” is dynamic and currently “low” relative to 3000 ms, but
+  it adapts upward as the rolling window fills with higher latencies.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
