@@ -995,8 +995,8 @@ impl HttpMonitor {
             // Official Anthropic API - skip proxy health check
             state.network.proxy_healthy = None;
         } else {
-            // Proxy endpoint - perform health check
-            match self.check_proxy_health(&creds.base_url).await {
+            // Proxy endpoint - perform health check using GET method with JSON validation
+            match self.check_proxy_health_with_client(&creds.base_url, &*self.health_client).await {
                 Ok(health_status) => state.network.proxy_healthy = health_status,
                 Err(_) => state.network.proxy_healthy = Some(false), // Health check errors treated as unhealthy
             }
