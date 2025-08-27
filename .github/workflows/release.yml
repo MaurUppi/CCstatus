@@ -68,8 +68,8 @@ jobs:
           - target: x86_64-unknown-linux-musl
             os: ubuntu-22.04  # Use specific version instead of latest
             name: ccstatus-linux-x64-static.tar.gz
-          - target: x86_64-pc-windows-gnu
-            os: ubuntu-22.04  # Cross-compile Windows from Linux
+          - target: x86_64-pc-windows-msvc
+            os: windows-2022  # Native Windows compilation
             name: ccstatus-windows-x64.zip
           - target: x86_64-apple-darwin
             os: macos-14  # Use macOS 14 to avoid macOS 15 migration issues
@@ -87,11 +87,7 @@ jobs:
       with:
         targets: ${{ matrix.target }}
 
-    - name: Install cross-compilation tools
-      if: matrix.target == 'x86_64-pc-windows-gnu'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y mingw-w64
+    # No cross-compilation tools needed for native Windows builds
 
     - name: Install musl tools
       if: matrix.target == 'x86_64-unknown-linux-musl'
@@ -111,7 +107,7 @@ jobs:
       run: cargo build --release --target ${{ matrix.target }} --features timings-curl-static
 
     - name: Package Linux/macOS
-      if: matrix.target != 'x86_64-pc-windows-gnu'  # Package all non-Windows targets
+      if: matrix.target != 'x86_64-pc-windows-msvc'  # Package all non-Windows targets
       run: |
         mkdir -p dist
         cp target/${{ matrix.target }}/release/ccstatus dist/ccstatus
@@ -119,7 +115,7 @@ jobs:
         tar czf ../${{ matrix.name }} ccstatus
 
     - name: Package Windows
-      if: matrix.target == 'x86_64-pc-windows-gnu'
+      if: matrix.target == 'x86_64-pc-windows-msvc'
       run: |
         mkdir -p dist
         cp target/${{ matrix.target }}/release/ccstatus.exe dist/ccstatus.exe
