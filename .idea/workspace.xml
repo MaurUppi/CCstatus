@@ -11,10 +11,7 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="6ce65814-3068-4bbb-97f1-85756855d77e" name="更改" comment="">
-      <change beforePath="$PROJECT_DIR$/.github/workflows/ci.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/workflows/ci.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/degraded.png" beforeDir="false" afterPath="$PROJECT_DIR$/assets/degraded.png" afterDir="false" />
-    </list>
+    <list default="true" id="6ce65814-3068-4bbb-97f1-85756855d77e" name="更改" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -123,7 +120,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1756127551716</updated>
-      <workItem from="1756127553051" duration="88781000" />
+      <workItem from="1756127553051" duration="89198000" />
     </task>
     <servers />
   </component>
