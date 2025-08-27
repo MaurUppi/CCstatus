@@ -64,19 +64,19 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
-            name: ccline-linux-x64.tar.gz
+            name: ccstatus-linux-x64.tar.gz
           - target: x86_64-unknown-linux-musl
             os: ubuntu-22.04  # Use specific version instead of latest
-            name: ccline-linux-x64-static.tar.gz
+            name: ccstatus-linux-x64-static.tar.gz
           - target: x86_64-pc-windows-gnu
             os: ubuntu-22.04  # Cross-compile Windows from Linux
-            name: ccline-windows-x64.zip
+            name: ccstatus-windows-x64.zip
           - target: x86_64-apple-darwin
             os: macos-14  # Use macOS 14 to avoid macOS 15 migration issues
-            name: ccline-macos-x64.tar.gz
+            name: ccstatus-macos-x64.tar.gz
           - target: aarch64-apple-darwin
             os: macos-14  # Use macOS 14 to avoid macOS 15 migration issues
-            name: ccline-macos-arm64.tar.gz
+            name: ccstatus-macos-arm64.tar.gz
 
     steps:
     - name: Checkout
@@ -86,14 +86,6 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
       with:
         targets: ${{ matrix.target }}
-
-    # Add basic quality checks (independent of ci.yml)
-    # Skip formatting check due to rustfmt edition detection issues
-    # - name: Check code formatting (src only)
-    #   run: find src/ -name "*.rs" -exec rustfmt --check {} \;
-
-    - name: Run clippy lints
-      run: cargo clippy --target ${{ matrix.target }} -- -D warnings
 
     - name: Install cross-compilation tools
       if: matrix.target == 'x86_64-pc-windows-gnu'
@@ -107,6 +99,14 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y musl-tools
 
+    # Add basic quality checks (independent of ci.yml)
+    # Skip formatting check due to rustfmt edition detection issues
+    # - name: Check code formatting (src only)
+    #   run: find src/ -name "*.rs" -exec rustfmt --check {} \;
+
+    - name: Run clippy lints
+      run: cargo clippy --target ${{ matrix.target }} -- -D warnings
+
     - name: Build binary
       run: cargo build --release --target ${{ matrix.target }} --features timings-curl-static
 
@@ -114,17 +114,17 @@ jobs:
       if: matrix.target != 'x86_64-pc-windows-gnu'  # Package all non-Windows targets
       run: |
         mkdir -p dist
-        cp target/${{ matrix.target }}/release/ccstatus dist/ccline
+        cp target/${{ matrix.target }}/release/ccstatus dist/ccstatus
         cd dist
-        tar czf ../${{ matrix.name }} ccline
+        tar czf ../${{ matrix.name }} ccstatus
 
     - name: Package Windows
       if: matrix.target == 'x86_64-pc-windows-gnu'
       run: |
         mkdir -p dist
-        cp target/${{ matrix.target }}/release/ccstatus.exe dist/ccline.exe
+        cp target/${{ matrix.target }}/release/ccstatus.exe dist/ccstatus.exe
         cd dist
-        zip ../${{ matrix.name }} ccline.exe
+        zip ../${{ matrix.name }} ccstatus.exe
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
