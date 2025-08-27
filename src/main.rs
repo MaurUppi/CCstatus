@@ -27,7 +27,10 @@ async fn main_impl() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if cli.print {
+        #[cfg(feature = "tui")]
         let mut config = Config::load().unwrap_or_else(|_| Config::default());
+        #[cfg(not(feature = "tui"))]
+        let config = Config::load().unwrap_or_else(|_| Config::default());
 
         // Apply theme override if provided (TUI only)
         #[cfg(feature = "tui")]
@@ -61,7 +64,6 @@ async fn main_impl() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("TUI feature is not enabled. Please install with --features tui");
             std::process::exit(1);
         }
-        return Ok(());
     }
 
     if cli.update {
@@ -77,7 +79,10 @@ async fn main_impl() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Load configuration
+    #[cfg(feature = "tui")]
     let mut config = Config::load().unwrap_or_else(|_| Config::default());
+    #[cfg(not(feature = "tui"))]
+    let config = Config::load().unwrap_or_else(|_| Config::default());
 
     // Apply theme override if provided (TUI only)
     #[cfg(feature = "tui")]

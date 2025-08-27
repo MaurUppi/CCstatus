@@ -66,46 +66,43 @@ impl StatusLineGenerator {
         let mut lines = Vec::new();
 
         // Render first line (non-network segments)
-        if !other_segments.is_empty() {
-            let mut first_line_output = Vec::new();
-            for (config, data) in other_segments.iter() {
-                let rendered = self.render_segment(config, data);
-                if !rendered.is_empty() {
-                    first_line_output.push(rendered);
-                }
-            }
-
-            if !first_line_output.is_empty() {
-                let first_line = if self.config.style.separator == "\u{e0b0}" {
-                    self.join_with_powerline_arrows(&first_line_output, &other_segments)
-                } else {
-                    self.join_with_white_separators(&first_line_output)
-                };
-                lines.push(first_line);
-            }
+        if let Some(line) = self.render_segments_line(&other_segments) {
+            lines.push(line);
         }
 
         // Render second line (network segments)
-        if !network_segments.is_empty() {
-            let mut second_line_output = Vec::new();
-            for (config, data) in network_segments.iter() {
-                let rendered = self.render_segment(config, data);
-                if !rendered.is_empty() {
-                    second_line_output.push(rendered);
-                }
-            }
-
-            if !second_line_output.is_empty() {
-                let second_line = if self.config.style.separator == "\u{e0b0}" {
-                    self.join_with_powerline_arrows(&second_line_output, &network_segments)
-                } else {
-                    self.join_with_white_separators(&second_line_output)
-                };
-                lines.push(second_line);
-            }
+        if let Some(line) = self.render_segments_line(&network_segments) {
+            lines.push(line);
         }
 
         lines.join("\n")
+    }
+
+    /// Helper method to render a line of segments, eliminating code duplication
+    fn render_segments_line(&self, segments: &[(SegmentConfig, SegmentData)]) -> Option<String> {
+        if segments.is_empty() {
+            return None;
+        }
+
+        let mut output = Vec::new();
+        for (config, data) in segments.iter() {
+            let rendered = self.render_segment(config, data);
+            if !rendered.is_empty() {
+                output.push(rendered);
+            }
+        }
+
+        if output.is_empty() {
+            return None;
+        }
+
+        let line = if self.config.style.separator == "\u{e0b0}" {
+            self.join_with_powerline_arrows(&output, segments)
+        } else {
+            self.join_with_white_separators(&output)
+        };
+
+        Some(line)
     }
 
     /// Generate statusline for TUI preview with proper width calculation
