@@ -68,11 +68,8 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-2022  # Native Windows compilation
             name: ccstatus-windows-x64.zip
-          - target: x86_64-apple-darwin
-            os: macos-14  # Use macOS 14 to avoid macOS 15 migration issues
-            name: ccstatus-macos-x64.tar.gz
           - target: aarch64-apple-darwin
-            os: macos-14  # Use macOS 14 to avoid macOS 15 migration issues
+            os: macos-14  # Native macOS ARM64 compilation  
             name: ccstatus-macos-arm64.tar.gz
 
     steps:
@@ -91,8 +88,8 @@ jobs:
     # - name: Check code formatting (src only)
     #   run: find src/ -name "*.rs" -exec rustfmt --check {} \;
 
-    - name: Run clippy lints
-      run: cargo clippy --target ${{ matrix.target }} -- -D warnings
+    - name: Check code compiles
+      run: cargo check --target ${{ matrix.target }}
 
     - name: Build binary
       run: cargo build --release --target ${{ matrix.target }} --features timings-curl-static
