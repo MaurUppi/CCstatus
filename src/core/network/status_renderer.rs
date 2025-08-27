@@ -12,8 +12,16 @@ impl StatusRenderer {
     /// Render status for statusline display
     /// Emoji: 🟢/🟡/🔴/⚪ map to `healthy/degraded/error/Unknown`
     /// Text: 🟢 shows P95; 🟡 shows P95+breakdown; 🔴 shows breakdown; wraps long content to next line
+    /// Proxy prefix: 🟢 | or 🔴 | prepended when proxy health check is available
     pub fn render_status(&self, status: &NetworkStatus, metrics: &NetworkMetrics) -> String {
-        match status {
+        // Determine proxy health prefix based on proxy_healthy field
+        let proxy_prefix = match metrics.proxy_healthy {
+            Some(true) => Some("🟢 | "),   // Healthy proxy
+            Some(false) => Some("🔴 | "),  // Unhealthy proxy
+            None => None,                   // No proxy or official endpoint
+        };
+
+        let core = match status {
             NetworkStatus::Healthy => {
                 // healthy: show P95 (N/A if zero)
                 let p95_display = if metrics.p95_latency_ms == 0 {
@@ -40,6 +48,12 @@ impl StatusRenderer {
             NetworkStatus::Unknown => {
                 "⚪ Env varis NOT Found".to_string()
             }
+        };
+
+        // Prepend proxy health prefix if available
+        match proxy_prefix {
+            Some(prefix) => format!("{}{}", prefix, core),
+            None => core,
         }
     }
     

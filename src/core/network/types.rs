@@ -51,6 +51,8 @@ pub struct NetworkMetrics {
     pub connection_reused: Option<bool>, // Connection reuse detection for display purposes
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub breakdown_source: Option<String>, // "heuristic" | "measured"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_healthy: Option<bool>, // Proxy health status: Some(true)=healthy, Some(false)=unhealthy, None=no proxy or no endpoint
 }
 
 /// Credential source types (aligned with credential.md)
@@ -255,6 +257,7 @@ impl Default for NetworkMetrics {
             p95_latency_ms: 0,
             connection_reused: None,
             breakdown_source: None,
+            proxy_healthy: None,
         }
     }
 }

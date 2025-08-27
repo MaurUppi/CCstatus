@@ -1,7 +1,5 @@
-use ccstatus::core::segments::network::{
-    types::{NetworkMetrics, NetworkStatus},
-    StatusRenderer,
-};
+use ccstatus::core::network::types::{NetworkMetrics, NetworkStatus};
+use ccstatus::core::network::StatusRenderer;
 
 #[test]
 fn test_status_renderer_creation() {
@@ -20,6 +18,9 @@ fn test_healthy_status_rendering() {
         error_type: None,
         rolling_totals: vec![100, 120, 150],
         p95_latency_ms: 145,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
@@ -40,6 +41,9 @@ fn test_degraded_status_rendering() {
         error_type: Some("HighLatency".to_string()),
         rolling_totals: vec![600, 700, 800],
         p95_latency_ms: 750,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -63,6 +67,9 @@ fn test_degraded_rate_limit_rendering() {
         error_type: Some("RateLimit".to_string()),
         rolling_totals: vec![150, 180, 200],
         p95_latency_ms: 190,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -86,6 +93,9 @@ fn test_error_status_rendering() {
         error_type: Some("ServerError".to_string()),
         rolling_totals: vec![1200, 1300, 1500],
         p95_latency_ms: 1400,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
@@ -109,6 +119,9 @@ fn test_error_timeout_rendering() {
         error_type: None,
         rolling_totals: vec![2000, 2500, 3000],
         p95_latency_ms: 2800,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
@@ -131,6 +144,9 @@ fn test_error_http_status_rendering() {
         error_type: Some("ClientError".to_string()),
         rolling_totals: vec![400, 450, 500],
         p95_latency_ms: 475,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
@@ -153,6 +169,9 @@ fn test_unknown_status_rendering() {
         error_type: None,
         rolling_totals: vec![],
         p95_latency_ms: 0,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Unknown, &metrics);
@@ -172,6 +191,9 @@ fn test_empty_breakdown_handling() {
         error_type: Some("TestError".to_string()),
         rolling_totals: vec![180, 190, 200],
         p95_latency_ms: 195,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -195,6 +217,9 @@ fn test_no_error_type_handling() {
         error_type: None, // No error type
         rolling_totals: vec![250, 275, 300],
         p95_latency_ms: 285,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -218,6 +243,9 @@ fn test_edge_case_zero_p95() {
         error_type: None,
         rolling_totals: vec![100],
         p95_latency_ms: 0, // Zero P95 (not enough samples)
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
@@ -238,6 +266,9 @@ fn test_very_high_latencies() {
         error_type: None,
         rolling_totals: vec![8000, 9000, 9999],
         p95_latency_ms: 9500,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
@@ -258,6 +289,9 @@ fn test_special_characters_in_error_type() {
         error_type: Some("Server-Error_With.Special&Chars".to_string()),
         rolling_totals: vec![400, 450, 500],
         p95_latency_ms: 475,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
@@ -282,6 +316,9 @@ fn test_long_breakdown_strings() {
         error_type: Some("HighLatency".to_string()),
         rolling_totals: vec![2000, 2250, 2500],
         p95_latency_ms: 2400,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -342,6 +379,9 @@ fn test_line_wrapping_behavior() {
         error_type: None,
         rolling_totals: vec![3000, 3100, 3200],
         p95_latency_ms: 3100,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -373,6 +413,9 @@ fn test_no_line_wrapping_for_short_content() {
         error_type: None,
         rolling_totals: vec![120, 135, 150],
         p95_latency_ms: 145,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -398,6 +441,9 @@ fn test_zero_p95_in_degraded_status() {
         error_type: None,
         rolling_totals: vec![200],
         p95_latency_ms: 0, // Zero P95 (insufficient samples)
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -420,6 +466,9 @@ fn test_empty_breakdown_in_error_status() {
         error_type: None,
         rolling_totals: vec![900, 950, 1000],
         p95_latency_ms: 980,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
@@ -428,4 +477,147 @@ fn test_empty_breakdown_in_error_status() {
     assert!(result.starts_with("🔴"));
     // Should not contain any additional text beyond the emoji
     assert_eq!(result, "🔴");
+}
+
+// Proxy health check tests
+
+#[test]
+fn test_proxy_healthy_prefix_none() {
+    let renderer = StatusRenderer::new();
+
+    let mut metrics = NetworkMetrics {
+        latency_ms: 150,
+        breakdown: "DNS:5ms|TCP:10ms|TLS:15ms|TTFB:120ms|Total:150ms".to_string(),
+        last_http_status: 200,
+        error_type: None,
+        rolling_totals: vec![100, 120, 150],
+        p95_latency_ms: 145,
+        connection_reused: None,
+        breakdown_source: None,
+        proxy_healthy: None, // Official endpoint, no proxy health check
+    };
+
+    let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
+
+    // Should show normal status without proxy prefix
+    assert_eq!(result, "🟢 P95:145ms");
+    assert!(!result.contains(" | "));
+}
+
+#[test]
+fn test_proxy_healthy_prefix_true() {
+    let renderer = StatusRenderer::new();
+
+    let mut metrics = NetworkMetrics {
+        latency_ms: 150,
+        breakdown: "DNS:5ms|TCP:10ms|TLS:15ms|TTFB:120ms|Total:150ms".to_string(),
+        last_http_status: 200,
+        error_type: None,
+        rolling_totals: vec![100, 120, 150],
+        p95_latency_ms: 145,
+        connection_reused: None,
+        breakdown_source: None,
+        proxy_healthy: Some(true), // Healthy proxy
+    };
+
+    let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
+
+    // Should show green proxy prefix + normal status
+    assert_eq!(result, "🟢 | 🟢 P95:145ms");
+    assert!(result.starts_with("🟢 | "));
+}
+
+#[test]
+fn test_proxy_unhealthy_prefix_false() {
+    let renderer = StatusRenderer::new();
+
+    let mut metrics = NetworkMetrics {
+        latency_ms: 800,
+        breakdown: "DNS:10ms|TCP:20ms|TLS:30ms|TTFB:740ms|Total:800ms".to_string(),
+        last_http_status: 200,
+        error_type: None,
+        rolling_totals: vec![600, 700, 800],
+        p95_latency_ms: 750,
+        connection_reused: None,
+        breakdown_source: None,
+        proxy_healthy: Some(false), // Unhealthy proxy
+    };
+
+    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
+
+    // Should show red proxy prefix + degraded status
+    assert!(result.starts_with("🔴 | 🟡"));
+    assert!(result.contains("P95:750ms"));
+    assert!(result.contains("DNS:10ms|TCP:20ms|TLS:30ms|TTFB:740ms|Total:800ms"));
+}
+
+#[test]
+fn test_proxy_healthy_with_error_status() {
+    let renderer = StatusRenderer::new();
+
+    let mut metrics = NetworkMetrics {
+        latency_ms: 1500,
+        breakdown: "Total:1500ms|Error:Timeout".to_string(),
+        last_http_status: 500,
+        error_type: Some("ServerError".to_string()),
+        rolling_totals: vec![1200, 1300, 1500],
+        p95_latency_ms: 1400,
+        connection_reused: None,
+        breakdown_source: None,
+        proxy_healthy: Some(true), // Healthy proxy but main API erroring
+    };
+
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics);
+
+    // Should show green proxy prefix + red error status
+    assert_eq!(result, "🟢 | 🔴 Total:1500ms|Error:Timeout");
+}
+
+#[test]
+fn test_proxy_unhealthy_with_unknown_status() {
+    let renderer = StatusRenderer::new();
+
+    let mut metrics = NetworkMetrics {
+        latency_ms: 0,
+        breakdown: "".to_string(),
+        last_http_status: 0,
+        error_type: None,
+        rolling_totals: vec![],
+        p95_latency_ms: 0,
+        connection_reused: None,
+        breakdown_source: None,
+        proxy_healthy: Some(false), // Unhealthy proxy
+    };
+
+    let result = renderer.render_status(&NetworkStatus::Unknown, &metrics);
+
+    // Should show red proxy prefix + unknown status
+    assert_eq!(result, "🔴 | ⚪ Env varis NOT Found");
+}
+
+#[test]
+fn test_proxy_health_with_line_wrapping() {
+    let renderer = StatusRenderer::new();
+
+    let long_breakdown = "DNS:50ms|TCP:100ms|TLS:150ms|TTFB:1200ms|Processing:800ms|Transfer:200ms|Authentication:300ms|Validation:400ms|Total:3200ms";
+
+    let mut metrics = NetworkMetrics {
+        latency_ms: 3200,
+        breakdown: long_breakdown.to_string(),
+        last_http_status: 200,
+        error_type: None,
+        rolling_totals: vec![3000, 3100, 3200],
+        p95_latency_ms: 3100,
+        connection_reused: None,
+        breakdown_source: None,
+        proxy_healthy: Some(false), // Unhealthy proxy with long breakdown
+    };
+
+    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
+
+    // Should show red proxy prefix and wrap due to length
+    assert!(result.starts_with("🔴 | 🟡"));
+    assert!(result.contains("P95:3100ms"));
+    assert!(result.contains(long_breakdown));
+    assert!(result.contains("\n")); // Should wrap to next line
 }
