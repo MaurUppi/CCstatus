@@ -65,9 +65,6 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
             name: ccstatus-linux-x64.tar.gz
-          - target: x86_64-unknown-linux-musl
-            os: ubuntu-22.04  # Use specific version instead of latest
-            name: ccstatus-linux-x64-static.tar.gz
           - target: x86_64-pc-windows-msvc
             os: windows-2022  # Native Windows compilation
             name: ccstatus-windows-x64.zip
@@ -87,13 +84,7 @@ jobs:
       with:
         targets: ${{ matrix.target }}
 
-    # No cross-compilation tools needed for native Windows builds
-
-    - name: Install musl tools
-      if: matrix.target == 'x86_64-unknown-linux-musl'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y musl-tools
+    # No cross-compilation tools needed for native builds
 
     # Add basic quality checks (independent of ci.yml)
     # Skip formatting check due to rustfmt edition detection issues
