@@ -72,7 +72,7 @@ jobs:
             os: macos-13  # Native Intel macOS compilation
             name: ccstatus-macos-x64.tar.gz
           - target: aarch64-apple-darwin
-            os: macos-latest  # Native Apple Silicon macOS compilation  
+            os: macos-15  # Native Apple Silicon macOS compilation  
             name: ccstatus-macos-arm64.tar.gz
 
     steps:
@@ -110,8 +110,7 @@ jobs:
       run: |
         mkdir -p dist
         cp target/${{ matrix.target }}/release/ccstatus.exe dist/ccstatus.exe
-        cd dist
-        zip ../${{ matrix.name }} ccstatus.exe
+        Compress-Archive -Path "dist/ccstatus.exe" -DestinationPath "${{ matrix.name }}"
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
