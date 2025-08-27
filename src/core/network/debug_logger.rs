@@ -156,8 +156,8 @@ impl RotatingLogger {
 pub struct EnhancedDebugLogger {
     enabled: bool,
     debug_logger: Option<Arc<Mutex<RotatingLogger>>>, // Flat text debug log (CCSTATUS_DEBUG gated)
-    jsonl_logger: Arc<Mutex<RotatingLogger>>, // NDJSON operational log (always-on)
-    session_id: String, // Correlation ID for this session
+    jsonl_logger: Arc<Mutex<RotatingLogger>>,         // NDJSON operational log (always-on)
+    session_id: String,                               // Correlation ID for this session
     redaction_patterns: Vec<Regex>,
 }
 
@@ -267,7 +267,7 @@ impl EnhancedDebugLogger {
         let timestamp = Local::now().to_rfc3339();
         let corr_id = correlation_id.unwrap_or_else(|| self.session_id.clone());
         let redacted_message = self.redact_sensitive_data(message);
-        
+
         // Format: TIMESTAMP [Component] "event","message","correlationId" [k1=v1 k2=v2 ...]
         let mut log_line = format!(
             "{} [{}] \"{}\",\"{}\",\"{}\"",
@@ -302,7 +302,7 @@ impl EnhancedDebugLogger {
             let redacted_message = self.redact_sensitive_data(message);
             entry["message"] = serde_json::Value::String(redacted_message);
         }
-        
+
         if let Ok(logger) = self.jsonl_logger.lock() {
             if let Ok(json_line) = serde_json::to_string(&entry) {
                 logger.write_with_rotation(&json_line)?;
@@ -440,7 +440,6 @@ impl EnhancedDebugLogger {
             fields,
         );
     }
-
 
     pub fn render_summary(&self, emoji: &str, status: &str) {
         let mut fields = HashMap::new();

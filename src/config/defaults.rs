@@ -10,12 +10,15 @@ impl Default for Config {
         {
             crate::ui::themes::ThemePresets::get_default()
         }
-        
+
         // Fallback minimal config when TUI feature is disabled
         #[cfg(not(feature = "tui"))]
         {
-            use crate::config::{AnsiColor, SegmentConfig, ColorConfig, IconConfig, SegmentId, TextStyleConfig, StyleConfig, StyleMode};
-            
+            use crate::config::{
+                AnsiColor, ColorConfig, IconConfig, SegmentConfig, SegmentId, StyleConfig,
+                StyleMode, TextStyleConfig,
+            };
+
             let mut segments = vec![
                 SegmentConfig {
                     id: SegmentId::Model,
@@ -29,9 +32,7 @@ impl Default for Config {
                         text: Some(AnsiColor::Color16 { c16: 7 }), // White
                         background: None,
                     },
-                    styles: TextStyleConfig {
-                        text_bold: false,
-                    },
+                    styles: TextStyleConfig { text_bold: false },
                     options: std::collections::HashMap::new(),
                 },
                 SegmentConfig {
@@ -46,9 +47,7 @@ impl Default for Config {
                         text: Some(AnsiColor::Color16 { c16: 7 }), // White
                         background: None,
                     },
-                    styles: TextStyleConfig {
-                        text_bold: false,
-                    },
+                    styles: TextStyleConfig { text_bold: false },
                     options: std::collections::HashMap::new(),
                 },
                 SegmentConfig {
@@ -63,9 +62,7 @@ impl Default for Config {
                         text: Some(AnsiColor::Color16 { c16: 7 }), // White
                         background: None,
                     },
-                    styles: TextStyleConfig {
-                        text_bold: false,
-                    },
+                    styles: TextStyleConfig { text_bold: false },
                     options: std::collections::HashMap::new(),
                 },
                 SegmentConfig {
@@ -80,13 +77,11 @@ impl Default for Config {
                         text: Some(AnsiColor::Color16 { c16: 7 }), // White
                         background: None,
                     },
-                    styles: TextStyleConfig {
-                        text_bold: false,
-                    },
+                    styles: TextStyleConfig { text_bold: false },
                     options: std::collections::HashMap::new(),
                 },
             ];
-            
+
             // Add network segment when network-monitoring feature is enabled
             #[cfg(feature = "network-monitoring")]
             segments.push(SegmentConfig {
@@ -101,12 +96,10 @@ impl Default for Config {
                     text: Some(AnsiColor::Color16 { c16: 10 }),
                     background: None,
                 },
-                styles: TextStyleConfig {
-                    text_bold: false,
-                },
+                styles: TextStyleConfig { text_bold: false },
                 options: std::collections::HashMap::new(),
             });
-            
+
             Config {
                 theme: "default".to_string(),
                 style: StyleConfig {

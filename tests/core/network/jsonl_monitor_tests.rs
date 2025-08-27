@@ -1,4 +1,4 @@
-use ccstatus::core::network::{EnhancedDebugLogger, JsonlMonitor, get_debug_logger};
+use ccstatus::core::network::{get_debug_logger, EnhancedDebugLogger, JsonlMonitor};
 use std::env;
 use std::fs;
 use std::sync::Arc;
@@ -414,7 +414,10 @@ async fn test_fallback_detection_flag_false() {
 
     assert!(result.is_ok());
     let (error_detected, last_error) = result.unwrap();
-    assert!(error_detected, "Should detect error via fallback path when flag is false");
+    assert!(
+        error_detected,
+        "Should detect error via fallback path when flag is false"
+    );
     assert!(last_error.is_some());
 
     let error = last_error.unwrap();
@@ -436,7 +439,10 @@ async fn test_fallback_detection_flag_missing() {
 
     assert!(result.is_ok());
     let (error_detected, last_error) = result.unwrap();
-    assert!(error_detected, "Should detect error via fallback path when flag is missing");
+    assert!(
+        error_detected,
+        "Should detect error via fallback path when flag is missing"
+    );
     assert!(last_error.is_some());
 
     let error = last_error.unwrap();
@@ -465,7 +471,10 @@ async fn test_case_insensitive_error_detection() {
 
     assert!(result.is_ok());
     let (error_detected, last_error) = result.unwrap();
-    assert!(error_detected, "Should detect errors with various case patterns");
+    assert!(
+        error_detected,
+        "Should detect errors with various case patterns"
+    );
     assert!(last_error.is_some());
 
     // Should return the last error (503)
@@ -493,12 +502,21 @@ async fn test_api_error_no_code() {
 
     assert!(result.is_ok());
     let (error_detected, last_error) = result.unwrap();
-    assert!(error_detected, "Should detect API errors without explicit codes");
+    assert!(
+        error_detected,
+        "Should detect API errors without explicit codes"
+    );
     assert!(last_error.is_some());
 
     let error = last_error.unwrap();
-    assert_eq!(error.code, 0, "Should default to code 0 when no explicit code");
-    assert_eq!(error.message, "API Error", "Should provide generic error message");
+    assert_eq!(
+        error.code, 0,
+        "Should default to code 0 when no explicit code"
+    );
+    assert_eq!(
+        error.message, "API Error",
+        "Should provide generic error message"
+    );
 }
 
 /// Test mixed content arrays where error text is in different positions
@@ -509,7 +527,7 @@ async fn test_mixed_content_arrays() {
 
     // Error text in second content item
     let entry1 = r#"{"isApiErrorMessage":false,"parentUuid":"mixed-1","timestamp":"2024-01-01T12:00:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"Normal text"},{"text":"API Error: 429 Rate Limited"},{"text":"More text"}]}}"#;
-    // Error text in third content item  
+    // Error text in third content item
     let entry2 = r#"{"parentUuid":"mixed-2","timestamp":"2024-01-01T12:01:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"First item"},{"text":"Second item"},{"text":"api error: 500 server failure"}]}}"#;
 
     let content = format!("{}\n{}", entry1, entry2);
@@ -520,7 +538,10 @@ async fn test_mixed_content_arrays() {
 
     assert!(result.is_ok());
     let (error_detected, last_error) = result.unwrap();
-    assert!(error_detected, "Should detect error text in any content array position");
+    assert!(
+        error_detected,
+        "Should detect error text in any content array position"
+    );
     assert!(last_error.is_some());
 
     // Should return the last error (500)
@@ -540,7 +561,10 @@ async fn test_fallback_and_flag_coexistence() {
     let fallback_missing = r#"{"parentUuid":"fallback-missing","timestamp":"2024-01-01T12:02:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"api error: 502 Bad Gateway"}]}}"#;
     let normal = r#"{"isApiErrorMessage":false,"parentUuid":"normal","timestamp":"2024-01-01T12:03:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"Normal message"}]}}"#;
 
-    let content = format!("{}\n{}\n{}\n{}", flag_based, fallback_false, fallback_missing, normal);
+    let content = format!(
+        "{}\n{}\n{}\n{}",
+        flag_based, fallback_false, fallback_missing, normal
+    );
     fs::write(&transcript_path, content).unwrap();
 
     let monitor = JsonlMonitor::new();
@@ -548,7 +572,10 @@ async fn test_fallback_and_flag_coexistence() {
 
     assert!(result.is_ok());
     let (error_detected, last_error) = result.unwrap();
-    assert!(error_detected, "Should detect both flag-based and fallback errors");
+    assert!(
+        error_detected,
+        "Should detect both flag-based and fallback errors"
+    );
     assert!(last_error.is_some());
 
     // Should return the last error (502 from fallback detection)
@@ -576,7 +603,10 @@ async fn test_false_positive_prevention() {
 
     assert!(result.is_ok());
     let (error_detected, last_error) = result.unwrap();
-    assert!(!error_detected, "Should not falsely detect non-API error text");
+    assert!(
+        !error_detected,
+        "Should not falsely detect non-API error text"
+    );
     assert!(last_error.is_none());
 }
 
@@ -600,7 +630,10 @@ async fn test_empty_content_arrays() {
 
     assert!(result.is_ok());
     let (error_detected, last_error) = result.unwrap();
-    assert!(!error_detected, "Should handle empty/missing content gracefully");
+    assert!(
+        !error_detected,
+        "Should handle empty/missing content gracefully"
+    );
     assert!(last_error.is_none());
 }
 
@@ -627,11 +660,17 @@ async fn test_utf8_safety_fallback_detection() {
     let result = monitor.scan_tail(&transcript_path).await;
 
     // Should succeed without panicking on UTF-8 boundaries
-    assert!(result.is_ok(), "Should handle UTF-8 characters safely in debug logging");
+    assert!(
+        result.is_ok(),
+        "Should handle UTF-8 characters safely in debug logging"
+    );
     let (error_detected, last_error) = result.unwrap();
-    assert!(error_detected, "Should detect API errors with unicode characters");
+    assert!(
+        error_detected,
+        "Should detect API errors with unicode characters"
+    );
     assert!(last_error.is_some());
-    
+
     let error = last_error.unwrap();
     assert_eq!(error.code, 429);
 }
@@ -660,10 +699,16 @@ async fn test_utf8_safety_malformed_json() {
     let result = monitor.scan_tail(&transcript_path).await;
 
     // Should succeed without panicking on UTF-8 boundaries in error logging
-    assert!(result.is_ok(), "Should handle UTF-8 characters safely in malformed JSON error logging");
+    assert!(
+        result.is_ok(),
+        "Should handle UTF-8 characters safely in malformed JSON error logging"
+    );
     let (error_detected, _last_error) = result.unwrap();
     // Should not detect errors since JSON parsing failed
-    assert!(!error_detected, "Should not detect errors in malformed JSON entries");
+    assert!(
+        !error_detected,
+        "Should not detect errors in malformed JSON entries"
+    );
 }
 
 /// Test UTF-8 safety with extreme unicode cases
@@ -692,7 +737,10 @@ async fn test_utf8_safety_extreme_cases() {
 
     assert!(result.is_ok(), "Should handle extreme UTF-8 cases safely");
     let (error_detected, last_error) = result.unwrap();
-    assert!(error_detected, "Should detect API errors with extreme unicode");
+    assert!(
+        error_detected,
+        "Should detect API errors with extreme unicode"
+    );
     assert!(last_error.is_some());
 }
 
@@ -720,9 +768,15 @@ async fn test_whitespace_tolerant_detection() {
     let monitor = JsonlMonitor::new();
     let result = monitor.scan_tail(&transcript_path).await;
 
-    assert!(result.is_ok(), "Should handle whitespace variations gracefully");
+    assert!(
+        result.is_ok(),
+        "Should handle whitespace variations gracefully"
+    );
     let (error_detected, last_error) = result.unwrap();
-    assert!(error_detected, "Should detect API errors with various whitespace patterns");
+    assert!(
+        error_detected,
+        "Should detect API errors with various whitespace patterns"
+    );
     assert!(last_error.is_some());
 
     // Should return the last error (503)
@@ -848,7 +902,7 @@ async fn test_nbsp_whitespace_handling() {
 
     // Test NBSP character specifically
     let entry = r#"{"isApiErrorMessage":false,"parentUuid":"nbsp-1","timestamp":"2024-01-01T12:00:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"API\u{00a0}error: 503 Service Unavailable"}]}}"#;
-    
+
     fs::write(&transcript_path, entry).unwrap();
 
     let monitor = JsonlMonitor::new();
@@ -856,7 +910,10 @@ async fn test_nbsp_whitespace_handling() {
 
     assert!(result.is_ok(), "Should handle NBSP character gracefully");
     let (error_detected, last_error) = result.unwrap();
-    assert!(error_detected, "Should detect API error with NBSP character");
+    assert!(
+        error_detected,
+        "Should detect API error with NBSP character"
+    );
     assert!(last_error.is_some());
 
     let error = last_error.unwrap();

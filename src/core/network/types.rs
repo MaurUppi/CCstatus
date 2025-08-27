@@ -262,13 +262,9 @@ impl Default for NetworkMetrics {
     }
 }
 
-
-
-
-
 // Environment variable utilities
 /// Parse boolean environment variables (strict true/false only)
-/// 
+///
 /// Only accepts "true" or "false" (case insensitive). All other values default to false.
 ///
 /// # Examples

@@ -54,9 +54,8 @@ impl StatusLineGenerator {
         }
 
         // Separate network segments from other segments
-        let (network_segments, other_segments): (Vec<_>, Vec<_>) = enabled_segments
-            .into_iter()
-            .partition(|(config, _)| {
+        let (network_segments, other_segments): (Vec<_>, Vec<_>) =
+            enabled_segments.into_iter().partition(|(config, _)| {
                 #[cfg(feature = "network-monitoring")]
                 return matches!(config.id, crate::config::SegmentId::Network);
                 #[cfg(not(feature = "network-monitoring"))]
@@ -494,10 +493,8 @@ impl StatusLineGenerator {
 pub async fn collect_all_segments(
     config: &Config,
     input: &crate::config::InputData,
-    #[cfg(feature = "network-monitoring")]
-    full_input: Option<&StatuslineInput>,
-    #[cfg(not(feature = "network-monitoring"))]
-    _full_input: Option<&()>,
+    #[cfg(feature = "network-monitoring")] full_input: Option<&StatuslineInput>,
+    #[cfg(not(feature = "network-monitoring"))] _full_input: Option<&()>,
 ) -> Vec<(SegmentConfig, SegmentData)> {
     use crate::core::segments::*;
 

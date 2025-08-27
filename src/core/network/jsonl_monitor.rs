@@ -174,7 +174,7 @@ impl JsonlMonitor {
 
                 // Operational logging to JSONL file (always-on)
                 let extracted_message = self.extract_message_from_details(&error_entry.details);
-                
+
                 // Create JSONL entry according to proposal schema
                 let jsonl_entry = serde_json::json!({
                     "timestamp": chrono::Local::now().to_rfc3339(),
@@ -184,7 +184,7 @@ impl JsonlMonitor {
                     "error_timestamp": error_entry.timestamp,
                     "session_id": self.logger.get_session_id()
                 });
-                
+
                 // Write to always-on JSONL operational log
                 let _ = self.logger.jsonl_sync(jsonl_entry);
 
@@ -212,7 +212,7 @@ impl JsonlMonitor {
                 "Scanned tail content: no API errors found",
             );
         }
-        
+
         // Operational JSONL entry (always-on)
         let tail_scan_entry = serde_json::json!({
             "timestamp": chrono::Local::now().to_rfc3339(),
@@ -221,7 +221,7 @@ impl JsonlMonitor {
             "message": format!("count={}", error_count),
             "session_id": self.logger.get_session_id()
         });
-        
+
         let _ = self.logger.jsonl_sync(tail_scan_entry);
 
         Ok((error_detected, last_error))
@@ -367,7 +367,7 @@ impl JsonlMonitor {
     fn parse_error_text(&self, text: &str) -> Option<(u16, String)> {
         // Phase 2 Enhancement: Better Unicode-aware case handling
         let lower = text.to_lowercase(); // Use to_lowercase() instead of to_ascii_lowercase()
-        
+
         // Phase 2 Enhancement: Whitespace tolerant API error detection
         // Matches: "api error", "api   error", "api\terror", "api\u{00a0}error", etc.
         let is_api_error = if lower.starts_with("api") && lower.len() > 3 {
@@ -378,14 +378,15 @@ impl JsonlMonitor {
         } else {
             false
         };
-        
+
         if is_api_error {
             // Phase 2 Enhancement: Try colon-based extraction first, then colon-optional
             if let Some(colon_idx) = lower.find(':') {
                 let after_colon = &lower[colon_idx + 1..];
-                if let Some(code) = after_colon.split_whitespace()
-                    .find_map(|tok| tok.parse::<u16>().ok()) {
-                    
+                if let Some(code) = after_colon
+                    .split_whitespace()
+                    .find_map(|tok| tok.parse::<u16>().ok())
+                {
                     // Try to parse JSON for detailed error message (preserve existing logic)
                     if let Some(json_start) = text.find('{') {
                         let json_part = &text[json_start..];
@@ -417,7 +418,8 @@ impl JsonlMonitor {
             } else {
                 // Phase 2 Enhancement: Colon-optional code extraction
                 // When no colon, scan initial tokens for 3-digit HTTP codes
-                if let Some(code) = lower.split_whitespace()
+                if let Some(code) = lower
+                    .split_whitespace()
                     .skip(2) // Skip "api" and "error"
                     .find_map(|tok| {
                         let parsed = tok.parse::<u16>().ok()?;
@@ -427,8 +429,8 @@ impl JsonlMonitor {
                         } else {
                             None
                         }
-                    }) {
-                    
+                    })
+                {
                     // Same JSON parsing and fallback logic as above
                     if let Some(json_start) = text.find('{') {
                         let json_part = &text[json_start..];
@@ -457,11 +459,11 @@ impl JsonlMonitor {
                     return Some((code, message));
                 }
             }
-            
+
             // No explicit code present → generic API error with code 0 (enhancement)
             return Some((0, "API Error".to_string()));
         }
-        
+
         None
     }
 

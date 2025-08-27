@@ -1,5 +1,5 @@
 // Statusline UI rendering for network monitoring
-use crate::core::network::types::{NetworkStatus, NetworkMetrics};
+use crate::core::network::types::{NetworkMetrics, NetworkStatus};
 
 /// Renders network status for statusline display
 pub struct StatusRenderer;
@@ -8,7 +8,7 @@ impl StatusRenderer {
     pub fn new() -> Self {
         Self
     }
-    
+
     /// Render status for statusline display
     /// Emoji: 🟢/🟡/🔴/⚪ map to `healthy/degraded/error/Unknown`
     /// Text: 🟢 shows P95; 🟡 shows P95+breakdown; 🔴 shows breakdown; wraps long content to next line
@@ -16,9 +16,9 @@ impl StatusRenderer {
     pub fn render_status(&self, status: &NetworkStatus, metrics: &NetworkMetrics) -> String {
         // Determine proxy health prefix based on proxy_healthy field
         let proxy_prefix = match metrics.proxy_healthy {
-            Some(true) => Some("🟢 | "),   // Healthy proxy
-            Some(false) => Some("🔴 | "),  // Unhealthy proxy
-            None => None,                   // No proxy or official endpoint
+            Some(true) => Some("🟢 | "),  // Healthy proxy
+            Some(false) => Some("🔴 | "), // Unhealthy proxy
+            None => None,                 // No proxy or official endpoint
         };
 
         let core = match status {
@@ -30,7 +30,7 @@ impl StatusRenderer {
                     format!("P95:{}ms", metrics.p95_latency_ms)
                 };
                 format!("🟢 {}", p95_display)
-            },
+            }
             NetworkStatus::Degraded => {
                 // degraded: show P95 and breakdown (wrap if long)
                 let p95_display = if metrics.p95_latency_ms == 0 {
@@ -40,14 +40,12 @@ impl StatusRenderer {
                 };
                 let base = format!("🟡 {}", p95_display);
                 self.format_with_breakdown(base, &metrics.breakdown)
-            },
+            }
             NetworkStatus::Error => {
                 // error: show breakdown (wrap if long)
                 self.format_with_breakdown("🔴".to_string(), &metrics.breakdown)
-            },
-            NetworkStatus::Unknown => {
-                "⚪ Env vars NOT Found".to_string()
             }
+            NetworkStatus::Unknown => "⚪ Env vars NOT Found".to_string(),
         };
 
         // Prepend proxy health prefix if available
@@ -56,7 +54,7 @@ impl StatusRenderer {
             None => core,
         }
     }
-    
+
     /// Format status with breakdown, wrapping to next line if too long
     fn format_with_breakdown(&self, base: String, breakdown: &str) -> String {
         if breakdown.is_empty() {

@@ -8,7 +8,7 @@
 //! ## Architecture Overview
 //!
 //! NetworkSegment acts as the coordination layer between:
-//! - Stdin parsing and input validation 
+//! - Stdin parsing and input validation
 //! - Credential resolution via CredentialManager
 //! - Error detection via JsonlMonitor  
 //! - HTTP probing via HttpMonitor (single writer)
@@ -54,8 +54,8 @@ use crate::core::network::types::{NetworkError, ProbeMode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::env;
-use std::path::PathBuf;
 use std::io::{self, Read};
+use std::path::PathBuf;
 use tokio::task;
 
 /// Stdin input structure from Claude Code statusline
@@ -106,7 +106,7 @@ pub struct WindowDecision {
     /// Whether COLD window is active (highest priority)
     pub is_cold_window: bool,
     /// Whether RED window is active (requires error detection)
-    pub is_red_window: bool,  
+    pub is_red_window: bool,
     /// Whether GREEN window is active (regular monitoring)
     pub is_green_window: bool,
     /// Selected probe mode based on priority and conditions
@@ -169,20 +169,29 @@ impl NetworkSegment {
     /// Other errors are logged but don't prevent status rendering.
     pub async fn run_from_stdin(&mut self) -> Result<(), NetworkError> {
         let debug_logger = get_debug_logger();
-        debug_logger.debug("NetworkSegment", "Starting stdin orchestration").await;
+        debug_logger
+            .debug("NetworkSegment", "Starting stdin orchestration")
+            .await;
 
         // Step 1: Parse stdin input
         let input = self.parse_stdin_input().await?;
-        
-        debug_logger.debug("NetworkSegment", &format!(
-            "Parsed stdin: session_id={}, total_duration_ms={}, transcript_path={}",
-            input.session_id, input.cost.total_duration_ms, input.transcript_path
-        )).await;
+
+        debug_logger
+            .debug(
+                "NetworkSegment",
+                &format!(
+                    "Parsed stdin: session_id={}, total_duration_ms={}, transcript_path={}",
+                    input.session_id, input.cost.total_duration_ms, input.transcript_path
+                ),
+            )
+            .await;
 
         // Steps 2-6: Execute orchestration workflow
         self.orchestrate(input).await?;
-        
-        debug_logger.debug("NetworkSegment", "Stdin orchestration completed").await;
+
+        debug_logger
+            .debug("NetworkSegment", "Stdin orchestration completed")
+            .await;
         Ok(())
     }
 
@@ -217,12 +226,19 @@ impl NetworkSegment {
         let debug_logger = get_debug_logger();
 
         // Step 2: Resolve credentials (env > shell > config priority)
-        debug_logger.debug("NetworkSegment", "Resolving credentials...").await;
+        debug_logger
+            .debug("NetworkSegment", "Resolving credentials...")
+            .await;
         let credentials = self.credential_manager.get_credentials().await?;
-        
+
         if credentials.is_none() {
-            debug_logger.debug("NetworkSegment", "No credentials found - writing unknown status").await;
-            
+            debug_logger
+                .debug(
+                    "NetworkSegment",
+                    "No credentials found - writing unknown status",
+                )
+                .await;
+
             // Step 2a: Handle no credentials case
             self.http_monitor.write_unknown(false).await?;
             self.render_and_output().await?;
@@ -230,46 +246,68 @@ impl NetworkSegment {
         }
 
         let creds = credentials.unwrap();
-        debug_logger.debug("NetworkSegment", &format!(
-            "Found credentials from: {}", creds.source
-        )).await;
+        debug_logger
+            .debug(
+                "NetworkSegment",
+                &format!("Found credentials from: {}", creds.source),
+            )
+            .await;
 
         // Step 3: Scan transcript for error detection (non-COLD path only)
         // This eliminates duplicate JSONL scans by performing it once before window calculation
         let cold_window_ms = Self::get_cold_window_threshold();
-        
+
         let (error_detected, last_error_event) = if input.cost.total_duration_ms >= cold_window_ms {
             // Non-COLD path: scan transcript once for both window decision and probe
-            debug_logger.debug("NetworkSegment", "Scanning transcript for error detection...").await;
-            let (detected, event) = self
-                .jsonl_monitor
-                .scan_tail(&input.transcript_path)
-                .await?;
-            
-            debug_logger.debug("NetworkSegment", &format!(
-                "Error scan result: detected={}, error={:?}",
-                detected, event.as_ref().map(|e| &e.message)
-            )).await;
-            
+            debug_logger
+                .debug(
+                    "NetworkSegment",
+                    "Scanning transcript for error detection...",
+                )
+                .await;
+            let (detected, event) = self.jsonl_monitor.scan_tail(&input.transcript_path).await?;
+
+            debug_logger
+                .debug(
+                    "NetworkSegment",
+                    &format!(
+                        "Error scan result: detected={}, error={:?}",
+                        detected,
+                        event.as_ref().map(|e| &e.message)
+                    ),
+                )
+                .await;
+
             (Some(detected), event)
         } else {
-            // COLD path: skip transcript scan 
-            debug_logger.debug("NetworkSegment", "COLD path: skipping transcript scan").await;
+            // COLD path: skip transcript scan
+            debug_logger
+                .debug("NetworkSegment", "COLD path: skipping transcript scan")
+                .await;
             (None, None)
         };
 
         // Step 4: Calculate window decisions
-        let window_decision = self.calculate_window_decision(&input, error_detected).await?;
-        debug_logger.debug("NetworkSegment", &format!(
-            "Window decision: cold={}, red={}, green={}, mode={:?}",
-            window_decision.is_cold_window, window_decision.is_red_window, 
-            window_decision.is_green_window, window_decision.probe_mode
-        )).await;
+        let window_decision = self
+            .calculate_window_decision(&input, error_detected)
+            .await?;
+        debug_logger
+            .debug(
+                "NetworkSegment",
+                &format!(
+                    "Window decision: cold={}, red={}, green={}, mode={:?}",
+                    window_decision.is_cold_window,
+                    window_decision.is_red_window,
+                    window_decision.is_green_window,
+                    window_decision.probe_mode
+                ),
+            )
+            .await;
 
         // Step 5: Execute probe if window is active
         if let Some(probe_mode) = window_decision.probe_mode {
             self.http_monitor.set_session_id(input.session_id.clone());
-            
+
             let last_error = if probe_mode == ProbeMode::Red {
                 // Use pre-computed last_error_event from single scan
                 last_error_event
@@ -277,17 +315,28 @@ impl NetworkSegment {
                 None
             };
 
-            debug_logger.debug("NetworkSegment", &format!(
-                "Executing probe: mode={:?}", probe_mode
-            )).await;
-            
-            let outcome = self.http_monitor.probe(probe_mode, creds, last_error).await?;
-            
-            debug_logger.debug("NetworkSegment", &format!(
-                "Probe completed: status={:?}, latency={}ms, written={}",
-                outcome.status, outcome.metrics.latency_ms, outcome.state_written
-            )).await;
-            
+            debug_logger
+                .debug(
+                    "NetworkSegment",
+                    &format!("Executing probe: mode={:?}", probe_mode),
+                )
+                .await;
+
+            let outcome = self
+                .http_monitor
+                .probe(probe_mode, creds, last_error)
+                .await?;
+
+            debug_logger
+                .debug(
+                    "NetworkSegment",
+                    &format!(
+                        "Probe completed: status={:?}, latency={}ms, written={}",
+                        outcome.status, outcome.metrics.latency_ms, outcome.state_written
+                    ),
+                )
+                .await;
+
             // Phase 2: Per-window deduplication - persist window ID AFTER successful probe execution
             // Only persist the window ID for the probe mode that actually ran
             if outcome.state_written {
@@ -295,26 +344,44 @@ impl NetworkSegment {
                     ProbeMode::Green => {
                         if let Some(green_id) = window_decision.green_window_id {
                             if let Err(e) = self.http_monitor.set_green_window_id(green_id).await {
-                                debug_logger.debug("NetworkSegment", &format!(
-                                    "Failed to persist GREEN window ID {}: {}", green_id, e
-                                )).await;
+                                debug_logger
+                                    .debug(
+                                        "NetworkSegment",
+                                        &format!(
+                                            "Failed to persist GREEN window ID {}: {}",
+                                            green_id, e
+                                        ),
+                                    )
+                                    .await;
                             } else {
-                                debug_logger.debug("NetworkSegment", &format!(
-                                    "Persisted GREEN window ID: {}", green_id
-                                )).await;
+                                debug_logger
+                                    .debug(
+                                        "NetworkSegment",
+                                        &format!("Persisted GREEN window ID: {}", green_id),
+                                    )
+                                    .await;
                             }
                         }
                     }
                     ProbeMode::Red => {
                         if let Some(red_id) = window_decision.red_window_id {
                             if let Err(e) = self.http_monitor.set_red_window_id(red_id).await {
-                                debug_logger.debug("NetworkSegment", &format!(
-                                    "Failed to persist RED window ID {}: {}", red_id, e
-                                )).await;
+                                debug_logger
+                                    .debug(
+                                        "NetworkSegment",
+                                        &format!(
+                                            "Failed to persist RED window ID {}: {}",
+                                            red_id, e
+                                        ),
+                                    )
+                                    .await;
                             } else {
-                                debug_logger.debug("NetworkSegment", &format!(
-                                    "Persisted RED window ID: {}", red_id
-                                )).await;
+                                debug_logger
+                                    .debug(
+                                        "NetworkSegment",
+                                        &format!("Persisted RED window ID: {}", red_id),
+                                    )
+                                    .await;
                             }
                         }
                     }
@@ -327,12 +394,14 @@ impl NetworkSegment {
                 }
             }
         } else {
-            debug_logger.debug("NetworkSegment", "No active window - skipping probe").await;
+            debug_logger
+                .debug("NetworkSegment", "No active window - skipping probe")
+                .await;
         }
 
         // Step 6: Render status to stdout
         self.render_and_output().await?;
-        
+
         Ok(())
     }
 
@@ -345,7 +414,8 @@ impl NetworkSegment {
             let mut stdin = io::stdin();
             let mut buffer = Vec::new();
             stdin.read_to_end(&mut buffer).map(|_| buffer)
-        }).await
+        })
+        .await
         .map_err(|e| NetworkError::InputParseError(format!("Failed to join stdin task: {}", e)))?
         .map_err(|e| NetworkError::InputParseError(format!("Failed to read stdin: {}", e)))?;
 
@@ -357,11 +427,15 @@ impl NetworkSegment {
 
         // Validate required fields
         if input.session_id.is_empty() {
-            return Err(NetworkError::InputParseError("session_id is required and cannot be empty".to_string()));
+            return Err(NetworkError::InputParseError(
+                "session_id is required and cannot be empty".to_string(),
+            ));
         }
-        
+
         if input.transcript_path.is_empty() {
-            return Err(NetworkError::InputParseError("transcript_path is required and cannot be empty".to_string()));
+            return Err(NetworkError::InputParseError(
+                "transcript_path is required and cannot be empty".to_string(),
+            ));
         }
 
         Ok(input)
@@ -384,21 +458,24 @@ impl NetworkSegment {
     /// 2. RED window requires both timing condition AND error detection
     /// 3. GREEN window is only evaluated if COLD and RED are not active
     pub async fn calculate_window_decision(
-        &mut self, 
+        &mut self,
         input: &StatuslineInput,
-        error_detected: Option<bool>
+        error_detected: Option<bool>,
     ) -> Result<WindowDecision, NetworkError> {
         let total_duration_ms = input.cost.total_duration_ms;
-        
+
         // Load state early to check for invalid state (COLD startup condition)
         let state = self.http_monitor.load_state().await.unwrap_or_default();
-        let is_invalid_state = matches!(state.status, crate::core::network::types::NetworkStatus::Unknown);
-        
+        let is_invalid_state = matches!(
+            state.status,
+            crate::core::network::types::NetworkStatus::Unknown
+        );
+
         // COLD window check (highest priority): Invalid state OR timing condition
         let cold_window_ms = Self::get_cold_window_threshold();
         let is_cold_timing = total_duration_ms < cold_window_ms;
         let is_cold_window = is_invalid_state || is_cold_timing;
-        
+
         if is_cold_window {
             // Check for session deduplication
             let should_skip_cold = self.should_skip_cold_probe(&input.session_id).await?;
@@ -412,7 +489,7 @@ impl NetworkSegment {
                     red_window_id: None,
                 });
             }
-            
+
             return Ok(WindowDecision {
                 is_cold_window: true,
                 is_red_window: false,
@@ -426,20 +503,17 @@ impl NetworkSegment {
         // RED window check (medium priority) - requires error detection
         let red_timing_condition = (total_duration_ms % 10_000) < 1_000;
         let red_window_id = total_duration_ms / 10_000;
-        
+
         if red_timing_condition {
             let error_detected = if let Some(detected) = error_detected {
                 // Use pre-computed error detection result
                 detected
             } else {
                 // Fallback: scan transcript if not provided (for backward compatibility)
-                let (detected, _) = self
-                    .jsonl_monitor
-                    .scan_tail(&input.transcript_path)
-                    .await?;
+                let (detected, _) = self.jsonl_monitor.scan_tail(&input.transcript_path).await?;
                 detected
             };
-            
+
             if error_detected {
                 // Check RED window deduplication (reuse state loaded earlier)
                 if state.monitoring_state.last_red_window_id == Some(red_window_id) {
@@ -453,7 +527,7 @@ impl NetworkSegment {
                         red_window_id: Some(red_window_id),
                     });
                 }
-                
+
                 return Ok(WindowDecision {
                     is_cold_window: false,
                     is_red_window: true,
@@ -468,7 +542,7 @@ impl NetworkSegment {
         // GREEN window check (lowest priority)
         let is_green_window = (total_duration_ms % 300_000) < 3_000;
         let green_window_id = total_duration_ms / 300_000;
-        
+
         if is_green_window {
             // Check GREEN window deduplication (reuse state loaded earlier)
             if state.monitoring_state.last_green_window_id == Some(green_window_id) {
@@ -482,7 +556,7 @@ impl NetworkSegment {
                     red_window_id: None,
                 });
             }
-            
+
             return Ok(WindowDecision {
                 is_cold_window: false,
                 is_red_window: false,
@@ -508,7 +582,7 @@ impl NetworkSegment {
     ///
     /// COLD probe is triggered when:
     /// 1. Time window condition: `total_duration_ms < COLD_WINDOW_MS` AND
-    /// 2. Either: 
+    /// 2. Either:
     ///    a) No valid state exists (file missing or status=Unknown) OR
     ///    b) Valid state exists but different session_id (no session deduplication)
     ///
@@ -517,14 +591,17 @@ impl NetworkSegment {
     /// - Unnecessary COLD probes when valid state already exists from previous runs
     pub async fn should_skip_cold_probe(&self, session_id: &str) -> Result<bool, NetworkError> {
         let state = self.http_monitor.load_state().await.unwrap_or_default();
-        
+
         // Check if state is invalid (missing or Unknown status)
         // If state is invalid, we should NOT skip the COLD probe
-        let is_state_invalid = matches!(state.status, crate::core::network::types::NetworkStatus::Unknown);
+        let is_state_invalid = matches!(
+            state.status,
+            crate::core::network::types::NetworkStatus::Unknown
+        );
         if is_state_invalid {
             return Ok(false); // Don't skip - COLD probe is needed to establish valid state
         }
-        
+
         // State is valid, check session deduplication
         // Skip if the same session already triggered a COLD probe
         Ok(state.monitoring_state.last_cold_session_id.as_deref() == Some(session_id))
@@ -536,15 +613,17 @@ impl NetworkSegment {
     /// Output goes to stdout for Claude Code statusline display.
     async fn render_and_output(&self) -> Result<(), NetworkError> {
         let state = self.http_monitor.load_state().await.unwrap_or_default();
-        let _status_text = self.status_renderer.render_status(&state.status, &state.network);
-        
+        let _status_text = self
+            .status_renderer
+            .render_status(&state.status, &state.network);
+
         // Note: status_text output is handled by the segment wrapper for statusline integration
         Ok(())
     }
 
     /// Get COLD window threshold in milliseconds from environment variables
-    /// 
-    /// Checks both `CCSTATUS_COLD_WINDOW_MS` and `ccstatus_COLD_WINDOW_MS` 
+    ///
+    /// Checks both `CCSTATUS_COLD_WINDOW_MS` and `ccstatus_COLD_WINDOW_MS`
     /// with fallback to 5000ms default
     fn get_cold_window_threshold() -> u64 {
         env::var("CCSTATUS_COLD_WINDOW_MS")

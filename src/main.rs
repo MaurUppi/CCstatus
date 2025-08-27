@@ -39,14 +39,14 @@ async fn main_impl() -> Result<(), Box<dyn std::error::Error>> {
 
     // Read Claude Code data from stdin with two-tier data flow for network monitoring
     let stdin = io::stdin();
-    
+
     #[cfg(feature = "network-monitoring")]
     let (input, full_input) = {
         let full_input: StatuslineInput = serde_json::from_reader(stdin.lock())?;
         let input = InputData::from(&full_input);
         (input, Some(full_input))
     };
-    
+
     #[cfg(not(feature = "network-monitoring"))]
     let (input, full_input) = {
         let input: InputData = serde_json::from_reader(stdin.lock())?;

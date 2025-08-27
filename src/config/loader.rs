@@ -69,7 +69,7 @@ impl ConfigLoader {
         // Silently ensure themes exist without printing output
         let _ = Self::init_themes_silent();
     }
-    
+
     /// No-op when TUI feature is disabled
     #[cfg(not(feature = "tui"))]
     pub fn ensure_themes_exist() {

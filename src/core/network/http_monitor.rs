@@ -36,7 +36,7 @@ use std::time::{Duration, Instant};
 #[cfg(feature = "network-monitoring")]
 use isahc::config::{Configurable, RedirectPolicy};
 #[cfg(feature = "network-monitoring")]
-use isahc::{HttpClient, Request, AsyncReadResponseExt};
+use isahc::{AsyncReadResponseExt, HttpClient, Request};
 
 #[cfg(feature = "network-monitoring")]
 use futures::io::{copy, sink};
@@ -95,8 +95,8 @@ pub struct HealthResponse {
 }
 
 /// Dedicated HTTP client for health check operations
-/// 
-/// This trait is specialized for health check requirements that differ from 
+///
+/// This trait is specialized for health check requirements that differ from
 /// regular API calls: GET method, response body access, redirect control.
 #[async_trait::async_trait]
 pub trait HealthCheckClient: Send + Sync {
@@ -114,11 +114,7 @@ pub trait HealthCheckClient: Send + Sync {
     /// * Must use GET method (not POST)
     /// * Must not follow redirects (treat 3xx as error)
     /// * Must return complete response body for JSON validation
-    async fn get_health(
-        &self,
-        url: String,
-        timeout_ms: u32,
-    ) -> Result<HealthResponse, String>;
+    async fn get_health(&self, url: String, timeout_ms: u32) -> Result<HealthResponse, String>;
 }
 
 /// Clock abstraction for dependency injection and testing  
@@ -174,16 +170,18 @@ impl HttpClientTrait for IsahcHttpClient {
 
         // Drain response body without allocating (zero-copy to sink)
         let mut body = response.into_body();
-        let _ = copy(&mut body, &mut sink()).await.map_err(|e| format!("Failed to drain response body: {}", e))?;
+        let _ = copy(&mut body, &mut sink())
+            .await
+            .map_err(|e| format!("Failed to drain response body: {}", e))?;
 
         // Generate timing breakdown with stable numeric format
         let total_ms = ttfb_duration.as_millis() as u32;
-        
+
         // Keep breakdown numeric and parseable - always DNS|TCP|TLS|TTFB|Total format
         // For now, we don't have individual timing phases from isahc, so estimate
-        let dns_ms = 0u32;  // Connection reuse = 0ms for DNS
-        let tcp_ms = 0u32;  // Connection reuse = 0ms for TCP  
-        let tls_ms = 0u32;  // Connection reuse = 0ms for TLS
+        let dns_ms = 0u32; // Connection reuse = 0ms for DNS
+        let tcp_ms = 0u32; // Connection reuse = 0ms for TCP
+        let tls_ms = 0u32; // Connection reuse = 0ms for TLS
         let breakdown = format!(
             "DNS:{}ms|TCP:{}ms|TLS:{}ms|TTFB:{}ms|Total:{}ms",
             dns_ms, tcp_ms, tls_ms, total_ms, total_ms
@@ -211,18 +209,14 @@ pub struct IsahcHealthCheckClient {
 #[cfg(feature = "network-monitoring")]
 #[async_trait::async_trait]
 impl HealthCheckClient for IsahcHealthCheckClient {
-    async fn get_health(
-        &self,
-        url: String,
-        timeout_ms: u32,
-    ) -> Result<HealthResponse, String> {
+    async fn get_health(&self, url: String, timeout_ms: u32) -> Result<HealthResponse, String> {
         let start = Instant::now();
 
         let request = Request::get(&url)
             .timeout(Duration::from_millis(timeout_ms as u64))
-            .redirect_policy(RedirectPolicy::None)  // Critical: Don't follow redirects
+            .redirect_policy(RedirectPolicy::None) // Critical: Don't follow redirects
             .header("User-Agent", "claude-cli/1.0.80 (external, cli)")
-            .body(Vec::new())  // Empty body for GET request
+            .body(Vec::new()) // Empty body for GET request
             .map_err(|e| format!("Health check request creation failed: {}", e))?;
 
         let mut response = self
@@ -253,9 +247,11 @@ impl HealthCheckClient for IsahcHealthCheckClient {
 impl IsahcHealthCheckClient {
     pub fn new() -> Result<Self, NetworkError> {
         let client = HttpClient::builder()
-            .redirect_policy(RedirectPolicy::None)  // Global redirect policy
+            .redirect_policy(RedirectPolicy::None) // Global redirect policy
             .build()
-            .map_err(|e| NetworkError::HttpError(format!("Failed to create health check client: {}", e)))?;
+            .map_err(|e| {
+                NetworkError::HttpError(format!("Failed to create health check client: {}", e))
+            })?;
         Ok(Self { client })
     }
 }
@@ -289,59 +285,88 @@ impl CurlProbeRunner for RealCurlRunner {
         timeout_ms: u32,
     ) -> Result<PhaseTimings, NetworkError> {
         let url = url.to_string();
-        let headers = headers.iter().map(|(k, v)| (k.to_string(), v.clone())).collect::<Vec<_>>();
+        let headers = headers
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect::<Vec<_>>();
         let body = body.to_vec();
-        
+
         let result = tokio::task::spawn_blocking(move || -> Result<PhaseTimings, String> {
             let mut handle = Easy::new();
-            
+
             // Configure request
-            handle.url(&url).map_err(|e| format!("URL set failed: {}", e))?;
-            handle.post(true).map_err(|e| format!("POST set failed: {}", e))?;
-            handle.post_fields_copy(&body).map_err(|e| format!("POST fields failed: {}", e))?;
-            handle.timeout(std::time::Duration::from_millis(timeout_ms as u64))
+            handle
+                .url(&url)
+                .map_err(|e| format!("URL set failed: {}", e))?;
+            handle
+                .post(true)
+                .map_err(|e| format!("POST set failed: {}", e))?;
+            handle
+                .post_fields_copy(&body)
+                .map_err(|e| format!("POST fields failed: {}", e))?;
+            handle
+                .timeout(std::time::Duration::from_millis(timeout_ms as u64))
                 .map_err(|e| format!("Timeout set failed: {}", e))?;
-            
+
             // Set headers
             let mut header_list = curl::easy::List::new();
             for (key, value) in headers {
-                header_list.append(&format!("{}: {}", key, value))
+                header_list
+                    .append(&format!("{}: {}", key, value))
                     .map_err(|e| format!("Header append failed: {}", e))?;
             }
-            handle.http_headers(header_list).map_err(|e| format!("Headers set failed: {}", e))?;
-            
+            handle
+                .http_headers(header_list)
+                .map_err(|e| format!("Headers set failed: {}", e))?;
+
             // Capture response body but don't store it
-            handle.write_function(|data| {
-                // Drain response body without storing
-                Ok(data.len())
-            }).map_err(|e| format!("Write function failed: {}", e))?;
-            
+            handle
+                .write_function(|data| {
+                    // Drain response body without storing
+                    Ok(data.len())
+                })
+                .map_err(|e| format!("Write function failed: {}", e))?;
+
             // Execute request and capture timings
-            handle.perform().map_err(|e| format!("Request perform failed: {}", e))?;
-            
+            handle
+                .perform()
+                .map_err(|e| format!("Request perform failed: {}", e))?;
+
             // Extract phase timings from libcurl (in seconds, convert to ms)
-            let dns_time = handle.namelookup_time()
-                .map_err(|e| format!("DNS time failed: {}", e))?.as_secs_f64();
-            let connect_time = handle.connect_time()
-                .map_err(|e| format!("Connect time failed: {}", e))?.as_secs_f64();
-            let appconnect_time = handle.appconnect_time()
-                .map_err(|e| format!("App connect time failed: {}", e))?.as_secs_f64();
-            let starttransfer_time = handle.starttransfer_time()
-                .map_err(|e| format!("Start transfer time failed: {}", e))?.as_secs_f64();
-            let total_time = handle.total_time()
-                .map_err(|e| format!("Total time failed: {}", e))?.as_secs_f64();
-            
+            let dns_time = handle
+                .namelookup_time()
+                .map_err(|e| format!("DNS time failed: {}", e))?
+                .as_secs_f64();
+            let connect_time = handle
+                .connect_time()
+                .map_err(|e| format!("Connect time failed: {}", e))?
+                .as_secs_f64();
+            let appconnect_time = handle
+                .appconnect_time()
+                .map_err(|e| format!("App connect time failed: {}", e))?
+                .as_secs_f64();
+            let starttransfer_time = handle
+                .starttransfer_time()
+                .map_err(|e| format!("Start transfer time failed: {}", e))?
+                .as_secs_f64();
+            let total_time = handle
+                .total_time()
+                .map_err(|e| format!("Total time failed: {}", e))?
+                .as_secs_f64();
+
             // Calculate phase durations and convert to milliseconds
             let dns_ms = (dns_time * 1000.0).max(0.0) as u32;
             let tcp_ms = ((connect_time - dns_time).max(0.0) * 1000.0) as u32;
             let tls_ms = ((appconnect_time - connect_time).max(0.0) * 1000.0) as u32;
             let ttfb_ms = ((starttransfer_time - appconnect_time).max(0.0) * 1000.0) as u32;
             let total_ms = (total_time * 1000.0).max(0.0) as u32;
-            
+
             // Get response status
-            let status = handle.response_code()
-                .map_err(|e| format!("Response code failed: {}", e))? as u16;
-            
+            let status = handle
+                .response_code()
+                .map_err(|e| format!("Response code failed: {}", e))?
+                as u16;
+
             Ok(PhaseTimings {
                 status,
                 dns_ms,
@@ -350,7 +375,8 @@ impl CurlProbeRunner for RealCurlRunner {
                 ttfb_ms,
                 total_ms,
             })
-        }).await
+        })
+        .await
         .map_err(|e| NetworkError::HttpError(format!("Curl task join failed: {}", e)))?
         .map_err(|e| NetworkError::HttpError(e))?;
 
@@ -386,7 +412,7 @@ impl HttpMonitor {
     /// Create new HttpMonitor with default configuration
     ///
     /// Uses default state path: `~/.claude/ccstatus/ccstatus-monitoring.json`
-    /// 
+    ///
     /// When `timings-curl` feature is enabled, automatically wires `RealCurlRunner`
     /// for detailed phase timings (disabled in test builds for safety).
     /// Use `with_curl_runner()` to override with custom implementations.
@@ -445,7 +471,7 @@ impl HttpMonitor {
         self.clock = clock;
         self
     }
-    
+
     /// Configure HttpMonitor with custom curl runner (for testing with timings-curl feature)
     #[cfg(feature = "timings-curl")]
     pub fn with_curl_runner(mut self, runner: Box<dyn CurlProbeRunner>) -> Self {
@@ -530,16 +556,20 @@ impl HttpMonitor {
     ///
     /// * `Ok(())` if successfully persisted or skipped due to monotonic check
     /// * `Err(NetworkError)` if loading state or persistence fails
-    async fn set_last_window_id(&self, color: WindowColor, window_id: u64) -> Result<(), NetworkError> {
+    async fn set_last_window_id(
+        &self,
+        color: WindowColor,
+        window_id: u64,
+    ) -> Result<(), NetworkError> {
         // Load current state to get existing window IDs
         let mut state = self.load_state().await?;
-        
+
         // Get reference to the appropriate window ID field
         let current_id = match color {
             WindowColor::Green => state.monitoring_state.last_green_window_id,
             WindowColor::Red => state.monitoring_state.last_red_window_id,
         };
-        
+
         // Monotonic check: only persist if new ID is greater than current
         if let Some(current) = current_id {
             if current >= window_id {
@@ -547,7 +577,7 @@ impl HttpMonitor {
                 return Ok(());
             }
         }
-        
+
         // Update the appropriate field
         match color {
             WindowColor::Green => {
@@ -557,10 +587,10 @@ impl HttpMonitor {
                 state.monitoring_state.last_red_window_id = Some(window_id);
             }
         }
-        
+
         // Update timestamp
         state.timestamp = get_local_timestamp();
-        
+
         // Persist atomically
         self.write_state_atomic(&state).await
     }
@@ -764,15 +794,16 @@ impl HttpMonitor {
     }
 
     /// Convert UTC timestamp to local timezone ISO-8601 format
-    /// 
-    /// Converts timestamps from JSONL transcript (typically UTC with 'Z' suffix) 
+    ///
+    /// Converts timestamps from JSONL transcript (typically UTC with 'Z' suffix)
     /// to local timezone format for consistent persistence.
     fn convert_utc_to_local_timestamp(utc_timestamp: &str) -> Result<String, NetworkError> {
-        use chrono::{DateTime, Utc, Local};
-        
-        let utc_dt: DateTime<Utc> = utc_timestamp.parse()
+        use chrono::{DateTime, Local, Utc};
+
+        let utc_dt: DateTime<Utc> = utc_timestamp
+            .parse()
             .map_err(|e| NetworkError::ConfigParseError(format!("Invalid UTC timestamp: {}", e)))?;
-        
+
         let local_dt = utc_dt.with_timezone(&Local);
         Ok(local_dt.to_rfc3339())
     }
@@ -806,12 +837,10 @@ impl HttpMonitor {
         }
     }
 
-
-
     /// Execute HTTP probe with timing measurement
-    /// 
+    ///
     /// Uses curl-based probe for detailed phase timings when timings-curl feature is enabled
-    /// (auto-wired by default, can be overridden). Falls back to isahc-based probe on curl 
+    /// (auto-wired by default, can be overridden). Falls back to isahc-based probe on curl
     /// failures or when no runner is available.
     async fn execute_http_probe(
         &self,
@@ -833,18 +862,25 @@ impl HttpMonitor {
                 ]
             });
 
-            let body = serde_json::to_vec(&payload)
-                .map_err(|e| NetworkError::HttpError(format!("Payload serialization failed: {}", e)))?;
+            let body = serde_json::to_vec(&payload).map_err(|e| {
+                NetworkError::HttpError(format!("Payload serialization failed: {}", e))
+            })?;
 
             let headers = vec![
                 ("Content-Type", "application/json".to_string()),
                 ("x-api-key", creds.auth_token.clone()),
-                ("User-Agent", "claude-cli/1.0.80 (external, cli)".to_string()),
+                (
+                    "User-Agent",
+                    "claude-cli/1.0.80 (external, cli)".to_string(),
+                ),
                 ("anthropic-version", "2023-06-01".to_string()),
             ];
 
             // Try curl first, fallback to isahc on failure for resiliency
-            match curl_runner.run(&endpoint, &headers, &body, timeout_ms).await {
+            match curl_runner
+                .run(&endpoint, &headers, &body, timeout_ms)
+                .await
+            {
                 Ok(phase_timings) => {
                     let duration = Duration::from_millis(phase_timings.ttfb_ms as u64);
                     let breakdown = format!(
@@ -860,8 +896,12 @@ impl HttpMonitor {
                 Err(curl_error) => {
                     // Log curl failure and fallback to isahc for resiliency
                     let debug_logger = get_debug_logger();
-                    let _ = debug_logger.error("HttpMonitor", 
-                        &format!("Curl probe failed, falling back to isahc: {}", curl_error)).await;
+                    let _ = debug_logger
+                        .error(
+                            "HttpMonitor",
+                            &format!("Curl probe failed, falling back to isahc: {}", curl_error),
+                        )
+                        .await;
                     // Fall through to isahc path below
                 }
             }
@@ -885,7 +925,10 @@ impl HttpMonitor {
         let mut headers = std::collections::HashMap::new();
         headers.insert("Content-Type".to_string(), "application/json".to_string());
         headers.insert("x-api-key".to_string(), creds.auth_token.clone());
-        headers.insert("User-Agent".to_string(), "claude-cli/1.0.80 (external, cli)".to_string());
+        headers.insert(
+            "User-Agent".to_string(),
+            "claude-cli/1.0.80 (external, cli)".to_string(),
+        );
         headers.insert("anthropic-version".to_string(), "2023-06-01".to_string());
 
         let (status_code, duration, breakdown) = self
@@ -935,7 +978,7 @@ impl HttpMonitor {
         let breakdown_source = "measured";
         #[cfg(not(feature = "timings-curl"))]
         let breakdown_source = "heuristic";
-        
+
         #[cfg(not(feature = "timings-curl"))]
         {
             // Keep breakdown numeric; log reuse heuristics (only for heuristic path)
@@ -945,10 +988,15 @@ impl HttpMonitor {
             );
 
             let debug_logger = get_debug_logger();
-            debug_logger.debug(
-                "HttpMonitor",
-                &format!("heuristic_breakdown: total={}ms p95={}ms", metrics.latency_ms, _p95),
-            ).await;
+            debug_logger
+                .debug(
+                    "HttpMonitor",
+                    &format!(
+                        "heuristic_breakdown: total={}ms p95={}ms",
+                        metrics.latency_ms, _p95
+                    ),
+                )
+                .await;
 
             // Update immediate metrics with computed heuristic breakdown
             state.network.latency_ms = metrics.latency_ms;
@@ -965,10 +1013,13 @@ impl HttpMonitor {
             state.network.breakdown = metrics.breakdown.clone();
             state.network.last_http_status = metrics.last_http_status;
             state.network.error_type = metrics.error_type.clone();
-            
-            // Parse DNS timing from breakdown to determine connection reuse  
+
+            // Parse DNS timing from breakdown to determine connection reuse
             let dns_reused = if let Some(dns_part) = metrics.breakdown.split('|').next() {
-                if let Some(dns_ms_str) = dns_part.strip_prefix("DNS:").and_then(|s| s.strip_suffix("ms")) {
+                if let Some(dns_ms_str) = dns_part
+                    .strip_prefix("DNS:")
+                    .and_then(|s| s.strip_suffix("ms"))
+                {
                     // Treat DNS <= 2ms as reused connection to account for timing precision
                     dns_ms_str.parse::<u32>().unwrap_or(0) <= 2
                 } else {
@@ -977,7 +1028,7 @@ impl HttpMonitor {
             } else {
                 false
             };
-            
+
             state.network.connection_reused = Some(dns_reused);
             state.network.breakdown_source = Some(breakdown_source.to_string());
         }
@@ -1008,8 +1059,9 @@ impl HttpMonitor {
                 // RED mode: Set status=error, update error event, don't touch rolling stats
                 if let Some(mut error_event) = last_jsonl_error_event {
                     // Convert UTC timestamp to local time for consistent persistence
-                    error_event.timestamp = Self::convert_utc_to_local_timestamp(&error_event.timestamp)
-                        .unwrap_or_else(|_| self.clock.local_timestamp());
+                    error_event.timestamp =
+                        Self::convert_utc_to_local_timestamp(&error_event.timestamp)
+                            .unwrap_or_else(|_| self.clock.local_timestamp());
                     state.last_jsonl_error_event = Some(error_event);
                 }
                 state.status = NetworkStatus::Error;
@@ -1065,7 +1117,8 @@ impl HttpMonitor {
                 if mode == ProbeMode::Cold {
                     if let Some(ref session_id) = self.current_session_id {
                         state.monitoring_state.last_cold_session_id = Some(session_id.clone());
-                        state.monitoring_state.last_cold_probe_at = Some(self.clock.local_timestamp());
+                        state.monitoring_state.last_cold_probe_at =
+                            Some(self.clock.local_timestamp());
                     }
                 }
 
@@ -1180,7 +1233,7 @@ impl HttpMonitor {
     // URL utility functions for proxy health checking
 
     /// Check if a base URL is the official Anthropic API endpoint
-    /// 
+    ///
     /// Performs case-insensitive comparison, ignoring trailing slashes.
     /// Used to determine whether proxy health checks should be performed.
     ///
@@ -1243,10 +1296,11 @@ impl HttpMonitor {
         };
 
         // Get status field value (case-insensitive field name)
-        let status = obj.iter()
+        let status = obj
+            .iter()
             .find(|(key, _)| key.eq_ignore_ascii_case("status"))
             .map(|(_, value)| value);
-        
+
         let status = match status {
             Some(status) => status,
             None => return false, // Missing status field
@@ -1274,8 +1328,12 @@ impl HttpMonitor {
     /// * `Ok(None)` - No health endpoint (404 response)
     /// * `Err(NetworkError)` - Internal error (should be mapped to Some(false) by caller)
     #[cfg(feature = "network-monitoring")]
-    pub async fn check_proxy_health_internal(&self, base_url: &str) -> Result<Option<bool>, NetworkError> {
-        self.check_proxy_health_with_client(base_url, &*self.health_client).await
+    pub async fn check_proxy_health_internal(
+        &self,
+        base_url: &str,
+    ) -> Result<Option<bool>, NetworkError> {
+        self.check_proxy_health_with_client(base_url, &*self.health_client)
+            .await
     }
 
     /// Check proxy health endpoint using dedicated health check client
@@ -1326,11 +1384,11 @@ impl HttpMonitor {
     /// - Uses generic POST-based requests (not dedicated GET)
     /// - Lacks response body access for JSON validation
     /// - Does not enforce redirect policy explicitly
-    /// 
+    ///
     /// This method is kept only for backward compatibility and will be removed
     /// in a future version. All new code should use `check_proxy_health_internal()`
     /// which provides proper GET method, JSON validation, and redirect control.
-    /// 
+    ///
     /// # Arguments
     /// * `base_url` - Base URL of the proxy to check
     ///
@@ -1347,11 +1405,18 @@ impl HttpMonitor {
         // WARNING: Uses generic HTTP client with POST-like semantics (legacy behavior)
         // This does not guarantee GET method or provide response body access
         let mut headers = std::collections::HashMap::new();
-        headers.insert("User-Agent".to_string(), "claude-cli/1.0.80 (external, cli)".to_string());
-        
+        headers.insert(
+            "User-Agent".to_string(),
+            "claude-cli/1.0.80 (external, cli)".to_string(),
+        );
+
         let empty_body = Vec::new();
 
-        match self.http_client.execute_request(health_url, headers, empty_body, timeout_ms).await {
+        match self
+            .http_client
+            .execute_request(health_url, headers, empty_body, timeout_ms)
+            .await
+        {
             Ok((status, _duration, _breakdown)) => {
                 match status {
                     404 => Ok(None), // No health endpoint
@@ -1369,7 +1434,10 @@ impl HttpMonitor {
 
     /// Check proxy health endpoint using internal health check client (mock version)
     #[cfg(not(feature = "network-monitoring"))]
-    pub async fn check_proxy_health_internal(&self, _base_url: &str) -> Result<Option<bool>, NetworkError> {
+    pub async fn check_proxy_health_internal(
+        &self,
+        _base_url: &str,
+    ) -> Result<Option<bool>, NetworkError> {
         Ok(None) // Always return None when monitoring is disabled
     }
 
@@ -1412,11 +1480,7 @@ pub struct MockHealthCheckClient;
 #[cfg(not(feature = "network-monitoring"))]
 #[async_trait::async_trait]
 impl HealthCheckClient for MockHealthCheckClient {
-    async fn get_health(
-        &self,
-        _url: String,
-        _timeout_ms: u32,
-    ) -> Result<HealthResponse, String> {
+    async fn get_health(&self, _url: String, _timeout_ms: u32) -> Result<HealthResponse, String> {
         // Return mock healthy response
         let duration = Duration::from_millis(200);
         let body = r#"{"status": "healthy"}"#.as_bytes().to_vec();

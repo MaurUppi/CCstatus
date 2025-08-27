@@ -109,13 +109,15 @@ impl From<&StatuslineInput> for InputData {
     fn from(input: &StatuslineInput) -> Self {
         Self {
             model: Model {
-                display_name: input.model.get("display_name")
+                display_name: input
+                    .model
+                    .get("display_name")
                     .and_then(|v| v.as_str())
                     .unwrap_or("Unknown")
-                    .to_string()
+                    .to_string(),
             },
             workspace: Workspace {
-                current_dir: input.cwd.clone()
+                current_dir: input.cwd.clone(),
             },
             transcript_path: input.transcript_path.clone(),
         }
@@ -257,7 +259,7 @@ impl Config {
     pub fn is_modified_from_theme(&self) -> bool {
         !self.matches_theme(&self.theme)
     }
-    
+
     /// No-op when TUI feature is disabled
     #[cfg(not(feature = "tui"))]
     pub fn is_modified_from_theme(&self) -> bool {
