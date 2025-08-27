@@ -102,8 +102,8 @@ impl RotatingLogger {
 
     fn perform_rotation(&self) -> Result<(), std::io::Error> {
         let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-        let base_name = self.log_path.file_stem().unwrap().to_str().unwrap();
-        let archive_name = format!("{}.{}.gz", base_name, timestamp);
+        let filename = self.log_path.file_name().unwrap().to_str().unwrap();
+        let archive_name = format!("{}.{}.gz", filename, timestamp);
         let archive_path = self.log_path.parent().unwrap().join(archive_name);
 
         // Atomic rotation: move current log to temp, compress, cleanup
@@ -128,14 +128,14 @@ impl RotatingLogger {
 
     fn cleanup_old_archives(&self) -> Result<(), std::io::Error> {
         let log_dir = self.log_path.parent().unwrap();
-        let base_name = self.log_path.file_stem().unwrap().to_str().unwrap();
+        let filename = self.log_path.file_name().unwrap().to_str().unwrap();
 
         let mut archives = Vec::new();
         for entry in std::fs::read_dir(log_dir)? {
             let entry = entry?;
             let name = entry.file_name().to_string_lossy().to_string();
 
-            if name.starts_with(&format!("{}.", base_name)) && name.ends_with(".gz") {
+            if name.starts_with(&format!("{}.", filename)) && name.ends_with(".gz") {
                 archives.push((entry.path(), entry.metadata()?.modified()?));
             }
         }
@@ -155,7 +155,8 @@ impl RotatingLogger {
 
 pub struct EnhancedDebugLogger {
     enabled: bool,
-    rotating_logger: Option<Arc<Mutex<RotatingLogger>>>,
+    debug_logger: Option<Arc<Mutex<RotatingLogger>>>, // Flat text debug log (CCSTATUS_DEBUG gated)
+    jsonl_logger: Arc<Mutex<RotatingLogger>>, // NDJSON operational log (always-on)
     session_id: String, // Correlation ID for this session
     redaction_patterns: Vec<Regex>,
 }
@@ -165,19 +166,25 @@ impl EnhancedDebugLogger {
         let enabled = Self::parse_debug_enabled();
         let session_id = Uuid::new_v4().to_string()[..8].to_string();
 
-        let rotating_logger = if enabled {
-            let log_path = Self::get_log_path();
-            Some(Arc::new(Mutex::new(RotatingLogger::new(log_path))))
+        // Debug logger - only created when CCSTATUS_DEBUG=true
+        let debug_logger = if enabled {
+            let debug_path = Self::get_debug_log_path();
+            Some(Arc::new(Mutex::new(RotatingLogger::new(debug_path))))
         } else {
             None
         };
+
+        // JSONL logger - always created (always-on operational logging)
+        let jsonl_path = Self::get_jsonl_log_path();
+        let jsonl_logger = Arc::new(Mutex::new(RotatingLogger::new(jsonl_path)));
 
         // Compile redaction patterns once at startup
         let redaction_patterns = Self::compile_redaction_patterns();
 
         Self {
             enabled,
-            rotating_logger,
+            debug_logger,
+            jsonl_logger,
             session_id,
             redaction_patterns,
         }
@@ -189,11 +196,19 @@ impl EnhancedDebugLogger {
         crate::core::network::types::parse_env_bool("CCSTATUS_DEBUG")
     }
 
-    fn get_log_path() -> PathBuf {
+    fn get_debug_log_path() -> PathBuf {
         let mut log_path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
         log_path.push(".claude");
         log_path.push("ccstatus");
         log_path.push("ccstatus-debug.log");
+        log_path
+    }
+
+    pub fn get_jsonl_log_path() -> PathBuf {
+        let mut log_path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        log_path.push(".claude");
+        log_path.push("ccstatus");
+        log_path.push("ccstatus-jsonl-error.json");
         log_path
     }
 
@@ -235,10 +250,10 @@ impl EnhancedDebugLogger {
         redacted
     }
 
-    /// Core synchronous logging method with JSON Lines format
+    /// Core synchronous logging method with flat-text format
     fn log_sync(
         &self,
-        level: &str,
+        _level: &str,
         component: &str,
         event: &str,
         message: &str,
@@ -249,23 +264,51 @@ impl EnhancedDebugLogger {
             return;
         }
 
-        let entry = LogEntry {
-            timestamp: Local::now().to_rfc3339(),
-            level: level.to_string(),
-            component: component.to_string(),
-            event: event.to_string(),
-            message: self.redact_sensitive_data(message),
-            correlation_id: correlation_id.or_else(|| Some(self.session_id.clone())),
-            fields,
-        };
+        let timestamp = Local::now().to_rfc3339();
+        let corr_id = correlation_id.unwrap_or_else(|| self.session_id.clone());
+        let redacted_message = self.redact_sensitive_data(message);
+        
+        // Format: TIMESTAMP [Component] "event","message","correlationId" [k1=v1 k2=v2 ...]
+        let mut log_line = format!(
+            "{} [{}] \"{}\",\"{}\",\"{}\"",
+            timestamp, component, event, redacted_message, corr_id
+        );
 
-        if let Some(logger) = &self.rotating_logger {
+        // Add optional key-value fields in brackets if present
+        if !fields.is_empty() {
+            let field_strings: Vec<String> = fields
+                .iter()
+                .map(|(k, v)| match v {
+                    serde_json::Value::String(s) => format!("{}={}", k, s),
+                    serde_json::Value::Number(n) => format!("{}={}", k, n),
+                    serde_json::Value::Bool(b) => format!("{}={}", k, b),
+                    _ => format!("{}={}", k, v.to_string()),
+                })
+                .collect();
+            log_line.push_str(&format!(" [{}]", field_strings.join(" ")));
+        }
+
+        if let Some(logger) = &self.debug_logger {
             if let Ok(logger) = logger.lock() {
-                if let Ok(json_line) = serde_json::to_string(&entry) {
-                    let _ = logger.write_with_rotation(&json_line); // Don't crash on logging errors
-                }
+                let _ = logger.write_with_rotation(&log_line); // Don't crash on logging errors
             }
         }
+    }
+
+    /// Write operational data to always-on JSONL log with redaction
+    pub fn jsonl_sync(&self, mut entry: serde_json::Value) -> Result<(), std::io::Error> {
+        // Apply redaction to message field for defense-in-depth
+        if let Some(message) = entry.get("message").and_then(|m| m.as_str()) {
+            let redacted_message = self.redact_sensitive_data(message);
+            entry["message"] = serde_json::Value::String(redacted_message);
+        }
+        
+        if let Ok(logger) = self.jsonl_logger.lock() {
+            if let Ok(json_line) = serde_json::to_string(&entry) {
+                logger.write_with_rotation(&json_line)?;
+            }
+        }
+        Ok(())
     }
 
     // Synchronous methods for short-lived processes
@@ -398,26 +441,6 @@ impl EnhancedDebugLogger {
         );
     }
 
-    pub fn jsonl_error_summary(&self, error_code: &str, _error_message: &str, timestamp: &str) {
-        let mut fields = HashMap::new();
-        fields.insert(
-            "error_code".to_string(),
-            serde_json::Value::String(error_code.to_string()),
-        );
-        fields.insert(
-            "error_timestamp".to_string(),
-            serde_json::Value::String(timestamp.to_string()),
-        );
-
-        self.log_sync(
-            "NETWORK",
-            "JsonlMonitor",
-            "jsonl_error",
-            &format!("JSONL processing error: {}", error_code),
-            None,
-            fields,
-        );
-    }
 
     pub fn render_summary(&self, emoji: &str, status: &str) {
         let mut fields = HashMap::new();

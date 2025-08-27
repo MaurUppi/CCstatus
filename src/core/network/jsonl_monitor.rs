@@ -21,37 +21,33 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 /// - Fallback: Case-insensitive pattern matching for "API error" text (when flag missing/false)
 /// - Supports various formats: "API Error: 429", "api error: 500", "API error occurred"
 ///
-/// **Debug Mode:** Set `CCSTATUS_DEBUG=true/1/yes/on` (flexible boolean) for enhanced logging
+/// **Debug Mode:** Set `CCSTATUS_DEBUG=true` (strict boolean) for enhanced logging
 /// **Performance:** Configurable via `CCSTATUS_JSONL_TAIL_KB` environment variable (default: 64KB, max: 10MB)
 /// **Security:** Input validation, structured logging, bounded memory usage
 pub struct JsonlMonitor {
-    debug_logger: Option<Arc<EnhancedDebugLogger>>,
+    logger: Arc<EnhancedDebugLogger>, // Always present for operational JSONL logging
 }
 
 impl JsonlMonitor {
     /// Create a new JsonlMonitor with optional debug logging
     ///
     /// **Security:** Never fails - graceful degradation without HOME directory
-    /// **Debug Mode:** Uses flexible boolean parsing (true/1/yes/on case-insensitive)
+    /// **Debug Mode:** Uses strict boolean parsing (true/false case-insensitive only)
     pub fn new() -> Self {
         Self::with_debug_logger(None)
     }
 
     /// Create JsonlMonitor with custom debug logger (for testing)
     pub fn with_debug_logger(custom_logger: Option<Arc<EnhancedDebugLogger>>) -> Self {
-        let debug_logger = custom_logger.or_else(|| {
-            // Use DebugLogger's flexible boolean parsing
-            if Self::parse_debug_enabled() {
-                Some(Arc::new(get_debug_logger()))
-            } else {
-                None
-            }
+        let logger = custom_logger.unwrap_or_else(|| {
+            // Always create logger - JSONL logging is always-on, debug logging is internally gated
+            Arc::new(get_debug_logger())
         });
 
-        Self { debug_logger }
+        Self { logger }
     }
 
-    /// Parse debug enabled status using flexible boolean parsing
+    /// Parse debug enabled status using strict boolean parsing
     /// Supports: true/false, 1/0, yes/no, on/off (case insensitive)
     fn parse_debug_enabled() -> bool {
         crate::core::network::types::parse_env_bool("CCSTATUS_DEBUG")
@@ -176,15 +172,21 @@ impl JsonlMonitor {
                 error_detected = true;
                 error_count += 1;
 
-                // Debug logging only (no persistence)
-                if let Some(logger) = &self.debug_logger {
-                    let extracted_message = self.extract_message_from_details(&error_entry.details);
-                    logger.jsonl_error_summary(
-                        &error_entry.http_code.to_string(),
-                        &extracted_message,
-                        &error_entry.timestamp,
-                    );
-                }
+                // Operational logging to JSONL file (always-on)
+                let extracted_message = self.extract_message_from_details(&error_entry.details);
+                
+                // Create JSONL entry according to proposal schema
+                let jsonl_entry = serde_json::json!({
+                    "timestamp": chrono::Local::now().to_rfc3339(),
+                    "type": "jsonl_error",
+                    "code": error_entry.http_code,
+                    "message": extracted_message,
+                    "error_timestamp": error_entry.timestamp,
+                    "session_id": self.logger.get_session_id()
+                });
+                
+                // Write to always-on JSONL operational log
+                let _ = self.logger.jsonl_sync(jsonl_entry);
 
                 // Keep track of most recent error for return value (always needed for RED gate)
                 last_error = Some(JsonlError {
@@ -195,22 +197,32 @@ impl JsonlMonitor {
             }
         }
 
-        // Summary logging for debug mode
-        if let Some(logger) = &self.debug_logger {
-            if error_count > 0 {
-                logger.debug_sync(
-                    "JsonlMonitor",
-                    "tail_scan_complete",
-                    &format!("Scanned tail content: {} API errors found", error_count),
-                );
-            } else {
-                logger.debug_sync(
-                    "JsonlMonitor",
-                    "tail_scan_complete",
-                    "Scanned tail content: no API errors found",
-                );
-            }
+        // Summary logging for debug mode + operational JSONL logging
+        // Debug log entry (CCSTATUS_DEBUG gated - handled internally by logger)
+        if error_count > 0 {
+            self.logger.debug_sync(
+                "JsonlMonitor",
+                "tail_scan_complete",
+                &format!("Scanned tail content: {} API errors found", error_count),
+            );
+        } else {
+            self.logger.debug_sync(
+                "JsonlMonitor",
+                "tail_scan_complete",
+                "Scanned tail content: no API errors found",
+            );
         }
+        
+        // Operational JSONL entry (always-on)
+        let tail_scan_entry = serde_json::json!({
+            "timestamp": chrono::Local::now().to_rfc3339(),
+            "type": "tail_scan_complete",
+            "code": 0,
+            "message": format!("count={}", error_count),
+            "session_id": self.logger.get_session_id()
+        });
+        
+        let _ = self.logger.jsonl_sync(tail_scan_entry);
 
         Ok((error_detected, last_error))
     }
@@ -222,13 +234,11 @@ impl JsonlMonitor {
         // Skip oversized lines to prevent memory pressure
         if line.len() > MAX_LINE_LENGTH {
             // Phase 2: Use debug logger for oversized line warnings
-            if let Some(logger) = &self.debug_logger {
-                logger.debug_sync(
-                    "JsonlMonitor",
-                    "oversized_line_skipped",
-                    &format!("Skipped oversized line: {} bytes", line.len()),
-                );
-            }
+            self.logger.debug_sync(
+                "JsonlMonitor",
+                "oversized_line_skipped",
+                &format!("Skipped oversized line: {} bytes", line.len()),
+            );
             return Ok(None);
         }
 
@@ -237,21 +247,19 @@ impl JsonlMonitor {
             Ok(json) => json,
             Err(e) => {
                 // Phase 2: Use debug logger for malformed JSON warnings
-                if let Some(logger) = &self.debug_logger {
-                    let error_msg = e.to_string();
-                    let truncated_msg = if error_msg.len() > 100 {
-                        // UTF-8 safe truncation: use char boundaries instead of byte boundaries
-                        let preview: String = error_msg.chars().take(100).collect();
-                        format!("{}...", preview)
-                    } else {
-                        error_msg
-                    };
-                    logger.debug_sync(
-                        "JsonlMonitor",
-                        "malformed_json_skipped",
-                        &format!("Skipped malformed JSON: {}", truncated_msg),
-                    );
-                }
+                let error_msg = e.to_string();
+                let truncated_msg = if error_msg.len() > 100 {
+                    // UTF-8 safe truncation: use char boundaries instead of byte boundaries
+                    let preview: String = error_msg.chars().take(100).collect();
+                    format!("{}...", preview)
+                } else {
+                    error_msg
+                };
+                self.logger.debug_sync(
+                    "JsonlMonitor",
+                    "malformed_json_skipped",
+                    &format!("Skipped malformed JSON: {}", truncated_msg),
+                );
                 return Ok(None);
             }
         };
@@ -274,20 +282,18 @@ impl JsonlMonitor {
                 if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
                     if self.parse_error_text(text).is_some() {
                         // Debug logging for fallback detection
-                        if let Some(logger) = &self.debug_logger {
-                            logger.debug_sync(
-                                "JsonlMonitor",
-                                "fallback_error_detected",
-                                &format!("API error detected via fallback path: {}", {
-                                    // UTF-8 safe truncation: use char boundaries instead of byte boundaries
-                                    if text.len() > 50 {
-                                        text.chars().take(50).collect::<String>()
-                                    } else {
-                                        text.to_string()
-                                    }
-                                }),
-                            );
-                        }
+                        self.logger.debug_sync(
+                            "JsonlMonitor",
+                            "fallback_error_detected",
+                            &format!("API error detected via fallback path: {}", {
+                                // UTF-8 safe truncation: use char boundaries instead of byte boundaries
+                                if text.len() > 50 {
+                                    text.chars().take(50).collect::<String>()
+                                } else {
+                                    text.to_string()
+                                }
+                            }),
+                        );
                         return Ok(Some(self.extract_transcript_error(&json)?));
                     }
                 }
