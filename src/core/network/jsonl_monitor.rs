@@ -10,10 +10,16 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 /// Monitor for scanning JSONL transcript files and detecting API errors
 ///
 /// **Primary Purpose:** RED gate control for monitoring system (stateless)
-/// - Detects `isApiErrorMessage: true` entries in transcript tail
+/// - Detects `isApiErrorMessage: true` entries in transcript tail (primary path)
+/// - **Enhanced Detection:** Also detects API error text patterns when flag is false/missing (fallback path)
 /// - Returns boolean detection status + most recent error details
 /// - Optimized for large files via configurable tail reading
 /// - Memory-only operation with no persistence (complies with module boundaries)
+///
+/// **Detection Methods:**
+/// - Primary: `isApiErrorMessage: true` flag-based detection (100% reliable)
+/// - Fallback: Case-insensitive pattern matching for "API error" text (when flag missing/false)
+/// - Supports various formats: "API Error: 429", "api error: 500", "API error occurred"
 ///
 /// **Debug Mode:** Set `CCSTATUS_DEBUG=true/1/yes/on` (flexible boolean) for enhanced logging
 /// **Performance:** Configurable via `CCSTATUS_JSONL_TAIL_KB` environment variable (default: 64KB, max: 10MB)
@@ -234,7 +240,9 @@ impl JsonlMonitor {
                 if let Some(logger) = &self.debug_logger {
                     let error_msg = e.to_string();
                     let truncated_msg = if error_msg.len() > 100 {
-                        format!("{}...", &error_msg[..100])
+                        // UTF-8 safe truncation: use char boundaries instead of byte boundaries
+                        let preview: String = error_msg.chars().take(100).collect();
+                        format!("{}...", preview)
                     } else {
                         error_msg
                     };
@@ -248,10 +256,41 @@ impl JsonlMonitor {
             }
         };
 
-        // Check for isApiErrorMessage flag
+        // Check for isApiErrorMessage flag (primary detection path)
         if let Some(is_error) = json.get("isApiErrorMessage").and_then(|v| v.as_bool()) {
             if is_error {
                 return Ok(Some(self.extract_transcript_error(&json)?));
+            }
+        }
+
+        // Enhancement: Secondary detection path - scan message content for API error text
+        // when isApiErrorMessage is false or missing
+        if let Some(content_array) = json
+            .get("message")
+            .and_then(|m| m.get("content"))
+            .and_then(|c| c.as_array())
+        {
+            for item in content_array {
+                if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                    if self.parse_error_text(text).is_some() {
+                        // Debug logging for fallback detection
+                        if let Some(logger) = &self.debug_logger {
+                            logger.debug_sync(
+                                "JsonlMonitor",
+                                "fallback_error_detected",
+                                &format!("API error detected via fallback path: {}", {
+                                    // UTF-8 safe truncation: use char boundaries instead of byte boundaries
+                                    if text.len() > 50 {
+                                        text.chars().take(50).collect::<String>()
+                                    } else {
+                                        text.to_string()
+                                    }
+                                }),
+                            );
+                        }
+                        return Ok(Some(self.extract_transcript_error(&json)?));
+                    }
+                }
             }
         }
 
@@ -317,12 +356,74 @@ impl JsonlMonitor {
     }
 
     /// Parse error text to extract code and message
+    /// **Enhancement:** Case-insensitive API error detection with fallback support
+    /// **Phase 2 Enhancement:** Whitespace tolerant matching and colon-optional code extraction
     fn parse_error_text(&self, text: &str) -> Option<(u16, String)> {
-        if text.starts_with("API Error: ") {
-            let parts: Vec<&str> = text.split_whitespace().collect();
-            if parts.len() >= 3 {
-                if let Ok(code) = parts[2].parse::<u16>() {
-                    // Try to parse JSON for detailed error message
+        // Phase 2 Enhancement: Better Unicode-aware case handling
+        let lower = text.to_lowercase(); // Use to_lowercase() instead of to_ascii_lowercase()
+        
+        // Phase 2 Enhancement: Whitespace tolerant API error detection
+        // Matches: "api error", "api   error", "api\terror", "api\u{00a0}error", etc.
+        let is_api_error = if lower.starts_with("api") && lower.len() > 3 {
+            let after_api = &lower[3..];
+            // Enhanced whitespace handling: support all Unicode whitespace including NBSP
+            let trimmed = after_api.trim_matches(|c: char| c.is_whitespace() || c == '\u{00a0}');
+            trimmed.starts_with("error")
+        } else {
+            false
+        };
+        
+        if is_api_error {
+            // Phase 2 Enhancement: Try colon-based extraction first, then colon-optional
+            if let Some(colon_idx) = lower.find(':') {
+                let after_colon = &lower[colon_idx + 1..];
+                if let Some(code) = after_colon.split_whitespace()
+                    .find_map(|tok| tok.parse::<u16>().ok()) {
+                    
+                    // Try to parse JSON for detailed error message (preserve existing logic)
+                    if let Some(json_start) = text.find('{') {
+                        let json_part = &text[json_start..];
+                        if let Ok(error_json) = serde_json::from_str::<Value>(json_part) {
+                            if let Some(error_msg) = error_json
+                                .get("error")
+                                .and_then(|e| e.get("message"))
+                                .and_then(|m| m.as_str())
+                            {
+                                return Some((code, error_msg.to_string()));
+                            }
+                        }
+                    }
+
+                    // Fallback to friendly messages by known HTTP codes
+                    let message = match code {
+                        429 => "Rate Limited",
+                        500 => "Internal Server Error",
+                        502 => "Bad Gateway",
+                        503 => "Service Unavailable",
+                        504 => "Gateway Timeout",
+                        529 => "Overloaded",
+                        _ => "API Error",
+                    }
+                    .to_string();
+
+                    return Some((code, message));
+                }
+            } else {
+                // Phase 2 Enhancement: Colon-optional code extraction
+                // When no colon, scan initial tokens for 3-digit HTTP codes
+                if let Some(code) = lower.split_whitespace()
+                    .skip(2) // Skip "api" and "error"
+                    .find_map(|tok| {
+                        let parsed = tok.parse::<u16>().ok()?;
+                        // Validate it's a reasonable HTTP status code (100-599)
+                        if parsed >= 100 && parsed < 600 {
+                            Some(parsed)
+                        } else {
+                            None
+                        }
+                    }) {
+                    
+                    // Same JSON parsing and fallback logic as above
                     if let Some(json_start) = text.find('{') {
                         let json_part = &text[json_start..];
                         if let Ok(error_json) = serde_json::from_str::<Value>(json_part) {
@@ -350,7 +451,11 @@ impl JsonlMonitor {
                     return Some((code, message));
                 }
             }
+            
+            // No explicit code present → generic API error with code 0 (enhancement)
+            return Some((0, "API Error".to_string()));
         }
+        
         None
     }
 

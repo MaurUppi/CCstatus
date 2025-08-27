@@ -5,3 +5,4 @@
 
 pub mod http_monitor_test;
 pub mod network_segment_tests;
+pub mod jsonl_monitor_tests;
