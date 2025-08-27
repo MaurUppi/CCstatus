@@ -158,14 +158,14 @@ impl CurlProbeRunner for FakeCurlRunner {
     ) -> Result<PhaseTimings, NetworkError> {
         let mut responses = self.responses.lock().await;
         responses.pop().unwrap_or_else(|| {
-            // Default response for deterministic testing
+            // Default response for deterministic testing - matches TestHttpClient default of 1500ms
             Ok(PhaseTimings {
                 status: 200,
                 dns_ms: 25,
                 tcp_ms: 30,
                 tls_ms: 35,
-                ttfb_ms: 900,
-                total_ms: 1000,
+                ttfb_ms: 1500,  // ttfb_ms becomes latency_ms in the outcome
+                total_ms: 1590, // total should be sum of all phases
             })
         })
     }
@@ -180,18 +180,63 @@ fn test_credentials() -> ApiCredentials {
     }
 }
 
+/// Coordinated test client that manages both HTTP and curl responses
+#[derive(Clone)]
+struct CoordinatedTestClient {
+    http_client: TestHttpClient,
+    #[cfg(feature = "timings-curl")]
+    curl_runner: FakeCurlRunner,
+}
+
+impl CoordinatedTestClient {
+    fn new() -> Self {
+        Self {
+            http_client: TestHttpClient::new(),
+            #[cfg(feature = "timings-curl")]
+            curl_runner: FakeCurlRunner::new(),
+        }
+    }
+
+    async fn add_success(&self, status: u16, duration_ms: u64) {
+        // Set up HTTP client response
+        self.http_client.add_success(status, duration_ms).await;
+
+        // Also set up curl runner response when feature is enabled
+        #[cfg(feature = "timings-curl")]
+        {
+            let ttfb_ms = duration_ms as u32;
+            let total_ms = duration_ms as u32 + 90; // Add phase timings
+            self.curl_runner.add_timing_response(status, 25, 30, 35, ttfb_ms, total_ms).await;
+        }
+    }
+
+    async fn add_timeout_error(&self) {
+        self.http_client.add_timeout_error().await;
+        #[cfg(feature = "timings-curl")]
+        {
+            self.curl_runner.add_error("Timeout error").await;
+        }
+    }
+}
+
 /// Create HttpMonitor with test dependencies and temp directory
-fn create_test_monitor(temp_dir: &TempDir) -> (HttpMonitor, TestHttpClient, TestClock) {
-    let http_client = TestHttpClient::new();
+fn create_test_monitor(temp_dir: &TempDir) -> (HttpMonitor, CoordinatedTestClient, TestClock) {
+    let coordinated_client = CoordinatedTestClient::new();
     let clock = TestClock::new();
 
     let state_path = temp_dir.path().join("monitoring.json");
-    let monitor = HttpMonitor::new(Some(state_path))
+    let mut monitor = HttpMonitor::new(Some(state_path))
         .unwrap()
-        .with_http_client(Box::new(http_client.clone()) as Box<dyn HttpClientTrait>)
+        .with_http_client(Box::new(coordinated_client.http_client.clone()) as Box<dyn HttpClientTrait>)
         .with_clock(Box::new(clock.clone()) as Box<dyn ClockTrait>);
 
-    (monitor, http_client, clock)
+    // When timings-curl feature is enabled, inject the coordinated FakeCurlRunner
+    #[cfg(feature = "timings-curl")]
+    {
+        monitor = monitor.with_curl_runner(Box::new(coordinated_client.curl_runner.clone()));
+    }
+
+    (monitor, coordinated_client, clock)
 }
 
 #[tokio::test]

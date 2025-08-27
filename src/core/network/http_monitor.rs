@@ -288,6 +288,10 @@ impl HttpMonitor {
     /// Create new HttpMonitor with default configuration
     ///
     /// Uses default state path: `~/.claude/ccstatus/ccstatus-monitoring.json`
+    /// 
+    /// When `timings-curl` feature is enabled, automatically wires `RealCurlRunner`
+    /// for detailed phase timings (disabled in test builds for safety).
+    /// Use `with_curl_runner()` to override with custom implementations.
     ///
     /// # Errors
     ///
@@ -697,7 +701,8 @@ impl HttpMonitor {
     /// Execute HTTP probe with timing measurement
     /// 
     /// Uses curl-based probe for detailed phase timings when timings-curl feature is enabled
-    /// and a curl_runner is injected, otherwise falls back to isahc-based probe with heuristic timing breakdown.
+    /// (auto-wired by default, can be overridden). Falls back to isahc-based probe on curl 
+    /// failures or when no runner is available.
     async fn execute_http_probe(
         &self,
         creds: &ApiCredentials,
@@ -728,19 +733,28 @@ impl HttpMonitor {
                 ("anthropic-version", "2023-06-01".to_string()),
             ];
 
-            let phase_timings = curl_runner.run(&endpoint, &headers, &body, timeout_ms).await?;
-            
-            let duration = Duration::from_millis(phase_timings.ttfb_ms as u64);
-            let breakdown = format!(
-                "DNS:{}ms|TCP:{}ms|TLS:{}ms|TTFB:{}ms|Total:{}ms",
-                phase_timings.dns_ms,
-                phase_timings.tcp_ms,
-                phase_timings.tls_ms,
-                phase_timings.ttfb_ms,
-                phase_timings.total_ms
-            );
-
-            return Ok((phase_timings.status, duration, breakdown));
+            // Try curl first, fallback to isahc on failure for resiliency
+            match curl_runner.run(&endpoint, &headers, &body, timeout_ms).await {
+                Ok(phase_timings) => {
+                    let duration = Duration::from_millis(phase_timings.ttfb_ms as u64);
+                    let breakdown = format!(
+                        "DNS:{}ms|TCP:{}ms|TLS:{}ms|TTFB:{}ms|Total:{}ms",
+                        phase_timings.dns_ms,
+                        phase_timings.tcp_ms,
+                        phase_timings.tls_ms,
+                        phase_timings.ttfb_ms,
+                        phase_timings.total_ms
+                    );
+                    return Ok((phase_timings.status, duration, breakdown));
+                }
+                Err(curl_error) => {
+                    // Log curl failure and fallback to isahc for resiliency
+                    let debug_logger = get_debug_logger();
+                    let _ = debug_logger.error("HttpMonitor", 
+                        &format!("Curl probe failed, falling back to isahc: {}", curl_error)).await;
+                    // Fall through to isahc path below
+                }
+            }
         }
 
         // Fallback to isahc-based probe with heuristic timing breakdown

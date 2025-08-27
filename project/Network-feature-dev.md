@@ -496,6 +496,13 @@ evaluate @src/core/network/http_monitor_phase_timings-review.md and develop a de
 made enhancement to @src/core/network/http_monitor.rs
 please Read previouse assessment report @src/core/network/http_monitor_phase_timings-review.md and evaluate code again, update if needed but keep same critical/medium/low structure.
 
+/sc:analyze @src/core/network/http_monitor.rs  --focus functionality "phase timings function enhancement"  --ultrathink --seq --serena
+re-evaluate @src/core/network/http_monitor_phase_timings-review.md , think about below enhancement needes. 
+• Medium:
+  • No curl→isahc fallback on runner failure; add fallback for resiliency.
+  • Tests may hit real curl with default runner wiring; inject FakeCurlRunner or gate
+    default injection under #[cfg(not(test))].
+
 
   What “Degraded” means here
 
