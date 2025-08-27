@@ -46,7 +46,7 @@ impl StatusRenderer {
                 self.format_with_breakdown("🔴".to_string(), &metrics.breakdown)
             },
             NetworkStatus::Unknown => {
-                "⚪ Env varis NOT Found".to_string()
+                "⚪ Env vars NOT Found".to_string()
             }
         };
 

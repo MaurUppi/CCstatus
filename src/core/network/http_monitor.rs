@@ -996,7 +996,7 @@ impl HttpMonitor {
             state.network.proxy_healthy = None;
         } else {
             // Proxy endpoint - perform health check using GET method with JSON validation
-            match self.check_proxy_health_with_client(&creds.base_url, &*self.health_client).await {
+            match self.check_proxy_health_internal(&creds.base_url).await {
                 Ok(health_status) => state.network.proxy_healthy = health_status,
                 Err(_) => state.network.proxy_healthy = Some(false), // Health check errors treated as unhealthy
             }
@@ -1259,6 +1259,25 @@ impl HttpMonitor {
         }
     }
 
+    /// Check proxy health endpoint using internal health check client
+    ///
+    /// MEDIUM Priority Fix: Cleaner API design using stored health client
+    /// This method uses the HttpMonitor's internal health_client, providing
+    /// a simpler interface for callers and reducing parameter passing complexity.
+    ///
+    /// # Arguments
+    /// * `base_url` - Base URL of the proxy to check
+    ///
+    /// # Returns
+    /// * `Ok(Some(true))` - Proxy is healthy (200 + valid JSON)
+    /// * `Ok(Some(false))` - Proxy is unhealthy (non-200, invalid JSON, network error)
+    /// * `Ok(None)` - No health endpoint (404 response)
+    /// * `Err(NetworkError)` - Internal error (should be mapped to Some(false) by caller)
+    #[cfg(feature = "network-monitoring")]
+    pub async fn check_proxy_health_internal(&self, base_url: &str) -> Result<Option<bool>, NetworkError> {
+        self.check_proxy_health_with_client(base_url, &*self.health_client).await
+    }
+
     /// Check proxy health endpoint using dedicated health check client
     ///
     /// Performs a GET request to `<base_url>/health` with 1500ms timeout.
@@ -1299,24 +1318,34 @@ impl HttpMonitor {
         }
     }
 
-    /// Legacy check proxy health endpoint (kept for backward compatibility)
+    /// **DEPRECATED** Legacy proxy health check method
     ///
-    /// This method uses the old HttpClientTrait interface and will be deprecated
-    /// once HttpMonitor is updated to use the dedicated health check client.
+    /// **Use `check_proxy_health_internal()` instead** for new code.
+    ///
+    /// This method uses the legacy HttpClientTrait interface which:
+    /// - Uses generic POST-based requests (not dedicated GET)
+    /// - Lacks response body access for JSON validation
+    /// - Does not enforce redirect policy explicitly
+    /// 
+    /// This method is kept only for backward compatibility and will be removed
+    /// in a future version. All new code should use `check_proxy_health_internal()`
+    /// which provides proper GET method, JSON validation, and redirect control.
     /// 
     /// # Arguments
     /// * `base_url` - Base URL of the proxy to check
     ///
     /// # Returns
-    /// * `Ok(Some(true))` - Proxy is healthy (200 response)
+    /// * `Ok(Some(true))` - Proxy responds with 200 (limited validation)
     /// * `Ok(Some(false))` - Proxy is unhealthy (non-200, network error)
     /// * `Ok(None)` - No health endpoint (404 response)
     #[cfg(feature = "network-monitoring")]
+    #[deprecated(since = "1.0.81", note = "Use `check_proxy_health_internal()` instead")]
     pub async fn check_proxy_health(&self, base_url: &str) -> Result<Option<bool>, NetworkError> {
         let health_url = Self::build_health_url(base_url);
         let timeout_ms = 1500u32;
 
-        // Create simple GET request with no authentication
+        // WARNING: Uses generic HTTP client with POST-like semantics (legacy behavior)
+        // This does not guarantee GET method or provide response body access
         let mut headers = std::collections::HashMap::new();
         headers.insert("User-Agent".to_string(), "claude-cli/1.0.80 (external, cli)".to_string());
         
@@ -1327,8 +1356,8 @@ impl HttpMonitor {
                 match status {
                     404 => Ok(None), // No health endpoint
                     200 => {
-                        // NOTE: Limited validation due to HttpClientTrait not providing body content
-                        // This will be replaced with proper JSON validation once health_client is integrated
+                        // LIMITATION: Cannot validate JSON response body due to HttpClientTrait design
+                        // Only status code validation is possible with this legacy method
                         Ok(Some(true))
                     }
                     _ => Ok(Some(false)), // Any other status is unhealthy
@@ -1336,6 +1365,12 @@ impl HttpMonitor {
             }
             Err(_) => Ok(Some(false)), // Network errors are treated as unhealthy
         }
+    }
+
+    /// Check proxy health endpoint using internal health check client (mock version)
+    #[cfg(not(feature = "network-monitoring"))]
+    pub async fn check_proxy_health_internal(&self, _base_url: &str) -> Result<Option<bool>, NetworkError> {
+        Ok(None) // Always return None when monitoring is disabled
     }
 
     /// Mock proxy health check for when network-monitoring feature is disabled
