@@ -4,15 +4,61 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - main
+    paths:
+      - 'Cargo.toml'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  precheck:
+    name: Determine if build should run
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.set.outputs.should_build }}
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide build trigger (tag or Cargo.toml version change)
+        id: set
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="${GITHUB_REF}"
+          # If this is a tag like v*, always build
+          if [[ "$ref" == refs/tags/v* ]]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # For non-tag push events (e.g., main with Cargo.toml path), build only if version changed
+          before="${{ github.event.before }}"
+          # If 'before' is missing (e.g., manual dispatch or initial commit), allow build
+          if [[ -z "${before}" || "${before}" == 0000000000000000000000000000000000000000 ]]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Extract current and previous versions from Cargo.toml
+          curr_version=$(grep -m1 '^version\s*=\s*"' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          prev_version=$(git show "${before}:Cargo.toml" 2>/dev/null | grep -m1 '^version\s*=\s*"' | sed -E 's/.*"([^"]+)".*/\1/' || true)
+
+          if [[ -n "${prev_version}" && "${curr_version}" != "${prev_version}" ]]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          fi
   build:
     name: Build for ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    needs: precheck
+    if: needs.precheck.outputs.should_build == 'true'
     strategy:
       matrix:
         include:
