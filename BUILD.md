@@ -25,7 +25,7 @@ cargo build --release --features self-update
 ```bash
 cargo build --release --features timings-curl
 ```
-- With static curl timings (bundles libcurl; larger but no system deps at runtime):
+- With static curl timings (bundles libcurl; larger but NO system deps at runtime):
 ```bash
 cargo build --release --features timings-curl-static
 ```

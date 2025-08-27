@@ -1,7 +1,7 @@
-# CCometixLine Project Overview
+# CCstatus Project Overview
 
 ## Purpose
-CCometixLine (ccline) is a high-performance Claude Code statusline tool written in Rust with Git integration and real-time usage tracking. It provides a customizable status bar for Claude Code IDE showing model information, directory, git status, and context window usage.
+CCstatus (ccline) is a high-performance Claude Code statusline tool written in Rust with Git integration and real-time usage tracking. It provides a customizable status bar for Claude Code IDE showing model information, directory, git status, and context window usage.
 
 ## Key Features
 - High performance Rust implementation with <50ms startup time

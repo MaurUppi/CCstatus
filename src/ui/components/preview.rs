@@ -105,11 +105,11 @@ impl PreviewComponent {
                     },
                 },
                 SegmentId::Directory => SegmentData {
-                    primary: "CCometixLine".to_string(),
+                    primary: "CCstatus".to_string(),
                     secondary: "".to_string(),
                     metadata: {
                         let mut map = HashMap::new();
-                        map.insert("current_dir".to_string(), "~/CCometixLine".to_string());
+                        map.insert("current_dir".to_string(), "~/CCstatus".to_string());
                         map
                     },
                 },

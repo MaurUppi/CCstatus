@@ -7,7 +7,7 @@ const silent = process.env.npm_config_loglevel === 'silent' ||
                process.env.CCLINE_SKIP_POSTINSTALL === '1';
 
 if (!silent) {
-  console.log('🚀 Setting up CCometixLine for Claude Code...');
+  console.log('🚀 Setting up CCstatus for Claude Code...');
 }
 
 try {
@@ -146,7 +146,7 @@ try {
   }
 
   if (!silent) {
-    console.log('✨ CCometixLine is ready for Claude Code!');
+    console.log('✨ CCstatus is ready for Claude Code!');
     console.log(`📍 Location: ${targetPath}`);
     console.log('🎉 You can now use: ccline --help');
   }

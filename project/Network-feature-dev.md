@@ -530,20 +530,149 @@ re-evaluate @src/core/network/http_monitor_phase_timings-review.md , think about
   So yes, the “Degraded threshold” is dynamic and currently “low” relative to 3000 ms, but
   it adapts upward as the rolling window fills with higher latencies.
 
+---------------------------------------------------------------------------
+
+
+/sc:analyze @src/core/network/jsonl_monitor.rs  --focus functionality "API Error Detection Enhancement"  --ultrathink --seq --serena
+evaluate @src/core/network/jsonl_monitor_enhancement_proposal.md and develop a dev plan. 
+
+/sc:improve @src/core/network/jsonl_monitor.rs "JsonlMonitor API Error Detection Enhancement" --tests-required --serena --morph --task-manage
+Approved all 3 phases plan. do it now.
+
+made enhancement to @src/core/network/jsonl_monitor.rs
+please Read previouse assessment report src/core/network/jsonl_monitor_enhancement_proposal.md and evaluate code again, update if needed but keep same critical/medium/low structure.
+
+/sc:analyze @src/core/network/jsonl_monitor.rs  --focus functionality "API Error Detection Enhancement"  --think --seq --serena
+evaluate @src/core/network/jsonl_monitor_enhancement_proposal_review.md and develop a dev plan. 
+
+/sc:improve @src/core/network/jsonl_monitor.rs "JsonlMonitor API Error Detection Enhancement" --tests-required --serena --morph --task-manage
+Approved all 3 phases plan. do it now.
+
+---------------------------------------------------------------------------
+`export CCSTATUS_DEBUG=true`
+`unset CCSTATUS_DEBUG`
+
+
+---------------------------------------------------------------------------
+
+Goal: add proxy server status checking
+Background: 
+0. Anthropic Official endpoint is `https://api.anthropic.com/` BUT did NOT provide `/health` for status checking. 
+1. Enduser network connection has a situation is: user -> proxy -> Anthropic
+2. proxy (e.g https://as038guxithtu.imds.ai) provide `/health` endpoint without credential requirement.
+3. Health endpoint will respones below msg if accessiable
+```
+{"status":"healthy","service":"claude-relay-service","version":"1.1.121","timestamp":"2025-08-26T14:19:50.659Z","uptime":166792.467405497,"memory":{"used":"102MB","total":"133MB","external":"5MB"},"components":{"redis":{"status":"healthy","connected":true,"latency":"0ms"},"logger":{"status":"healthy","healthy":true,"timestamp":"2025-08-26T14:19:50.658Z"}},"stats":{"requests":367319,"errors":25850,"warnings":238981}}
+```
+Requirements:
+0. IF CredentialManager return official endpoint, STOP following additional pipeline. 
+1. IF CredentialManager return non-official endpoint, THEN check IF `/health` endpoint exist. 
+2. IF exist (no 404), probe it and received respones has `"status":"healthy"` , THEN Add `🟢` prefix to `🟢 P95:1556ms`
+3. IF exist (no 404), BUT respones is different status, THEN add `🔴` prefix to `🟢 P95:1556ms`
+
+Question
+1. risk level of code change assessment?
+2. what edge cases that may missed?
+3. What is your dev resolution?
+
+MUST do: Ask my inputs/feedback before save your proposal at @src/core/network/ 
+
+
+https://github.com/Wei-Shaw/claude-relay-service/blob/81ad8a787f28059b8018aca668787f8836090d8d/src/utils/logger.js#L367-L376
+// 📡 健康检查
+logger.healthCheck = () => {
+  try {
+    const testMessage = 'Logger health check'
+    logger.debug(testMessage)
+    return { healthy: true, timestamp: new Date().toISOString() }
+  } catch (error) {
+    return { healthy: false, error: error.message, timestamp: new Date().toISOString() }
+  }
+}
+
+
+1. health always at exactly <base>/health
+2. network errors/timeouts be treated as “🔴”
+3. Proxy `/health` endpoint will NOT returns 3xx, IF REALLY happended, treated as “🔴”
+Regarding "Preferred approach"
+I'll preferr proxy health endpoint check following existing COLD/GREEN/RED window mechanisms but Simplfy status to 🔴/🟢
+
+
+YES -> "OK to add proxy_healthy: Option<bool> to NetworkMetrics."
+YES -> "Fixed timeout 1500ms acceptable"
+YES -> "health checked only when a probe runs"
+
+
+/sc:analyze @src/core/network/  --focus functionality "proxy health check feature"  --ultrathink --seq --serena
+evaluate @project/network/6-proxy_health_check_proposal.md and develop a dev plan for review. 
+
+/sc:improve @src/core/network/ "Proxy Health Check" --tests-required --serena --morph --task-manage
+Approved all 4 phases plan. do it now.
 
 
 
+Per the propsal @project/network/6-proxy_health_check_proposal.md
+evaluate code @src/core/network/{http_monitor.rs, types.rs, status_renderer.rs} if functionality implementation met requirement. assessment results should be classified into critical, medium, Low level. save your assessment report at @project/network folder.
+
+⏺ ✅ Proxy Health Check Implementation Complete
+
+  The proxy health check feature has been successfully implemented and validated across all phases:
+
+  Implementation Summary
+
+  - Phase 1: Added proxy_healthy field to NetworkMetrics with backward compatibility
+  - Phase 2: Implemented URL utilities and health check logic in HttpMonitor
+  - Phase 3: Updated StatusRenderer with proxy health prefix display (🟢 | / 🔴 |)
+  - Phase 4: Created comprehensive test suites (15 new test functions)
+  - Phase 5: ✅ All builds and tests pass with network-monitoring feature
+
+  Key Features Working
+
+  - Official Anthropic API detection (skips proxy health checks)
+  - Proxy health endpoint checking (<base_url>/health)
+  - Status code handling: 200→healthy, 404→no endpoint, others→unhealthy
+  - Clean status line integration with existing formatting
+  - Backward compatibility with existing state files
+
+  Validation Results
+
+  - ✅ 9/9 proxy health check tests pass
+  - ✅ 6/6 status renderer proxy tests pass
+  - ✅ Clean compilation (debug & release builds)
+  - ✅ No breaking changes to existing functionality
+
+/sc:analyze @src/core/network/{http_monitor.rs, types.rs, status_renderer.rs}  --focus functionality "proxy health check feature"  --ultrathink --seq --serena
+evaluate @project/network/6-proxy_health_check_assessment.md and develop a enhancement plan for review. 
+
+/sc:improve @src/core/network/{http_monitor.rs, types.rs, status_renderer.rs}  --tests-required --serena --morph --task-manage
+Approved all 6 phases plan. ensure Success Criteria will be met. 
+
+made enhancement to @src/core/network/{http_monitor.rs, types.rs, status_renderer.rs}
+please Read previous assessment report @project/network/6-proxy_health_check_assessment.md and evaluate code again, update if needed but keep same critical/medium/low structure.
 
 
+/sc:analyze @src/core/network/{http_monitor.rs, types.rs, status_renderer.rs}  --focus functionality "proxy health check feature"  --ultrathink --seq --serena
+Reload @project/network/6-proxy_health_check_assessment.md ,eyes on Critical issue, THEN develop a enhancement plan for review. 
+
+---------------------------------------------------------------------------
+
+/sc:analyze @src/core/network --focus functionality "debug & jsonl logging redesign"  --ultrathink --seq --serena
+evaluate @project/network/7-debug_jsonl_logging_redesign_proposal.md and develop a enhancement plan for review. 
 
 
+/sc:improve @src/core/network/  --tests-required --serena --morph --task-manage
+Approved your plan. ensure Acceptance criteria will be met. 
 
 
+Per the propsal @project/network/7-debug_jsonl_logging_redesign_proposal.md
+evaluate code @src/core/network/{debug_logger.rs, jsonl_monitor.rs} if functionality implementation met requirement. assessment results should be classified into critical, medium, Low level. save your assessment report at @project/network folder.
+
+/sc:analyze @src/core/network/{debug_logger.rs, jsonl_monitor.rs} --focus functionality "debug & jsonl logging redesign"  --ultrathink --seq --serena
+Read the @project/network/7-debug_jsonl_logging_redesign_assessment.md assessment report and think out a fix plan for review
 
 
-
-
-
+made enhancement to @src/core/network/{debug_logger.rs, jsonl_monitor.rs}
+please reload assessment report @project/network/7-debug_jsonl_logging_redesign_assessment.md and evaluate code again, update if needed but keep same critical/medium/low structure.
 
 
 

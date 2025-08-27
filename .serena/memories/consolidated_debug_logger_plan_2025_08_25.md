@@ -15,7 +15,7 @@
 ### Environment Variables - Standardized  
 - **CCSTATUS_DEBUG only** (values: true, 1, yes, on)
 - **No configuration** for rotation limits, compression format, etc.
-- **Simplicity over flexibility** for CCometixLine's use case
+- **Simplicity over flexibility** for CCstatus's use case
 
 ## Implementation Phases
 
@@ -141,7 +141,7 @@ regex = "1.0"            # Redaction patterns
 | Full rotation | +100-300ms | Gzip compression, rare (8MB reached) |
 | Startup | +1ms | Session ID generation, path setup |
 
-**Total CCometixLine Impact:** <2ms additional startup time
+**Total CCstatus Impact:** <2ms additional startup time
 
 ## Success Metrics
 
@@ -163,7 +163,7 @@ regex = "1.0"            # Redaction patterns
 ## Next Steps
 
 1. **Implement Phase 1** - Fix critical truncation and add basic rotation
-2. **Test concurrent access** - Multiple CCometixLine processes 
+2. **Test concurrent access** - Multiple CCstatus processes 
 3. **Implement Phase 2** - JSON Lines and correlation IDs
 4. **Add Phase 3 safety** - Redaction and typed methods
 5. **Validate network integration** - Test with existing network monitoring components

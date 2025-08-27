@@ -124,7 +124,7 @@ chrono = "0.4"           # Timestamps (existing)
 - Add rotation config to constructor
 - Integrate rotation with sync/async write methods
 
-**With CCometixLine:**
+**With CCstatus:**
 - Minimal startup time impact (<1ms)
 - No changes to existing logging API
 - Environment-based configuration

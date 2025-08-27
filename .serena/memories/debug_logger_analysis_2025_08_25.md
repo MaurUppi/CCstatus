@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-The DebugLogger component has a **critical architectural flaw** that renders it ineffective for its intended purpose. While the basic logging mechanisms work correctly, the session-based log truncation breaks debugging capability for CCometixLine's short-lived process model.
+The DebugLogger component has a **critical architectural flaw** that renders it ineffective for its intended purpose. While the basic logging mechanisms work correctly, the session-based log truncation breaks debugging capability for CCstatus's short-lived process model.
 
 **Risk Level:** 🔴 **HIGH** - Core debugging functionality is broken  
 **Effort to Fix:** 🟡 **MEDIUM** - Requires architectural changes but code is well-structured  
@@ -17,7 +17,7 @@ The DebugLogger component has a **critical architectural flaw** that renders it 
 ### 1. Log Truncation (CRITICAL)
 - **Issue:** Each process startup clears the log file via `LOG_INIT.call_once()`
 - **Impact:** Historical data lost, multi-step operations impossible to debug
-- **Root Cause:** Design assumes long-lived process, but CCometixLine runs as short-lived statusline updates
+- **Root Cause:** Design assumes long-lived process, but CCstatus runs as short-lived statusline updates
 - **Evidence:** `let _ = std::fs::write(&log_path, "");` in constructor
 - **Fix Priority:** P0 - Must fix immediately
 
@@ -119,7 +119,7 @@ The existing review assessment is **accurate and well-prioritized**:
 1. **Immediate:** Implement P0 fixes (remove truncation, add sync methods)
 2. **Short-term:** Standardize environment variables and add JSON logging
 3. **Medium-term:** Add operational enhancements and typed interfaces
-4. **Validation:** Test with multiple concurrent CCometixLine processes
+4. **Validation:** Test with multiple concurrent CCstatus processes
 
 **Effort Estimate:** 2-3 development sessions to reach production-ready state
 **Testing Requirements:** Multi-process scenarios, concurrent access, error conditions

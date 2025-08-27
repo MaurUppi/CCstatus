@@ -1,6 +1,6 @@
 # @cometix/ccline
 
-CCometixLine - High-performance Claude Code StatusLine tool
+CCstatus - High-performance Claude Code StatusLine tool
 
 ## Installation
 
@@ -37,6 +37,6 @@ npm install -g @cometix/ccline --registry https://registry.npmmirror.com
 
 ## More Information
 
-- GitHub: https://github.com/Haleclipse/CCometixLine
-- Issues: https://github.com/Haleclipse/CCometixLine/issues
+- GitHub: https://github.com/MaurUppi/CCstatus
+- Issues: https://github.com/MaurUppi/CCstatus/issues
 - License: MIT

@@ -5,7 +5,106 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.4] - 2025-08-26
+## [2.0.0] - 2025-08-27
+
+### ⚡ 重大架构升级
+
+#### 🏗️ 双日志架构实现
+- **始终开启的 JSONL 运营日志**: 不再依赖 `CCSTATUS_DEBUG` 设置
+  - 独立的运营数据记录：`~/.claude/ccstatus/ccstatus-jsonl-error.json`
+  - 自动敏感信息脱敏，防止 API 密钥泄露
+  - 内置日志轮转和 gzip 压缩，防止磁盘占用
+- **可选调试日志**: `CCSTATUS_DEBUG=true` 时启用详细调试信息
+  - 平文本格式，便于人工排查问题
+  - 独立的文件路径和轮转策略
+- **修复归档清理逻辑**: 解决文件命名不匹配导致的磁盘空间问题
+
+#### 🚀 功能完善
+- **全面集成测试**: 验证 JSONL 始终开启行为
+- **代码清理**: 移除已废弃的 `jsonl_error_summary` 方法
+- **文档更新**: 反映严格的布尔值解析规则（仅支持 true/false）
+
+### 🛡️ 安全性提升
+- **防御性脱敏**: JSONL 消息在写入前自动过滤敏感信息
+- **原子文件操作**: 临时文件 + 重命名模式确保数据完整性
+
+### 📊 向后兼容性
+- 现有用户配置无需修改
+- 新增 JSONL 日志文件，但不影响现有功能
+- 平滑升级路径，无破坏性变更
+
+---
+
+## [1.3.0] - 2025-08-26
+
+### 🔧 模块化构建系统
+- **特性标志扩展**: 支持 `timings-curl-static` 构建选项
+  - 静态 curl 库集成，消除运行时依赖
+  - 专为 Windows/Linux 可移植部署优化
+  - 自动降级：curl 失败时回退到 isahc 启发式计时
+- **CI/CD 优化**: 更新发布流程支持静态库构建
+- **BUILD.md 文档**: 完整的构建选项和平台说明
+
+---
+
+## [1.2.0] - 2025-08-25
+
+### 📊 高精度性能监控
+- **HTTP 阶段计时**: 基于 libcurl 的详细网络性能测量
+  - DNS 解析时间独立统计
+  - TCP 连接建立时间测量
+  - TLS 握手时间分析
+  - TTFB（首字节时间）精确计算
+  - 总响应时间完整追踪
+- **性能指标优化**: 改进延迟统计和 P95 计算准确性
+- **依赖项精简**: 优化网络监控相关依赖包大小
+
+---
+
+## [1.1.0] - 2025-08-24
+
+### 🚀 网络健康检查系统
+- **HealthCheckClient 架构**: 专业级代理健康状态监控
+  - 支持多种探测模式：COLD（启动）、GREEN（定期）、RED（错误触发）
+  - 四种状态指示：🟢 健康、🟡 降级、🔴 错误、⚪ 未知
+  - 集成测试覆盖，确保监控准确性
+- **HttpMonitor 增强**: 全面的 HTTP 探测能力
+  - 原子状态持久化，防止数据竞争
+  - 窗口去重机制，避免重复探测
+  - 会话跟踪，支持 COLD 探测去重
+- **错误恢复**: 增强的故障处理和自动恢复机制
+
+---
+
+## [1.0.6] - 2025-08-23
+
+### 📋 监控组件完善
+- **JsonlMonitor 增强**: UTF-8 安全处理和模式匹配改进
+  - 全面支持 Unicode 内容解析
+  - 改进的 API 错误检测算法
+  - 结构化日志记录和全面测试覆盖
+- **ErrorTracker 升级**: 智能错误分类和安全性改进
+  - 基于 HTTP 状态码的精确错误映射
+  - 支持 `isApiErrorMessage` 标志检测
+  - 模式匹配备用检测，提高容错能力
+- **DebugLogger 优化**: 结构化日志记录和轮转机制
+
+---
+
+## [1.0.5] - 2025-08-22
+
+### ⚡ 网络监控基础框架
+- **NetworkSegment 协调器**: stdin 触发的窗口化探测系统
+  - 智能监控窗口：COLD（启动检测）、GREEN（5分钟定期）、RED（错误触发）
+  - 频率控制探测，最小化对 Claude API 的影响
+  - P95 延迟追踪，12样本滚动窗口性能分析
+- **凭证管理**: 自动检测环境变量、shell 和 Claude 配置
+- **状态线集成**: 修复缺失组件，实现双行布局支持
+- **基础测试框架**: 网络监控组件单元测试
+
+---
+
+## [1.0.4] - 2025-08-21
 
 ### Added
 - **Network Monitoring Feature ⚡**: Real-time Claude API connectivity status monitoring
@@ -81,7 +180,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Environment-independent mock data generation for all segment types
 - Dynamic version display using `env!("CARGO_PKG_VERSION")`
 - Optimized preview rendering without file system calls or Git operations
-- Consistent cross-platform display: "Sonnet 4 | CCometixLine | main ✓ | 78.2% · 156.4k"
+- Consistent cross-platform display: "Sonnet 4 | CCstatus | main ✓ | 78.2% · 156.4k"
 
 ## [1.0.2] - 2025-08-17
 
@@ -198,7 +297,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2025-08-11
 
 ### Added
-- Initial release of CCometixLine
+- Initial release of CCstatus
 - High-performance Rust-based statusline tool for Claude Code
 - Git integration with branch, status, and tracking info
 - Model display with simplified Claude model names
