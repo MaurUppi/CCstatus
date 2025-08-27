@@ -232,6 +232,7 @@ dependencies = [
  "chrono",
  "clap",
  "crossterm 0.29.0",
+ "curl",
  "dirs",
  "flate2",
  "fs2",
