@@ -72,32 +72,21 @@
 
 #### Linux
 
-#### 选项 1: 动态链接版本（推荐）
 ```bash
 mkdir -p ~/.claude/ccstatus
-wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccline-linux-x64.tar.gz
-tar -xzf ccline-linux-x64.tar.gz
+wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccstatus-linux-x64.tar.gz
+tar -xzf ccstatus-linux-x64.tar.gz
 cp ccline ~/.claude/ccstatus/CCstatus
 chmod +x ~/.claude/ccstatus/CCstatus
 ```
 *系统要求: Ubuntu 22.04+, CentOS 9+, Debian 11+, RHEL 9+ (glibc 2.35+)*
 
-#### 选项 2: 静态链接版本（通用兼容）
-```bash
-mkdir -p ~/.claude/ccstatus
-wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccline-linux-x64-static.tar.gz
-tar -xzf ccline-linux-x64-static.tar.gz
-cp ccline ~/.claude/ccstatus/CCstatus
-chmod +x ~/.claude/ccstatus/CCstatus
-```
-*适用于任何 Linux 发行版（静态链接，无依赖）*
-
 ### macOS (Intel)
 
 ```bash  
 mkdir -p ~/.claude/ccstatus
-wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccline-macos-x64.tar.gz
-tar -xzf ccline-macos-x64.tar.gz
+wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccstatus-macos-x64.tar.gz
+tar -xzf ccstatus-macos-x64.tar.gz
 cp ccline ~/.claude/ccstatus/CCstatus
 chmod +x ~/.claude/ccstatus/CCstatus
 ```
@@ -106,8 +95,8 @@ chmod +x ~/.claude/ccstatus/CCstatus
 
 ```bash
 mkdir -p ~/.claude/ccstatus  
-wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccline-macos-arm64.tar.gz
-tar -xzf ccline-macos-arm64.tar.gz
+wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccstatus-macos-arm64.tar.gz
+tar -xzf ccstatus-macos-arm64.tar.gz
 cp ccline ~/.claude/ccstatus/CCstatus
 chmod +x ~/.claude/ccstatus/CCstatus
 ```
@@ -117,8 +106,8 @@ chmod +x ~/.claude/ccstatus/CCstatus
 ```powershell
 # 创建目录并下载
 New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\ccstatus"
-Invoke-WebRequest -Uri "https://github.com/MaurUppi/CCstatus/releases/latest/download/ccline-windows-x64.zip" -OutFile "ccline-windows-x64.zip"
-Expand-Archive -Path "ccline-windows-x64.zip" -DestinationPath "."
+Invoke-WebRequest -Uri "https://github.com/MaurUppi/CCstatus/releases/latest/download/ccstatus-windows-x64.zip" -OutFile "ccstatus-windows-x64.zip"
+Expand-Archive -Path "ccstatus-windows-x64.zip" -DestinationPath "."
 Move-Item "ccline.exe" "$env:USERPROFILE\.claude\ccstatus\CCstatus.exe"
 ```
 
