@@ -1,29 +1,10 @@
 use clap::Parser;
 
 #[derive(Parser, Debug)]
-#[command(name = "ccline")]
-#[command(version, about = "High-performance Claude Code StatusLine")]
+#[command(name = "High-performance Claude Code StatusLine with Network Probe")]
+#[command(version = concat!("Ver:", env!("CARGO_PKG_VERSION")))]
+#[command(about = "High-performance Claude Code StatusLine with Network Probe")]
 pub struct Cli {
-    /// Enter TUI configuration mode
-    #[arg(short = 'c', long = "config")]
-    pub config: bool,
-
-    /// Set theme
-    #[arg(short = 't', long = "theme")]
-    pub theme: Option<String>,
-
-    /// Print current configuration
-    #[arg(long = "print")]
-    pub print: bool,
-
-    /// Initialize config file
-    #[arg(long = "init")]
-    pub init: bool,
-
-    /// Check configuration
-    #[arg(long = "check")]
-    pub check: bool,
-
     /// Check for updates
     #[arg(short = 'u', long = "update")]
     pub update: bool,

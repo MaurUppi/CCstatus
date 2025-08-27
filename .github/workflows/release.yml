@@ -60,7 +60,7 @@ jobs:
       if: matrix.os != 'windows-latest' && matrix.target != 'x86_64-pc-windows-gnu'
       run: |
         mkdir -p dist
-        cp target/${{ matrix.target }}/release/ccometixline dist/ccline
+        cp target/${{ matrix.target }}/release/ccstatus dist/ccline
         cd dist
         tar czf ../${{ matrix.name }} ccline
 
@@ -68,7 +68,7 @@ jobs:
       if: matrix.target == 'x86_64-pc-windows-gnu'
       run: |
         mkdir -p dist
-        cp target/${{ matrix.target }}/release/ccometixline.exe dist/ccline.exe
+        cp target/${{ matrix.target }}/release/ccstatus.exe dist/ccline.exe
         cd dist
         zip ../${{ matrix.name }} ccline.exe
 

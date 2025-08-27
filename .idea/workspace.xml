@@ -12,21 +12,16 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="6ce65814-3068-4bbb-97f1-85756855d77e" name="更改" comment="">
-      <change afterPath="$PROJECT_DIR$/assets/degraded.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/claude.local.bak" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.github/workflows/release.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/workflows/release.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.serena/cache/rust/document_symbols_cache_v23-06-25.pkl" beforeDir="false" afterPath="$PROJECT_DIR$/.serena/cache/rust/document_symbols_cache_v23-06-25.pkl" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/BUILD.md" beforeDir="false" afterPath="$PROJECT_DIR$/BUILD.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CHANGELOG.md" beforeDir="false" afterPath="$PROJECT_DIR$/CHANGELOG.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.zh.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.zh.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/project/API-error.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/project/CC-ErrorCode-0.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/project/CC-ErrorCode-1.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/project/Network-feature-dev.md" beforeDir="false" afterPath="$PROJECT_DIR$/project/Network-feature-dev.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/assets/img1.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/config/loader.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/config/loader.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/themes/presets.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/themes/presets.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/updater.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/updater.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -136,7 +131,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1756127551716</updated>
-      <workItem from="1756127553051" duration="83564000" />
+      <workItem from="1756127553051" duration="84831000" />
     </task>
     <servers />
   </component>

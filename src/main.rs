@@ -21,50 +21,6 @@ async fn main_impl() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse_args();
 
     // Handle configuration commands
-    if cli.init {
-        Config::init()?;
-        return Ok(());
-    }
-
-    if cli.print {
-        #[cfg(feature = "tui")]
-        let mut config = Config::load().unwrap_or_else(|_| Config::default());
-        #[cfg(not(feature = "tui"))]
-        let config = Config::load().unwrap_or_else(|_| Config::default());
-
-        // Apply theme override if provided (TUI only)
-        #[cfg(feature = "tui")]
-        if let Some(theme) = cli.theme {
-            config = ccstatus::ui::themes::ThemePresets::get_theme(&theme);
-        }
-        
-        #[cfg(not(feature = "tui"))]
-        if let Some(_theme) = cli.theme {
-            eprintln!("Warning: Theme override is only available with TUI feature enabled");
-        }
-
-        config.print()?;
-        return Ok(());
-    }
-
-    if cli.check {
-        let config = Config::load()?;
-        config.check()?;
-        println!("✓ Configuration valid");
-        return Ok(());
-    }
-
-    if cli.config {
-        #[cfg(feature = "tui")]
-        {
-            ccstatus::ui::run_configurator()?;
-        }
-        #[cfg(not(feature = "tui"))]
-        {
-            eprintln!("TUI feature is not enabled. Please install with --features tui");
-            std::process::exit(1);
-        }
-    }
 
     if cli.update {
         #[cfg(feature = "self-update")]
@@ -79,21 +35,7 @@ async fn main_impl() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Load configuration
-    #[cfg(feature = "tui")]
-    let mut config = Config::load().unwrap_or_else(|_| Config::default());
-    #[cfg(not(feature = "tui"))]
     let config = Config::load().unwrap_or_else(|_| Config::default());
-
-    // Apply theme override if provided (TUI only)
-    #[cfg(feature = "tui")]
-    if let Some(theme) = cli.theme {
-        config = ccstatus::ui::themes::ThemePresets::get_theme(&theme);
-    }
-    
-    #[cfg(not(feature = "tui"))]
-    if let Some(_theme) = cli.theme {
-        eprintln!("Warning: Theme override is only available with TUI feature enabled");
-    }
 
     // Read Claude Code data from stdin with two-tier data flow for network monitoring
     let stdin = io::stdin();
