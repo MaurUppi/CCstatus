@@ -12,7 +12,8 @@ Tests cover the enhanced proxy health check functionality including:
 
 #![cfg(feature = "network-monitoring")]
 
-use ccstatus::core::network::http_monitor::{HealthCheckClient, HealthResponse, HttpMonitor};
+use ccstatus::core::network::proxy_health::client::{HealthCheckClient, HealthResponse};
+use ccstatus::core::network::http_monitor::HttpMonitor;
 use std::collections::HashMap;
 use std::time::Duration;
 use tempfile::TempDir;

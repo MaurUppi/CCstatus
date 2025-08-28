@@ -1,5 +1,6 @@
 // Statusline UI rendering for network monitoring
 use crate::core::network::types::{NetworkMetrics, NetworkStatus};
+use crate::core::network::proxy_health::config::ProxyHealthLevel;
 
 /// Renders network status for statusline display
 pub struct StatusRenderer;
@@ -12,13 +13,15 @@ impl StatusRenderer {
     /// Render status for statusline display
     /// Emoji: 🟢/🟡/🔴/⚪ map to `healthy/degraded/error/Unknown`
     /// Text: 🟢 shows P95; 🟡 shows P95+breakdown; 🔴 shows breakdown; wraps long content to next line
-    /// Proxy prefix: 🟢 | or 🔴 | prepended when proxy health check is available
+    /// Proxy prefix: 🟢 |/🟡 |/🔴 |/⚪ | prepended when proxy health check is available (tri-state support + Unknown)
     pub fn render_status(&self, status: &NetworkStatus, metrics: &NetworkMetrics) -> String {
-        // Determine proxy health prefix based on proxy_healthy field
-        let proxy_prefix = match metrics.proxy_healthy {
-            Some(true) => Some("🟢 | "),  // Healthy proxy
-            Some(false) => Some("🔴 | "), // Unhealthy proxy
-            None => None,                 // No proxy or official endpoint
+        // Determine proxy health prefix based on enhanced tri-state levels with fallback
+        let proxy_prefix = match metrics.get_proxy_health_level() {
+            Some(ProxyHealthLevel::Healthy) => Some("🟢 | "),  // Healthy proxy
+            Some(ProxyHealthLevel::Degraded) => Some("🟡 | "), // Degraded proxy
+            Some(ProxyHealthLevel::Bad) => Some("🔴 | "),     // Unhealthy proxy
+            Some(ProxyHealthLevel::Unknown) => Some("⚪ | "),  // Unknown proxy (Cloudflare challenges, etc.)
+            None => None, // No proxy health check (official endpoint or no health endpoint)
         };
 
         let core = match status {

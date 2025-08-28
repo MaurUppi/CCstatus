@@ -15,7 +15,8 @@ This ensures the assessment findings are completely addressed and success criter
 
 #![cfg(feature = "network-monitoring")]
 
-use ccstatus::core::network::http_monitor::{HealthCheckClient, HealthResponse, HttpMonitor};
+use ccstatus::core::network::proxy_health::client::{HealthCheckClient, HealthResponse};
+use ccstatus::core::network::http_monitor::HttpMonitor;
 use ccstatus::core::network::status_renderer::StatusRenderer;
 use ccstatus::core::network::types::{NetworkMetrics, NetworkStatus};
 use std::collections::HashMap;

@@ -224,7 +224,7 @@ dependencies = [
 
 [[package]]
 name = "ccstatus"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "ansi-to-tui",
  "ansi_term",
@@ -244,9 +244,11 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror 2.0.15",
  "tokio",
  "toml",
  "ureq",
+ "url",
  "uuid",
 ]
 

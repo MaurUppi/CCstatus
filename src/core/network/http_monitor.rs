@@ -29,14 +29,21 @@ endpoints and maintains atomic state persistence with comprehensive timing metri
 */
 
 use crate::core::network::debug_logger::get_debug_logger;
+use crate::core::network::proxy_health::{assess_proxy_health, ProxyHealthOptions, HealthCheckClient};
+
+#[cfg(feature = "network-monitoring")]
+use crate::core::network::proxy_health::IsahcHealthCheckClient;
+
+#[cfg(not(feature = "network-monitoring"))]
+use crate::core::network::proxy_health::MockHealthCheckClient;
 use crate::core::network::types::*;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 #[cfg(feature = "network-monitoring")]
-use isahc::config::{Configurable, RedirectPolicy};
+use isahc::config::Configurable;
 #[cfg(feature = "network-monitoring")]
-use isahc::{AsyncReadResponseExt, HttpClient, Request};
+use isahc::{HttpClient, Request};
 
 #[cfg(feature = "network-monitoring")]
 use futures::io::{copy, sink};
@@ -83,39 +90,7 @@ pub trait HttpClientTrait: Send + Sync {
     ) -> Result<(u16, Duration, String), String>;
 }
 
-/// Health check response containing full response data for validation
-#[derive(Debug, Clone)]
-pub struct HealthResponse {
-    /// HTTP status code from health endpoint
-    pub status_code: u16,
-    /// Response body content for JSON validation
-    pub body: Vec<u8>,
-    /// Request duration for metrics
-    pub duration: Duration,
-}
-
-/// Dedicated HTTP client for health check operations
-///
-/// This trait is specialized for health check requirements that differ from
-/// regular API calls: GET method, response body access, redirect control.
-#[async_trait::async_trait]
-pub trait HealthCheckClient: Send + Sync {
-    /// Execute GET request to health endpoint with full response
-    ///
-    /// # Arguments
-    /// * `url` - Complete health check URL (e.g., "https://proxy.com/health")
-    /// * `timeout_ms` - Request timeout in milliseconds
-    ///
-    /// # Returns
-    /// * `Ok(HealthResponse)` - Successful response with status, body, and timing
-    /// * `Err(String)` - Network error or request failure
-    ///
-    /// # Implementation Requirements
-    /// * Must use GET method (not POST)
-    /// * Must not follow redirects (treat 3xx as error)
-    /// * Must return complete response body for JSON validation
-    async fn get_health(&self, url: String, timeout_ms: u32) -> Result<HealthResponse, String>;
-}
+// HealthCheckClient and HealthResponse are now imported from proxy_health module
 
 /// Clock abstraction for dependency injection and testing  
 pub trait ClockTrait: Send + Sync {
@@ -200,61 +175,7 @@ impl IsahcHttpClient {
     }
 }
 
-/// Production health check client implementation using isahc with GET method
-#[cfg(feature = "network-monitoring")]
-pub struct IsahcHealthCheckClient {
-    client: HttpClient,
-}
-
-#[cfg(feature = "network-monitoring")]
-#[async_trait::async_trait]
-impl HealthCheckClient for IsahcHealthCheckClient {
-    async fn get_health(&self, url: String, timeout_ms: u32) -> Result<HealthResponse, String> {
-        let start = Instant::now();
-
-        let request = Request::get(&url)
-            .timeout(Duration::from_millis(timeout_ms as u64))
-            .redirect_policy(RedirectPolicy::None) // Critical: Don't follow redirects
-            .header("User-Agent", "claude-cli/1.0.80 (external, cli)")
-            .body(Vec::new()) // Empty body for GET request
-            .map_err(|e| format!("Health check request creation failed: {}", e))?;
-
-        let mut response = self
-            .client
-            .send_async(request)
-            .await
-            .map_err(|e| format!("Health check request failed: {}", e))?;
-
-        let status_code = response.status().as_u16();
-        let duration = start.elapsed();
-
-        // Read response body for JSON validation (unlike regular API client)
-        let body = response
-            .bytes()
-            .await
-            .map_err(|e| format!("Failed to read health check response body: {}", e))?
-            .to_vec();
-
-        Ok(HealthResponse {
-            status_code,
-            body,
-            duration,
-        })
-    }
-}
-
-#[cfg(feature = "network-monitoring")]
-impl IsahcHealthCheckClient {
-    pub fn new() -> Result<Self, NetworkError> {
-        let client = HttpClient::builder()
-            .redirect_policy(RedirectPolicy::None) // Global redirect policy
-            .build()
-            .map_err(|e| {
-                NetworkError::HttpError(format!("Failed to create health check client: {}", e))
-            })?;
-        Ok(Self { client })
-    }
-}
+// IsahcHealthCheckClient is now provided by the proxy_health module
 
 /// Production clock implementation using system time
 #[derive(Default)]
@@ -1041,15 +962,24 @@ impl HttpMonitor {
         });
         state.monitoring_enabled = true;
 
-        // Proxy health check implementation
-        if Self::is_official_base_url(&creds.base_url) {
-            // Official Anthropic API - skip proxy health check
-            state.network.proxy_healthy = None;
-        } else {
-            // Proxy endpoint - perform health check using GET method with JSON validation
-            match self.check_proxy_health_internal(&creds.base_url).await {
-                Ok(health_status) => state.network.proxy_healthy = health_status,
-                Err(_) => state.network.proxy_healthy = Some(false), // Health check errors treated as unhealthy
+        // Proxy health check using new proxy_health module
+        let proxy_health_options = ProxyHealthOptions {
+            use_root_urls: true, // Enhanced mode: try root-based URLs first
+            try_fallback: true,
+            follow_redirect_once: true, // Enable safe same-host redirect following
+            timeout_ms: 1500,
+        };
+        
+        let proxy_health_outcome = assess_proxy_health(&creds.base_url, &proxy_health_options, &*self.health_client).await;
+        
+        // Use centralized mapping function to set both legacy and new fields
+        match proxy_health_outcome {
+            Ok(outcome) => {
+                state.network.set_proxy_health(outcome.level, outcome.detail);
+            }
+            Err(_) => {
+                // Health check errors: no proxy detected or internal error
+                state.network.set_proxy_health(None, None);
             }
         }
 
@@ -1230,222 +1160,9 @@ impl HttpMonitor {
         Ok(())
     }
 
-    // URL utility functions for proxy health checking
+    // Legacy proxy health functions have been moved to proxy_health module
 
-    /// Check if a base URL is the official Anthropic API endpoint
-    ///
-    /// Performs case-insensitive comparison, ignoring trailing slashes.
-    /// Used to determine whether proxy health checks should be performed.
-    ///
-    /// # Arguments
-    /// * `base_url` - The base URL to check
-    ///
-    /// # Returns
-    /// * `true` if this is the official endpoint (skip proxy health check)
-    /// * `false` if this is a proxy endpoint (perform health check)
-    pub fn is_official_base_url(base_url: &str) -> bool {
-        let normalized = Self::normalize_base_url(base_url);
-        normalized.eq_ignore_ascii_case("https://api.anthropic.com")
-    }
-
-    /// Normalize base URL by trimming trailing slashes
-    ///
-    /// # Arguments
-    /// * `base_url` - The base URL to normalize
-    ///
-    /// # Returns
-    /// * Normalized URL string without trailing slash
-    pub fn normalize_base_url(base_url: &str) -> String {
-        base_url.trim_end_matches('/').to_string()
-    }
-
-    /// Build health check URL from base URL
-    ///
-    /// # Arguments
-    /// * `base_url` - The base URL to append /health to
-    ///
-    /// # Returns
-    /// * Complete health check URL
-    pub fn build_health_url(base_url: &str) -> String {
-        let normalized = Self::normalize_base_url(base_url);
-        format!("{}/health", normalized)
-    }
-
-    /// Validate health check JSON response body
-    ///
-    /// Validates that the response contains `{"status": "healthy"}` (case-insensitive).
-    /// Tolerates extra fields and flexible JSON formatting.
-    ///
-    /// # Arguments
-    /// * `body` - Response body bytes to validate
-    ///
-    /// # Returns
-    /// * `true` - Valid JSON with status=healthy (case-insensitive)
-    /// * `false` - Invalid JSON, missing status field, or status!=healthy
-    pub(crate) fn validate_health_json(&self, body: &[u8]) -> bool {
-        // Parse JSON response
-        let json_value: serde_json::Value = match serde_json::from_slice(body) {
-            Ok(value) => value,
-            Err(_) => return false, // Invalid JSON
-        };
-
-        // Check if it's an object with a status field
-        let obj = match json_value.as_object() {
-            Some(obj) => obj,
-            None => return false, // Not a JSON object
-        };
-
-        // Get status field value (case-insensitive field name)
-        let status = obj
-            .iter()
-            .find(|(key, _)| key.eq_ignore_ascii_case("status"))
-            .map(|(_, value)| value);
-
-        let status = match status {
-            Some(status) => status,
-            None => return false, // Missing status field
-        };
-
-        // Check if status is "healthy" (case-insensitive)
-        match status.as_str() {
-            Some(status_str) => status_str.eq_ignore_ascii_case("healthy"),
-            None => false, // Status is not a string
-        }
-    }
-
-    /// Check proxy health endpoint using internal health check client
-    ///
-    /// MEDIUM Priority Fix: Cleaner API design using stored health client
-    /// This method uses the HttpMonitor's internal health_client, providing
-    /// a simpler interface for callers and reducing parameter passing complexity.
-    ///
-    /// # Arguments
-    /// * `base_url` - Base URL of the proxy to check
-    ///
-    /// # Returns
-    /// * `Ok(Some(true))` - Proxy is healthy (200 + valid JSON)
-    /// * `Ok(Some(false))` - Proxy is unhealthy (non-200, invalid JSON, network error)
-    /// * `Ok(None)` - No health endpoint (404 response)
-    /// * `Err(NetworkError)` - Internal error (should be mapped to Some(false) by caller)
-    #[cfg(feature = "network-monitoring")]
-    pub async fn check_proxy_health_internal(
-        &self,
-        base_url: &str,
-    ) -> Result<Option<bool>, NetworkError> {
-        self.check_proxy_health_with_client(base_url, &*self.health_client)
-            .await
-    }
-
-    /// Check proxy health endpoint using dedicated health check client
-    ///
-    /// Performs a GET request to `<base_url>/health` with 1500ms timeout.
-    /// Uses dedicated HealthCheckClient for proper GET method and redirect handling.
-    /// Validates JSON response with `{"status": "healthy"}` (case-insensitive).
-    ///
-    /// # Arguments
-    /// * `base_url` - Base URL of the proxy to check
-    /// * `health_client` - Dedicated health check client for GET requests
-    ///
-    /// # Returns
-    /// * `Ok(Some(true))` - Proxy is healthy (200 + valid JSON)
-    /// * `Ok(Some(false))` - Proxy is unhealthy (non-200, invalid JSON, network error)
-    /// * `Ok(None)` - No health endpoint (404 response)
-    /// * `Err(NetworkError)` - Internal error (should be mapped to Some(false) by caller)
-    #[cfg(feature = "network-monitoring")]
-    pub async fn check_proxy_health_with_client(
-        &self,
-        base_url: &str,
-        health_client: &dyn HealthCheckClient,
-    ) -> Result<Option<bool>, NetworkError> {
-        let health_url = Self::build_health_url(base_url);
-        let timeout_ms = 1500u32;
-
-        match health_client.get_health(health_url, timeout_ms).await {
-            Ok(response) => {
-                match response.status_code {
-                    404 => Ok(None), // No health endpoint available
-                    200 => {
-                        // Validate JSON body content
-                        let is_healthy = self.validate_health_json(&response.body);
-                        Ok(Some(is_healthy))
-                    }
-                    _ => Ok(Some(false)), // Any other HTTP status is unhealthy
-                }
-            }
-            Err(_) => Ok(Some(false)), // Network errors are treated as unhealthy
-        }
-    }
-
-    /// **DEPRECATED** Legacy proxy health check method
-    ///
-    /// **Use `check_proxy_health_internal()` instead** for new code.
-    ///
-    /// This method uses the legacy HttpClientTrait interface which:
-    /// - Uses generic POST-based requests (not dedicated GET)
-    /// - Lacks response body access for JSON validation
-    /// - Does not enforce redirect policy explicitly
-    ///
-    /// This method is kept only for backward compatibility and will be removed
-    /// in a future version. All new code should use `check_proxy_health_internal()`
-    /// which provides proper GET method, JSON validation, and redirect control.
-    ///
-    /// # Arguments
-    /// * `base_url` - Base URL of the proxy to check
-    ///
-    /// # Returns
-    /// * `Ok(Some(true))` - Proxy responds with 200 (limited validation)
-    /// * `Ok(Some(false))` - Proxy is unhealthy (non-200, network error)
-    /// * `Ok(None)` - No health endpoint (404 response)
-    #[cfg(feature = "network-monitoring")]
-    #[deprecated(since = "1.0.81", note = "Use `check_proxy_health_internal()` instead")]
-    pub async fn check_proxy_health(&self, base_url: &str) -> Result<Option<bool>, NetworkError> {
-        let health_url = Self::build_health_url(base_url);
-        let timeout_ms = 1500u32;
-
-        // WARNING: Uses generic HTTP client with POST-like semantics (legacy behavior)
-        // This does not guarantee GET method or provide response body access
-        let mut headers = std::collections::HashMap::new();
-        headers.insert(
-            "User-Agent".to_string(),
-            "claude-cli/1.0.80 (external, cli)".to_string(),
-        );
-
-        let empty_body = Vec::new();
-
-        match self
-            .http_client
-            .execute_request(health_url, headers, empty_body, timeout_ms)
-            .await
-        {
-            Ok((status, _duration, _breakdown)) => {
-                match status {
-                    404 => Ok(None), // No health endpoint
-                    200 => {
-                        // LIMITATION: Cannot validate JSON response body due to HttpClientTrait design
-                        // Only status code validation is possible with this legacy method
-                        Ok(Some(true))
-                    }
-                    _ => Ok(Some(false)), // Any other status is unhealthy
-                }
-            }
-            Err(_) => Ok(Some(false)), // Network errors are treated as unhealthy
-        }
-    }
-
-    /// Check proxy health endpoint using internal health check client (mock version)
-    #[cfg(not(feature = "network-monitoring"))]
-    pub async fn check_proxy_health_internal(
-        &self,
-        _base_url: &str,
-    ) -> Result<Option<bool>, NetworkError> {
-        Ok(None) // Always return None when monitoring is disabled
-    }
-
-    /// Mock proxy health check for when network-monitoring feature is disabled
-    #[cfg(not(feature = "network-monitoring"))]
-    async fn check_proxy_health(&self, _base_url: &str) -> Result<Option<bool>, NetworkError> {
-        Ok(None) // Always return None when monitoring is disabled
-    }
+    // Legacy proxy health check functions have been removed - use proxy_health module instead
 }
 
 // Proxy health check implementation complete
@@ -1472,22 +1189,4 @@ impl HttpClientTrait for MockHttpClient {
     }
 }
 
-/// Mock health check client implementation when network-monitoring feature is disabled
-#[cfg(not(feature = "network-monitoring"))]
-#[derive(Default)]
-pub struct MockHealthCheckClient;
-
-#[cfg(not(feature = "network-monitoring"))]
-#[async_trait::async_trait]
-impl HealthCheckClient for MockHealthCheckClient {
-    async fn get_health(&self, _url: String, _timeout_ms: u32) -> Result<HealthResponse, String> {
-        // Return mock healthy response
-        let duration = Duration::from_millis(200);
-        let body = r#"{"status": "healthy"}"#.as_bytes().to_vec();
-        Ok(HealthResponse {
-            status_code: 200,
-            body,
-            duration,
-        })
-    }
-}
+// MockHealthCheckClient is now provided by the proxy_health module

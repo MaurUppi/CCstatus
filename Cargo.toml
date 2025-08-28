@@ -48,7 +48,8 @@ isahc = { version = "1.7", default-features = false, features = ["static-curl"],
 # Trim tokio: single-threaded runtime + only used pieces
 # tokio = { version = "1.47.1", features = ["rt", "rt-multi-thread", "time", "sync", "fs", "macros", "io-util"], optional = true }
 tokio = { version = "1.47.1", default-features = false, features = ["rt", "macros","time", "fs", "io-util", "sync"], optional = true }
-# thiserror = "2.0.15"
+thiserror = "2.0.15"
+url = "2.4"
 
 # Phase timings with curl (optional for real DNS/TCP/TLS measurements)
 curl = { version = "0.4", optional = true }
