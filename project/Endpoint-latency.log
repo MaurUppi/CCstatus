@@ -1,9 +1,0 @@
-[2025-08-22 16:34:37.108] [DEBUG] [HttpMonitor] Returning HttpResult: success=true, latency=3465ms
-
-[2025-08-22 16:34:53.974] [DEBUG] [HttpMonitor] Returning HttpResult: success=true, latency=3014ms
-
-2025-08-22 16:34:59.016] [DEBUG] [HttpMonitor] Returning HttpResult: success=true, latency=2716ms
-
-[2025-08-22 16:35:11.814] [DEBUG] [HttpMonitor] Returning HttpResult: success=true, latency=3264ms
-
-[2025-08-22 16:35:38.939] [DEBUG] [HttpMonitor] Returning HttpResult: success=true, latency=3211ms
