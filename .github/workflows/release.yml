@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-22.04  # Use specific version instead of latest
     outputs:
       should_build: ${{ steps.set.outputs.should_build }}
+      version: ${{ steps.set.outputs.version }}
+      create_tag: ${{ steps.set.outputs.create_tag }}
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@v4
@@ -31,9 +33,15 @@ jobs:
         run: |
           set -euo pipefail
           ref="${GITHUB_REF}"
+          
+          # Extract current version from Cargo.toml
+          curr_version=$(grep -m1 '^version\s*=\s*"' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=${curr_version}" >> "$GITHUB_OUTPUT"
+          
           # If this is a tag like v*, always build
           if [[ "$ref" == refs/tags/v* ]]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
+            echo "create_tag=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -42,18 +50,22 @@ jobs:
           # If 'before' is missing (e.g., manual dispatch or initial commit), allow build
           if [[ -z "${before}" || "${before}" == 0000000000000000000000000000000000000000 ]]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
+            echo "create_tag=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Extract current and previous versions from Cargo.toml
-          curr_version=$(grep -m1 '^version\s*=\s*"' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          # Extract previous version from Cargo.toml
           prev_version=$(git show "${before}:Cargo.toml" 2>/dev/null | grep -m1 '^version\s*=\s*"' | sed -E 's/.*"([^"]+)".*/\1/' || true)
 
           if [[ -n "${prev_version}" && "${curr_version}" != "${prev_version}" ]]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
+            echo "create_tag=true" >> "$GITHUB_OUTPUT"
+            echo "📦 Version changed: ${prev_version} → ${curr_version}, will create tag v${curr_version}"
           else
             echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "create_tag=false" >> "$GITHUB_OUTPUT"
           fi
+
   build:
     name: Build for ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
@@ -151,20 +163,51 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-22.04  # Use specific version instead of latest
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    needs: [precheck, build]
+    if: needs.precheck.outputs.should_build == 'true' && (startsWith(github.ref, 'refs/tags/') || needs.precheck.outputs.create_tag == 'true')
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+
+    - name: Create and push tag (if version changed)
+      if: needs.precheck.outputs.create_tag == 'true'
+      shell: bash
+      run: |
+        version="${{ needs.precheck.outputs.version }}"
+        tag="v${version}"
+        echo "Creating tag: ${tag}"
+        
+        # Configure git
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        # Create and push tag
+        git tag -a "${tag}" -m "Release ${tag}"
+        git push origin "${tag}"
+        
+        echo "✅ Created and pushed tag: ${tag}"
 
     - name: Download artifacts
       uses: actions/download-artifact@v4
       with:
         path: artifacts
 
+    - name: Get tag name for release
+      id: tag
+      shell: bash
+      run: |
+        if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          # Use existing tag
+          echo "tag_name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+        else
+          # Use version from precheck
+          echo "tag_name=v${{ needs.precheck.outputs.version }}" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
+        tag_name: ${{ steps.tag.outputs.tag_name }}
         files: artifacts/*/*
         generate_release_notes: true
         draft: false
