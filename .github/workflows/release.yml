@@ -165,4 +165,42 @@ jobs:
         generate_release_notes: true
         draft: false
         prerelease: false
+        body: |
+          ## 📦 Download Options
+
+          **🎯 Recommended (Static Builds)** - Zero dependencies, download and run:
+          - **Linux x64**: `ccstatus-linux-x64-static.tar.gz` (~7MB)
+          - **Windows x64**: `ccstatus-windows-x64-static.zip` (~7MB) 
+          - **macOS Intel**: `ccstatus-macos-x64-static.tar.gz` (~7MB)
+          - **macOS Apple Silicon**: `ccstatus-macos-arm64-static.tar.gz` (~7MB)
+
+          **⚡ Advanced Users (Slim Builds)** - Smaller size, requires system OpenSSL:
+          - **macOS Intel**: `ccstatus-macos-x64-slim.tar.gz` (~3MB) *
+          - **macOS Apple Silicon**: `ccstatus-macos-arm64-slim.tar.gz` (~3MB) *
+
+          \* Slim builds require `brew install openssl@3` or equivalent system OpenSSL 3.x
+
+          ## 🔧 Build Details
+
+          | Variant | Features | Size | Dependencies | Use Case |
+          |---------|----------|------|--------------|----------|
+          | **static** | `timings-curl-static` | ~7MB | None ✅ | General distribution |
+          | **slim** | `network-monitoring` | ~3MB | System OpenSSL 3.x | Development/CI |
+
+          ## 📋 Quick Start
+
+          ```bash
+          # Download static build (recommended)
+          curl -L https://github.com/MaurUppi/CCstatus/releases/latest/download/ccstatus-macos-arm64-static.tar.gz | tar -xz
+          chmod +x ccstatus
+          ./ccstatus -V
+
+          # Or download slim build (requires system OpenSSL)  
+          brew install openssl@3
+          curl -L https://github.com/MaurUppi/CCstatus/releases/latest/download/ccstatus-macos-arm64-slim.tar.gz | tar -xz
+          chmod +x ccstatus
+          ./ccstatus -V
+          ```
+
+          ---
 
