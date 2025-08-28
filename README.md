@@ -76,7 +76,7 @@
 mkdir -p ~/.claude/ccstatus
 wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccstatus-linux-x64.tar.gz
 tar -xzf ccstatus-linux-x64.tar.gz
-cp ccline ~/.claude/ccstatus/CCstatus
+cp ccstatus ~/.claude/ccstatus/CCstatus
 chmod +x ~/.claude/ccstatus/CCstatus
 ```
 *系统要求: Ubuntu 22.04+, CentOS 9+, Debian 11+, RHEL 9+ (glibc 2.35+)*
@@ -87,7 +87,7 @@ chmod +x ~/.claude/ccstatus/CCstatus
 mkdir -p ~/.claude/ccstatus
 wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccstatus-macos-x64.tar.gz
 tar -xzf ccstatus-macos-x64.tar.gz
-cp ccline ~/.claude/ccstatus/CCstatus
+cp ccstatus ~/.claude/ccstatus/CCstatus
 chmod +x ~/.claude/ccstatus/CCstatus
 ```
 
@@ -97,7 +97,7 @@ chmod +x ~/.claude/ccstatus/CCstatus
 mkdir -p ~/.claude/ccstatus  
 wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccstatus-macos-arm64.tar.gz
 tar -xzf ccstatus-macos-arm64.tar.gz
-cp ccline ~/.claude/ccstatus/CCstatus
+cp ccstatus ~/.claude/ccstatus/CCstatus
 chmod +x ~/.claude/ccstatus/CCstatus
 ```
 
@@ -108,7 +108,7 @@ chmod +x ~/.claude/ccstatus/CCstatus
 New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\ccstatus"
 Invoke-WebRequest -Uri "https://github.com/MaurUppi/CCstatus/releases/latest/download/ccstatus-windows-x64.zip" -OutFile "ccstatus-windows-x64.zip"
 Expand-Archive -Path "ccstatus-windows-x64.zip" -DestinationPath "."
-Move-Item "ccline.exe" "$env:USERPROFILE\.claude\ccstatus\CCstatus.exe"
+Move-Item "ccstatus.exe" "$env:USERPROFILE\.claude\ccstatus\CCstatus.exe"
 ```
 
 </p>

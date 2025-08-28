@@ -83,7 +83,7 @@ impl CredentialManager {
         let logger = get_debug_logger();
 
         // Test override: force no credentials
-        if std::env::var("CCSTATUS_NO_CREDENTIALS").unwrap_or_default() == "1" {
+        if env::var("CCSTATUS_NO_CREDENTIALS").unwrap_or_default() == "1" {
             logger
                 .debug(
                     "CredentialManager",

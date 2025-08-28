@@ -72,9 +72,9 @@ Model | Working Directory | Git Branch Status | Context Window | Network Status
 #### Option 1: Dynamic Binary (Recommended)
 ```bash
 mkdir -p ~/.claude/ccstatus
-wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccline-linux-x64.tar.gz
-tar -xzf ccline-linux-x64.tar.gz
-cp ccline ~/.claude/ccstatus/CCstatus
+wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccstatus-linux-x64.tar.gz
+tar -xzf ccstatus-linux-x64.tar.gz
+cp ccstatus ~/.claude/ccstatus/CCstatus
 chmod +x ~/.claude/ccstatus/CCstatus
 ```
 *Requires: Ubuntu 22.04+, CentOS 9+, Debian 11+, RHEL 9+ (glibc 2.35+)*
@@ -82,9 +82,9 @@ chmod +x ~/.claude/ccstatus/CCstatus
 #### Option 2: Static Binary (Universal Compatibility)
 ```bash
 mkdir -p ~/.claude/ccstatus
-wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccline-linux-x64-static.tar.gz
-tar -xzf ccline-linux-x64-static.tar.gz
-cp ccline ~/.claude/ccstatus/CCstatus
+wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccstatus-linux-x64-static.tar.gz
+tar -xzf ccstatus-linux-x64-static.tar.gz
+cp ccstatus ~/.claude/ccstatus/CCstatus
 chmod +x ~/.claude/ccstatus/CCstatus
 ```
 *Works on any Linux distribution (static, no dependencies)*
@@ -93,9 +93,9 @@ chmod +x ~/.claude/ccstatus/CCstatus
 
 ```bash  
 mkdir -p ~/.claude/ccstatus
-wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccline-macos-x64.tar.gz
-tar -xzf ccline-macos-x64.tar.gz
-cp ccline ~/.claude/ccstatus/CCstatus
+wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccstatus-macos-x64.tar.gz
+tar -xzf ccstatus-macos-x64.tar.gz
+cp ccstatus ~/.claude/ccstatus/CCstatus
 chmod +x ~/.claude/ccstatus/CCstatus
 ```
 
@@ -103,9 +103,9 @@ chmod +x ~/.claude/ccstatus/CCstatus
 
 ```bash
 mkdir -p ~/.claude/ccstatus  
-wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccline-macos-arm64.tar.gz
-tar -xzf ccline-macos-arm64.tar.gz
-cp ccline ~/.claude/ccstatus/CCstatus
+wget https://github.com/MaurUppi/CCstatus/releases/latest/download/ccstatus-macos-arm64.tar.gz
+tar -xzf ccstatus-macos-arm64.tar.gz
+cp ccstatus ~/.claude/ccstatus/CCstatus
 chmod +x ~/.claude/ccstatus/CCstatus
 ```
 
@@ -114,9 +114,9 @@ chmod +x ~/.claude/ccstatus/CCstatus
 ```powershell
 # Create directory and download
 New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\ccstatus"
-Invoke-WebRequest -Uri "https://github.com/MaurUppi/CCstatus/releases/latest/download/ccline-windows-x64.zip" -OutFile "ccline-windows-x64.zip"
-Expand-Archive -Path "ccline-windows-x64.zip" -DestinationPath "."
-Move-Item "ccline.exe" "$env:USERPROFILE\.claude\ccstatus\CCstatus.exe"
+Invoke-WebRequest -Uri "https://github.com/MaurUppi/CCstatus/releases/latest/download/ccstatus-windows-x64.zip" -OutFile "ccstatus-windows-x64.zip"
+Expand-Archive -Path "ccstatus-windows-x64.zip" -DestinationPath "."
+Move-Item "ccstatus.exe" "$env:USERPROFILE\.claude\ccstatus\CCstatus.exe"
 ```
 
 </p>
