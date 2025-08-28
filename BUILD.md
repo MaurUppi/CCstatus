@@ -56,6 +56,30 @@ cargo test --release --features timings-curl
 - macOS/Linux: `timings-curl` uses system or vendored libcurl; works out of the box.
 - Windows: prefer `timings-curl-static` for portable binaries. Expect larger size.
 
+### Binary Size Optimization
+
+**Size Comparison (ARM64 macOS)**:
+- `network-monitoring` only: ~3.2MB (requires system OpenSSL)
+- `timings-curl-static`: ~6.7MB (fully static, no dependencies)
+
+**Optimization Strategies**:
+```bash
+# Minimal size with system dependencies (may have OpenSSL path issues)
+cargo build --release --features network-monitoring
+
+# Balanced: static linking with size optimization
+RUSTFLAGS="-C opt-level=z -C codegen-units=1 -C panic=abort" \
+OPENSSL_STATIC=1 \
+cargo build --release --features timings-curl-static
+
+# Development: fastest build time
+cargo build --features network-monitoring
+```
+
+**Distribution Strategy**:
+- **Static builds** (`timings-curl-static`): Recommended for general distribution
+- **Slim builds** (`network-monitoring`): For users with proper OpenSSL setup
+
 ### CI Matrix (example)
 ```yaml
 jobs:
