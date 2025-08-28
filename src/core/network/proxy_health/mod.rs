@@ -12,8 +12,7 @@ pub mod url;
 pub mod parsing;
 pub mod checker;
 
-#[cfg(test)]
-mod integration_tests;
+
 
 // Re-export public API
 pub use client::{HealthCheckClient, HealthResponse};

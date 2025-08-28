@@ -30,6 +30,7 @@ endpoints and maintains atomic state persistence with comprehensive timing metri
 
 use crate::core::network::debug_logger::get_debug_logger;
 use crate::core::network::proxy_health::{assess_proxy_health, ProxyHealthOptions, HealthCheckClient};
+use serde_json;
 
 #[cfg(feature = "network-monitoring")]
 use crate::core::network::proxy_health::IsahcHealthCheckClient;
@@ -1160,9 +1161,7 @@ impl HttpMonitor {
         Ok(())
     }
 
-    // Legacy proxy health functions have been moved to proxy_health module
 
-    // Legacy proxy health check functions have been removed - use proxy_health module instead
 }
 
 // Proxy health check implementation complete
