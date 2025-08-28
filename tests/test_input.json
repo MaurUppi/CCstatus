@@ -1,0 +1,25 @@
+{
+  "session_id": "772eaf12-e929-4d87-abdb-f3ad9669c4d0",
+  "transcript_path": "/Users/ouzy/.claude/projects/-Users-ouzy-Documents-DevProjects-CCstatus/772eaf12-e929-4d87-abdb-f3ad9669c4d0.jsonl",
+  "cwd": "/Users/ouzy/Documents/DevProjects/CCstatus",
+  "model": {
+    "id": "claude-sonnet-4-20250514",
+    "display_name": "Sonnet 4"
+  },
+  "workspace": {
+    "current_dir": "/Users/ouzy/Documents/DevProjects/CCstatus",
+    "project_dir": "/Users/ouzy/Documents/DevProjects/CCstatus"
+  },
+  "version": "1.0.88",
+  "output_style": {
+    "name": "default"
+  },
+  "cost": {
+    "total_cost_usd": 0.0009232000000000001,
+    "total_duration_ms": 54146,
+    "total_api_duration_ms": 2024,
+    "total_lines_added": 0,
+    "total_lines_removed": 0
+  },
+  "exceeds_200k_tokens": false
+}

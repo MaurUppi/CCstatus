@@ -2,15 +2,13 @@
 target/
 
 # Documentation and development files
-claude*.md
+claude*
 PRD.md
 .claude/
 project/
-tests/
 .serena/
 .cursor/
 .idea/
-npm/
 
 # System files
 .DS_Store
