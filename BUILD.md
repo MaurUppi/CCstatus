@@ -53,14 +53,15 @@ cargo test --release --features timings-curl
 ```
 
 ### Platform Notes
-- macOS/Linux: `timings-curl` uses system or vendored libcurl; works out of the box.
-- Windows: prefer `timings-curl-static` for portable binaries. Expect larger size.
+- **macOS**: `timings-curl-static` recommended for universal compatibility (fixes ARM64 OpenSSL path issues)
+- **Linux**: Both `timings-curl` and `timings-curl-static` work; static builds eliminate glibc dependencies
+- **Windows**: `timings-curl-static` required for portable binaries without runtime dependencies
 
 ### Binary Size Optimization
 
 **Size Comparison (ARM64 macOS)**:
-- `network-monitoring` only: ~3.2MB (requires system OpenSSL)
-- `timings-curl-static`: ~6.7MB (fully static, no dependencies)
+- **Slim** (`network-monitoring`): ~3.2MB (requires system OpenSSL 3.x)
+- **Static** (`timings-curl-static`): ~6.7MB (fully static, zero dependencies)
 
 **Optimization Strategies**:
 ```bash
@@ -77,31 +78,50 @@ cargo build --features network-monitoring
 ```
 
 **Distribution Strategy**:
-- **Static builds** (`timings-curl-static`): Recommended for general distribution
-- **Slim builds** (`network-monitoring`): For users with proper OpenSSL setup
+- **Static builds** (`timings-curl-static`): Universal compatibility, no system dependencies (recommended)
+- **Slim builds** (`network-monitoring`): Smaller size, requires `brew install openssl@3` on macOS
 
-### CI Matrix (example)
+### CI Matrix (actual)
 ```yaml
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        features: [default, timings-curl]
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+            variant: static
+          - target: x86_64-pc-windows-msvc
+            os: windows-2022
+            variant: static
+          - target: x86_64-apple-darwin
+            os: macos-13
+            variant: static
+          - target: x86_64-apple-darwin
+            os: macos-13
+            variant: slim
+          - target: aarch64-apple-darwin
+            os: macos-15
+            variant: static
+          - target: aarch64-apple-darwin
+            os: macos-15
+            variant: slim
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with: { toolchain: stable, override: true, profile: minimal }
-      - name: Build
+      # Configure static linking for macOS
+      - name: Configure static linking for macOS
+        if: runner.os == 'macOS'
         run: |
-          if [ "${{ matrix.features }}" = "timings-curl" ]; then
-            cargo build --release --features timings-curl
+          echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
+          echo "OPENSSL_NO_VENDOR=1" >> $GITHUB_ENV
+      
+      # Build based on variant
+      - name: Build binary  
+        run: |
+          if [ "${{ matrix.variant }}" = "slim" ]; then
+            cargo build --release --target ${{ matrix.target }} --features network-monitoring
           else
-            cargo build --release
+            cargo build --release --target ${{ matrix.target }} --features timings-curl-static
           fi
-      - name: Test
-        run: cargo test --all --release
 ```
 
 ### Tips

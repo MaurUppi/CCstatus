@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] - 2025-08-28
+
+### 🔧 构建系统重大改进
+
+#### 🍎 macOS ARM64 静态链接修复
+- **解决 dyld OpenSSL 路径问题**: 修复 CI 构建的 macOS ARM64 二进制文件运行时 OpenSSL 动态库路径错误
+  - 问题：CI 构建查找 `/usr/local/opt/openssl` (Intel 路径)，ARM64 实际在 `/opt/homebrew/opt/openssl`
+  - 解决方案：启用静态链接 `OPENSSL_STATIC=1` 和 `OPENSSL_NO_VENDOR=1`
+  - 更新 `isahc` 依赖使用 `static-curl` 特性消除运行时依赖
+- **双版本构建策略**: 实现静态版本和轻量版本并行构建
+  - **Static**: `timings-curl-static` (~7MB) - 零依赖，通用兼容性
+  - **Slim**: `network-monitoring` (~3MB) - 需要系统 OpenSSL 3.x
+  - macOS 平台同时提供两种版本供用户选择
+
+#### 📦 发布流程优化
+- **清晰的版本标识**: 所有发布包名称包含 `-static` 或 `-slim` 后缀
+- **详细发布说明**: 每个 release 包含构建差异说明和使用场景指导
+- **跨平台兼容性**: Linux/Windows 保持静态构建，macOS 提供双选择
+- **安装指南更新**: README 中所有平台安装命令更新为 `-static` 版本
+
+#### 🧹 代码库清理
+- **修复 .gitignore 违规**: 移除 `.idea/`, `.serena/`, `project/`, `claude*.md` 等被误提交文件
+- **防止未来违规**: 加强 `.gitignore` 规则，添加系统文件排除模式
+- **保持测试文件跟踪**: 确认 `tests/` 目录应被版本控制追踪
+
+### 📚 文档完善
+- **BUILD.md 全面更新**: 反映新的双版本构建策略和平台特定说明
+- **CI 配置文档化**: 提供实际 CI 矩阵配置而非示例代码
+- **平台说明优化**: 明确各平台推荐构建变体和依赖要求
+
+### 🛡️ 质量保证
+- **构建验证**: 所有平台构建通过 `cargo check` 验证
+- **零破坏性变更**: 现有用户工作流程无需修改
+- **向后兼容**: 保持所有现有功能和配置格式
+
+---
+
 ## [2.0.0] - 2025-08-27
 
 ### ⚡ 重大架构升级
