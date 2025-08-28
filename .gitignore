@@ -10,4 +10,7 @@ tests/
 .serena/
 .cursor/
 .idea/
-npm/.DS_Store
+npm/
+
+# System files
+.DS_Store
