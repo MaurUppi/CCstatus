@@ -21,6 +21,8 @@ fn test_healthy_status_rendering() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
@@ -44,6 +46,8 @@ fn test_degraded_status_rendering() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -70,6 +74,8 @@ fn test_degraded_rate_limit_rendering() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -96,6 +102,8 @@ fn test_error_status_rendering() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
@@ -122,6 +130,8 @@ fn test_error_timeout_rendering() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
@@ -147,6 +157,8 @@ fn test_error_http_status_rendering() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
@@ -172,6 +184,8 @@ fn test_unknown_status_rendering() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Unknown, &metrics);
@@ -194,6 +208,8 @@ fn test_empty_breakdown_handling() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -220,6 +236,8 @@ fn test_no_error_type_handling() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -246,6 +264,8 @@ fn test_edge_case_zero_p95() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
@@ -269,6 +289,8 @@ fn test_very_high_latencies() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
@@ -292,6 +314,8 @@ fn test_special_characters_in_error_type() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
@@ -319,6 +343,8 @@ fn test_long_breakdown_strings() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -382,6 +408,8 @@ fn test_line_wrapping_behavior() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -416,6 +444,8 @@ fn test_no_line_wrapping_for_short_content() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -444,6 +474,8 @@ fn test_zero_p95_in_degraded_status() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -469,6 +501,8 @@ fn test_empty_breakdown_in_error_status() {
         breakdown_source: None,
         connection_reused: None,
         proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
@@ -495,6 +529,8 @@ fn test_proxy_healthy_prefix_none() {
         connection_reused: None,
         breakdown_source: None,
         proxy_healthy: None, // Official endpoint, no proxy health check
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
@@ -518,6 +554,8 @@ fn test_proxy_healthy_prefix_true() {
         connection_reused: None,
         breakdown_source: None,
         proxy_healthy: Some(true), // Healthy proxy
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
@@ -541,6 +579,8 @@ fn test_proxy_unhealthy_prefix_false() {
         connection_reused: None,
         breakdown_source: None,
         proxy_healthy: Some(false), // Unhealthy proxy
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
@@ -565,6 +605,8 @@ fn test_proxy_healthy_with_error_status() {
         connection_reused: None,
         breakdown_source: None,
         proxy_healthy: Some(true), // Healthy proxy but main API erroring
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
@@ -587,6 +629,8 @@ fn test_proxy_unhealthy_with_unknown_status() {
         connection_reused: None,
         breakdown_source: None,
         proxy_healthy: Some(false), // Unhealthy proxy
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Unknown, &metrics);
@@ -611,6 +655,8 @@ fn test_proxy_health_with_line_wrapping() {
         connection_reused: None,
         breakdown_source: None,
         proxy_healthy: Some(false), // Unhealthy proxy with long breakdown
+        proxy_health_level: None,
+        proxy_health_detail: None,
     };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);

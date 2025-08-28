@@ -1,5 +1,6 @@
 // Core types for network monitoring
 use std::path::PathBuf;
+use crate::core::network::proxy_health::config::ProxyHealthLevel;
 
 // Re-export credential types from existing module (don't move them)
 // pub use super::credential::{CredentialManager, ShellType};
@@ -16,6 +17,27 @@ pub enum NetworkStatus {
     /// No credentials configured or monitoring disabled
     #[default]
     Unknown,
+}
+
+/// Detailed information about proxy health check attempt
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ProxyHealthDetail {
+    /// Primary URL attempted
+    pub primary_url: String,
+    /// Fallback URL attempted (if any)
+    pub fallback_url: Option<String>, 
+    /// Redirect URL followed (if any)
+    pub redirect_url: Option<String>,
+    /// Which attempt succeeded: "primary" | "fallback" | "redirect"
+    pub success_method: Option<String>,
+    /// Timestamp when check was performed
+    pub checked_at: String,
+    /// Response time in milliseconds
+    pub response_time_ms: u64,
+    /// Reason for health determination
+    /// Values: "cloudflare_challenge", "redirect_followed", "no_endpoint_404", 
+    /// "non_200_no_cf", "invalid_json_200", "unknown_schema_200", "timeout"
+    pub reason: Option<String>,
 }
 
 /// State tracking for monitoring windows and probe deduplication
@@ -53,6 +75,11 @@ pub struct NetworkMetrics {
     pub breakdown_source: Option<String>, // "heuristic" | "measured"
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_healthy: Option<bool>, // Proxy health status: Some(true)=healthy, Some(false)=unhealthy, None=no proxy or no endpoint
+    // New proxy health fields for enhanced tri-state support
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_health_level: Option<ProxyHealthLevel>, // Enhanced tri-state health level
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_health_detail: Option<ProxyHealthDetail>, // Detailed health check information
 }
 
 /// Credential source types (aligned with credential.md)
@@ -258,7 +285,60 @@ impl Default for NetworkMetrics {
             connection_reused: None,
             breakdown_source: None,
             proxy_healthy: None,
+            proxy_health_level: None,
+            proxy_health_detail: None,
         }
+    }
+}
+
+/// Centralized proxy health field management
+impl NetworkMetrics {
+    /// Set proxy health with automatic field consistency
+    /// 
+    /// Updates both legacy proxy_healthy and new proxy_health_level fields
+    /// to maintain backward compatibility while supporting enhanced tri-state levels.
+    ///
+    /// # Arguments
+    /// * `level` - Enhanced proxy health level (None = no proxy/no endpoint)
+    /// * `detail` - Detailed information about health check attempt
+    ///
+    /// # Field Mapping
+    /// - Healthy → proxy_healthy=Some(true), proxy_health_level=Some(Healthy)
+    /// - Degraded → proxy_healthy=Some(false), proxy_health_level=Some(Degraded)  
+    /// - Bad → proxy_healthy=Some(false), proxy_health_level=Some(Bad)
+    /// - None → proxy_healthy=None, proxy_health_level=None
+    pub fn set_proxy_health(&mut self, level: Option<ProxyHealthLevel>, detail: Option<ProxyHealthDetail>) {
+        self.proxy_health_level = level.clone();
+        self.proxy_health_detail = detail;
+        
+        // Maintain backward compatibility with legacy proxy_healthy field
+        self.proxy_healthy = match level {
+            Some(ProxyHealthLevel::Healthy) => Some(true),
+            Some(ProxyHealthLevel::Degraded) | Some(ProxyHealthLevel::Bad) | Some(ProxyHealthLevel::Unknown) => Some(false),
+            None => None,
+        };
+    }
+    
+    /// Get proxy health level with fallback to legacy field
+    ///
+    /// Provides seamless access to proxy health status with automatic fallback
+    /// for backward compatibility with existing monitoring files.
+    ///
+    /// # Returns
+    /// - Enhanced level if available (proxy_health_level)
+    /// - Mapped from legacy field if enhanced unavailable (proxy_healthy)
+    /// - None if no proxy health information available
+    pub fn get_proxy_health_level(&self) -> Option<ProxyHealthLevel> {
+        // Priority: new field > legacy field mapping
+        self.proxy_health_level.clone().or_else(|| {
+            self.proxy_healthy.map(|healthy| {
+                if healthy { 
+                    ProxyHealthLevel::Healthy 
+                } else { 
+                    ProxyHealthLevel::Bad // Default mapping for false
+                }
+            })
+        })
     }
 }
 
