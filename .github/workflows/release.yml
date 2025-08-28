@@ -64,15 +64,15 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
-            name: ccstatus-linux-x64.tar.gz
+            name: ccstatus-linux-x64-static.tar.gz
             variant: static
           - target: x86_64-pc-windows-msvc
             os: windows-2022  # Native Windows compilation
-            name: ccstatus-windows-x64.zip
+            name: ccstatus-windows-x64-static.zip
             variant: static
           - target: x86_64-apple-darwin
             os: macos-13  # Native Intel macOS compilation
-            name: ccstatus-macos-x64.tar.gz
+            name: ccstatus-macos-x64-static.tar.gz
             variant: static
           - target: x86_64-apple-darwin
             os: macos-13  # Slim variant with system deps
@@ -80,7 +80,7 @@ jobs:
             variant: slim
           - target: aarch64-apple-darwin
             os: macos-15  # Native Apple Silicon macOS compilation  
-            name: ccstatus-macos-arm64.tar.gz
+            name: ccstatus-macos-arm64-static.tar.gz
             variant: static
           - target: aarch64-apple-darwin
             os: macos-15  # Slim variant with system deps
