@@ -178,6 +178,10 @@ Move-Item "ccstatus.exe" "$env:USERPROFILE\.claude\ccstatus\CCstatus.exe"
 **功能特性：**
 
 - 自动凭据检测（环境变量、shell、Claude 配置）
+- **代理健康检查**：独立的代理健康状态监控模块
+  - 智能健康状态评估：健康/降级/故障/未知
+  - 多 URL 探测策略：主要端点 + 备用端点
+  - 官方端点检测，跳过代理检查避免冗余
 - P95 延迟跟踪，滚动 12 样本窗口
 - 频率门控探测，最小化 API 使用
 - 使用 `CCSTATUS_DEBUG=true` 进行调试日志记录

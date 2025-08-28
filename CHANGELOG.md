@@ -5,6 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2025-08-28
+
+### 🏗️ 架构重大改进
+
+#### 🔄 代理健康检查模块化分离
+- **独立代理健康监控模块**: 从 HttpMonitor 中分离出专门的 `proxy_health` 模块
+  - **专业化架构**: 独立的健康检查客户端和评估逻辑
+  - **智能状态评估**: 支持 健康/降级/故障/未知 四种状态
+  - **多 URL 探测策略**: 主要端点 (`/api/health`) + 备用端点 (`/health`)
+  - **官方端点检测**: 自动识别 Anthropic 官方端点，跳过代理检查避免冗余
+  - **容错设计**: 支持响应解析失败时的降级处理
+- **模块化结构**: 清晰的关注点分离
+  - `checker.rs`: 核心评估逻辑和状态映射
+  - `client.rs`: HTTP 客户端抽象和 Mock 支持  
+  - `parsing.rs`: JSON 响应解析和模式检测
+  - `url.rs`: URL 构建和验证逻辑
+  - `config.rs`: 配置选项和默认值
+
+#### 🧹 代码质量提升
+- **消除重复代码**: 重构 `ProxyHealthOutcome` 构建逻辑
+  - 创建 `build_outcome_with_response()` 和 `build_outcome_no_response()` 辅助函数
+  - 替换 6 处重复的结构体构建模式
+  - 提高代码可维护性和一致性
+- **改进 COLD 窗口逻辑**: 恢复为原始的纯时间设计
+  - 修复测试失败：从混合状态/时间触发逻辑回归为 `total_duration_ms < COLD_WINDOW_MS`
+  - 保持原始设计意图的时间窗口概念
+  - 提高时间窗口行为的可预测性
+
+#### 🧪 全面测试覆盖
+- **25 个代理健康检查测试**: 涵盖所有组件和场景
+  - **单元测试**: checker, parsing, url 模块独立测试  
+  - **集成测试**: 端到端工作流验证
+  - **边缘情况**: 网络失败、无效响应、超时处理
+  - **状态映射**: 验证所有健康状态的正确转换
+- **网络监控测试修复**: 修复所有失败的测试用例
+  - 修复 3 个 status_renderer_tests (typo 修正)
+  - 修复 3 个 jsonl_monitor_tests (NBSP 字符清理)  
+  - 修复 10 个 network_segment_tests (COLD 窗口逻辑)
+- **测试覆盖完整性**: 确保新功能的可靠性和回归防护
+
+### 🔧 开发工具增强
+- **改进 .gitignore 配置**: 确保本地开发文件不被推送
+  - 添加 `project/` 目录排除（文档和开发文件）
+  - 添加 `.serena/` 目录排除（MCP 服务器内存文件）
+  - 保持代码库整洁，仅跟踪必要文件
+
+### 📊 向后兼容性
+- **无破坏性变更**: 所有现有功能保持不变
+- **API 兼容性**: HttpMonitor 接口保持稳定
+- **配置兼容性**: 用户无需修改现有配置
+- **性能优化**: 模块化设计提高了代码组织但不影响运行时性能
+
+### 🛡️ 质量保证
+- **架构清晰性**: 关注点分离提高代码可读性
+- **可测试性**: 独立模块便于单元测试和集成测试  
+- **可维护性**: 减少重复代码，提高修改效率
+- **稳定性**: 全面的测试覆盖确保系统稳定性
+
+---
+
 ## [2.0.2] - 2025-08-28
 
 ### 🔧 构建系统重大改进

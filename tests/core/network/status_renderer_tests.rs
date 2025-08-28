@@ -190,8 +190,8 @@ fn test_unknown_status_rendering() {
 
     let result = renderer.render_status(&NetworkStatus::Unknown, &metrics);
 
-    // Should show white circle and "Env varis NOT Found"
-    assert_eq!(result, "⚪ Env varis NOT Found");
+    // Should show white circle and "Env vars NOT Found"
+    assert_eq!(result, "⚪ Env vars NOT Found");
 }
 
 #[test]
@@ -365,7 +365,7 @@ fn test_status_renderer_default() {
     let metrics = NetworkMetrics::default();
     let result = renderer.render_status(&NetworkStatus::Unknown, &metrics);
 
-    assert_eq!(result, "⚪ Env varis NOT Found");
+    assert_eq!(result, "⚪ Env vars NOT Found");
 }
 
 #[test]
@@ -636,7 +636,7 @@ fn test_proxy_unhealthy_with_unknown_status() {
     let result = renderer.render_status(&NetworkStatus::Unknown, &metrics);
 
     // Should show red proxy prefix + unknown status
-    assert_eq!(result, "🔴 | ⚪ Env varis NOT Found");
+    assert_eq!(result, "🔴 | ⚪ Env vars NOT Found");
 }
 
 #[test]

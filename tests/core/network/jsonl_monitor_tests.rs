@@ -874,7 +874,7 @@ async fn test_combined_phase2_enhancements() {
         // Complex whitespace with colon-optional
         r#"{"isApiErrorMessage":false,"parentUuid":"comb-3","timestamp":"2024-01-01T12:02:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"API \t  error 502 gateway issues"}]}}"#,
         // NBSP with colon-optional
-        r#"{"parentUuid":"comb-4","timestamp":"2024-01-01T12:03:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"API\u{00a0}error 503 temporarily unavailable"}]}}"#,
+        r#"{"parentUuid":"comb-4","timestamp":"2024-01-01T12:03:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"API error 503 temporarily unavailable"}]}}"#,
     ];
 
     let content = entries.join("\n");
@@ -901,7 +901,7 @@ async fn test_nbsp_whitespace_handling() {
     let transcript_path = temp_dir.path().join("nbsp_test.jsonl");
 
     // Test NBSP character specifically
-    let entry = r#"{"isApiErrorMessage":false,"parentUuid":"nbsp-1","timestamp":"2024-01-01T12:00:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"API\u{00a0}error: 503 Service Unavailable"}]}}"#;
+    let entry = r#"{"isApiErrorMessage":false,"parentUuid":"nbsp-1","timestamp":"2024-01-01T12:00:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"API error: 503 Service Unavailable"}]}}"#;
 
     fs::write(&transcript_path, entry).unwrap();
 

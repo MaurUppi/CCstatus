@@ -3,12 +3,11 @@ target/
 
 # Documentation and development files
 claude*
-PRD.md
 .claude/
-project/
-.serena/
 .cursor/
 .idea/
+project/
+.serena/
 
 # System files
 **/.DS_Store

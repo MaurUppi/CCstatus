@@ -448,7 +448,7 @@ impl NetworkSegment {
     ///
     /// # Window Logic
     ///
-    /// - **COLD**: Invalid state (status=Unknown) OR `total_duration_ms < COLD_WINDOW_MS` with session deduplication
+    /// - **COLD**: `total_duration_ms < COLD_WINDOW_MS` with session deduplication
     /// - **RED**: `(total_duration_ms % 10_000) < 1_000` AND error detected AND window deduplication
     /// - **GREEN**: `(total_duration_ms % 300_000) < 3_000` AND window deduplication
     ///
@@ -464,17 +464,9 @@ impl NetworkSegment {
     ) -> Result<WindowDecision, NetworkError> {
         let total_duration_ms = input.cost.total_duration_ms;
 
-        // Load state early to check for invalid state (COLD startup condition)
-        let state = self.http_monitor.load_state().await.unwrap_or_default();
-        let is_invalid_state = matches!(
-            state.status,
-            crate::core::network::types::NetworkStatus::Unknown
-        );
-
-        // COLD window check (highest priority): Invalid state OR timing condition
+        // COLD window check (highest priority): Based on timing only (original design)
         let cold_window_ms = Self::get_cold_window_threshold();
-        let is_cold_timing = total_duration_ms < cold_window_ms;
-        let is_cold_window = is_invalid_state || is_cold_timing;
+        let is_cold_window = total_duration_ms < cold_window_ms;
 
         if is_cold_window {
             // Check for session deduplication
@@ -515,7 +507,8 @@ impl NetworkSegment {
             };
 
             if error_detected {
-                // Check RED window deduplication (reuse state loaded earlier)
+                // Check RED window deduplication
+                let state = self.http_monitor.load_state().await.unwrap_or_default();
                 if state.monitoring_state.last_red_window_id == Some(red_window_id) {
                     // Skip RED probe due to window deduplication
                     return Ok(WindowDecision {
@@ -544,7 +537,8 @@ impl NetworkSegment {
         let green_window_id = total_duration_ms / 300_000;
 
         if is_green_window {
-            // Check GREEN window deduplication (reuse state loaded earlier)
+            // Check GREEN window deduplication
+            let state = self.http_monitor.load_state().await.unwrap_or_default();
             if state.monitoring_state.last_green_window_id == Some(green_window_id) {
                 // Skip GREEN probe due to window deduplication
                 return Ok(WindowDecision {

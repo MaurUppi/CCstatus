@@ -185,6 +185,10 @@ Token usage percentage based on transcript analysis with context limit tracking.
 **Features:**
 
 - Automatic credential detection (environment, shell, Claude config)
+- **Proxy Health Check**: Dedicated proxy health status monitoring module
+  - Intelligent health status assessment: Healthy/Degraded/Bad/Unknown
+  - Multi-URL probe strategy: primary endpoint + fallback endpoint
+  - IF detected Official endpoint then skip proxy check to avoid redundancy
 - P95 latency tracking with rolling 12-sample window
 - Frequency-gated probing to minimize API usage
 - Debug logging with `CCSTATUS_DEBUG=true`
