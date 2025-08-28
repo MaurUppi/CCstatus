@@ -1,5 +1,6 @@
 use super::segment_list::{FieldSelection, Panel};
 use crate::config::{Config, SegmentId, StyleMode};
+use crate::ui::utils::{ansi_color_to_description, ansi_color_to_ratatui_color};
 use ratatui::{
     layout::Rect,
     style::{Color, Style},
@@ -38,156 +39,24 @@ impl SettingsComponent {
                 StyleMode::NerdFont | StyleMode::Powerline => &segment.icon.nerd_font,
             };
             // Convert AnsiColor to ratatui Color
-            let icon_ratatui_color = match &segment.colors.icon {
-                Some(crate::config::AnsiColor::Color16 { c16 }) => match c16 {
-                    0 => Color::Black,
-                    1 => Color::Red,
-                    2 => Color::Green,
-                    3 => Color::Yellow,
-                    4 => Color::Blue,
-                    5 => Color::Magenta,
-                    6 => Color::Cyan,
-                    7 => Color::White,
-                    8 => Color::DarkGray,
-                    9 => Color::LightRed,
-                    10 => Color::LightGreen,
-                    11 => Color::LightYellow,
-                    12 => Color::LightBlue,
-                    13 => Color::LightMagenta,
-                    14 => Color::LightCyan,
-                    15 => Color::Gray,
-                    _ => Color::White,
-                },
-                Some(crate::config::AnsiColor::Color256 { c256 }) => Color::Indexed(*c256),
-                Some(crate::config::AnsiColor::Rgb { r, g, b }) => Color::Rgb(*r, *g, *b),
-                None => Color::White,
-            };
-            let text_ratatui_color = match &segment.colors.text {
-                Some(crate::config::AnsiColor::Color16 { c16 }) => match c16 {
-                    0 => Color::Black,
-                    1 => Color::Red,
-                    2 => Color::Green,
-                    3 => Color::Yellow,
-                    4 => Color::Blue,
-                    5 => Color::Magenta,
-                    6 => Color::Cyan,
-                    7 => Color::White,
-                    8 => Color::DarkGray,
-                    9 => Color::LightRed,
-                    10 => Color::LightGreen,
-                    11 => Color::LightYellow,
-                    12 => Color::LightBlue,
-                    13 => Color::LightMagenta,
-                    14 => Color::LightCyan,
-                    15 => Color::Gray,
-                    _ => Color::White,
-                },
-                Some(crate::config::AnsiColor::Color256 { c256 }) => Color::Indexed(*c256),
-                Some(crate::config::AnsiColor::Rgb { r, g, b }) => Color::Rgb(*r, *g, *b),
-                None => Color::White,
-            };
-            let icon_color_desc = match &segment.colors.icon {
-                Some(crate::config::AnsiColor::Color16 { c16 }) => match c16 {
-                    0 => "Black".to_string(),
-                    1 => "Red".to_string(),
-                    2 => "Green".to_string(),
-                    3 => "Yellow".to_string(),
-                    4 => "Blue".to_string(),
-                    5 => "Magenta".to_string(),
-                    6 => "Cyan".to_string(),
-                    7 => "White".to_string(),
-                    8 => "Dark Gray".to_string(),
-                    9 => "Light Red".to_string(),
-                    10 => "Light Green".to_string(),
-                    11 => "Light Yellow".to_string(),
-                    12 => "Light Blue".to_string(),
-                    13 => "Light Magenta".to_string(),
-                    14 => "Light Cyan".to_string(),
-                    15 => "Gray".to_string(),
-                    _ => format!("ANSI {}", c16),
-                },
-                Some(crate::config::AnsiColor::Color256 { c256 }) => format!("256:{}", c256),
-                Some(crate::config::AnsiColor::Rgb { r, g, b }) => {
-                    format!("RGB({},{},{})", r, g, b)
-                }
-                None => "Default".to_string(),
-            };
-            let text_color_desc = match &segment.colors.text {
-                Some(crate::config::AnsiColor::Color16 { c16 }) => match c16 {
-                    0 => "Black".to_string(),
-                    1 => "Red".to_string(),
-                    2 => "Green".to_string(),
-                    3 => "Yellow".to_string(),
-                    4 => "Blue".to_string(),
-                    5 => "Magenta".to_string(),
-                    6 => "Cyan".to_string(),
-                    7 => "White".to_string(),
-                    8 => "Dark Gray".to_string(),
-                    9 => "Light Red".to_string(),
-                    10 => "Light Green".to_string(),
-                    11 => "Light Yellow".to_string(),
-                    12 => "Light Blue".to_string(),
-                    13 => "Light Magenta".to_string(),
-                    14 => "Light Cyan".to_string(),
-                    15 => "Gray".to_string(),
-                    _ => format!("ANSI {}", c16),
-                },
-                Some(crate::config::AnsiColor::Color256 { c256 }) => format!("256:{}", c256),
-                Some(crate::config::AnsiColor::Rgb { r, g, b }) => {
-                    format!("RGB({},{},{})", r, g, b)
-                }
-                None => "Default".to_string(),
-            };
-            let background_ratatui_color = match &segment.colors.background {
-                Some(crate::config::AnsiColor::Color16 { c16 }) => match c16 {
-                    0 => Color::Black,
-                    1 => Color::Red,
-                    2 => Color::Green,
-                    3 => Color::Yellow,
-                    4 => Color::Blue,
-                    5 => Color::Magenta,
-                    6 => Color::Cyan,
-                    7 => Color::White,
-                    8 => Color::DarkGray,
-                    9 => Color::LightRed,
-                    10 => Color::LightGreen,
-                    11 => Color::LightYellow,
-                    12 => Color::LightBlue,
-                    13 => Color::LightMagenta,
-                    14 => Color::LightCyan,
-                    15 => Color::Gray,
-                    _ => Color::White,
-                },
-                Some(crate::config::AnsiColor::Color256 { c256 }) => Color::Indexed(*c256),
-                Some(crate::config::AnsiColor::Rgb { r, g, b }) => Color::Rgb(*r, *g, *b),
-                None => Color::White,
-            };
-            let background_color_desc = match &segment.colors.background {
-                Some(crate::config::AnsiColor::Color16 { c16 }) => match c16 {
-                    0 => "Black".to_string(),
-                    1 => "Red".to_string(),
-                    2 => "Green".to_string(),
-                    3 => "Yellow".to_string(),
-                    4 => "Blue".to_string(),
-                    5 => "Magenta".to_string(),
-                    6 => "Cyan".to_string(),
-                    7 => "White".to_string(),
-                    8 => "Dark Gray".to_string(),
-                    9 => "Light Red".to_string(),
-                    10 => "Light Green".to_string(),
-                    11 => "Light Yellow".to_string(),
-                    12 => "Light Blue".to_string(),
-                    13 => "Light Magenta".to_string(),
-                    14 => "Light Cyan".to_string(),
-                    15 => "Gray".to_string(),
-                    _ => format!("ANSI {}", c16),
-                },
-                Some(crate::config::AnsiColor::Color256 { c256 }) => format!("256:{}", c256),
-                Some(crate::config::AnsiColor::Rgb { r, g, b }) => {
-                    format!("RGB({},{},{})", r, g, b)
-                }
-                None => "None".to_string(),
-            };
+            let icon_ratatui_color = segment.colors.icon
+                .as_ref()
+                .map(ansi_color_to_ratatui_color)
+                .unwrap_or(Color::White);
+            let text_ratatui_color = segment.colors.text
+                .as_ref()
+                .map(ansi_color_to_ratatui_color)
+                .unwrap_or(Color::White);
+            let icon_color_desc = ansi_color_to_description(segment.colors.icon.as_ref());
+            let text_color_desc = ansi_color_to_description(segment.colors.text.as_ref());
+            let background_ratatui_color = segment.colors.background
+                .as_ref()
+                .map(ansi_color_to_ratatui_color)
+                .unwrap_or(Color::White);
+            let mut background_color_desc = ansi_color_to_description(segment.colors.background.as_ref());
+            if segment.colors.background.is_none() {
+                background_color_desc = "None".to_string();
+            }
             let create_field_line = |field: FieldSelection, content: Vec<Span<'static>>| {
                 let is_selected = *selected_panel == Panel::Settings && *selected_field == field;
                 let mut spans = vec![];
@@ -271,27 +140,24 @@ impl SettingsComponent {
                 ),
             ];
             let text = Text::from(lines);
-            let settings_block = Block::default()
-                .borders(Borders::ALL)
-                .title("Settings")
-                .border_style(if *selected_panel == Panel::Settings {
-                    Style::default().fg(Color::Cyan)
-                } else {
-                    Style::default()
-                });
+            let settings_block = self.create_settings_block(selected_panel);
             let settings_panel = Paragraph::new(text).block(settings_block);
             f.render_widget(settings_panel, area);
         } else {
-            let settings_block = Block::default()
-                .borders(Borders::ALL)
-                .title("Settings")
-                .border_style(if *selected_panel == Panel::Settings {
-                    Style::default().fg(Color::Cyan)
-                } else {
-                    Style::default()
-                });
+            let settings_block = self.create_settings_block(selected_panel);
             let settings_panel = Paragraph::new("No segment selected").block(settings_block);
             f.render_widget(settings_panel, area);
         }
+    }
+
+    fn create_settings_block(&self, selected_panel: &Panel) -> Block {
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Settings")
+            .border_style(if *selected_panel == Panel::Settings {
+                Style::default().fg(Color::Cyan)
+            } else {
+                Style::default()
+            })
     }
 }

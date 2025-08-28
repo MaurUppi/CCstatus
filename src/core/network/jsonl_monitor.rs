@@ -47,11 +47,6 @@ impl JsonlMonitor {
         Self { logger }
     }
 
-    /// Parse debug enabled status using strict boolean parsing
-    /// Supports: true/false, 1/0, yes/no, on/off (case insensitive)
-    fn parse_debug_enabled() -> bool {
-        crate::core::network::types::parse_env_bool("CCSTATUS_DEBUG")
-    }
 
     /// Scan transcript tail for API error detection - optimized for RED gate control
     ///
@@ -361,6 +356,23 @@ impl JsonlMonitor {
         })
     }
 
+    /// Extract error message from JSON text if present
+    fn extract_json_error_message(&self, text: &str) -> Option<String> {
+        if let Some(json_start) = text.find('{') {
+            let json_part = &text[json_start..];
+            if let Ok(error_json) = serde_json::from_str::<Value>(json_part) {
+                if let Some(error_msg) = error_json
+                    .get("error")
+                    .and_then(|e| e.get("message"))
+                    .and_then(|m| m.as_str())
+                {
+                    return Some(error_msg.to_string());
+                }
+            }
+        }
+        None
+    }
+
     /// Parse error text to extract code and message
     /// **Enhancement:** Case-insensitive API error detection with fallback support
     /// **Phase 2 Enhancement:** Whitespace tolerant matching and colon-optional code extraction
@@ -388,17 +400,8 @@ impl JsonlMonitor {
                     .find_map(|tok| tok.parse::<u16>().ok())
                 {
                     // Try to parse JSON for detailed error message (preserve existing logic)
-                    if let Some(json_start) = text.find('{') {
-                        let json_part = &text[json_start..];
-                        if let Ok(error_json) = serde_json::from_str::<Value>(json_part) {
-                            if let Some(error_msg) = error_json
-                                .get("error")
-                                .and_then(|e| e.get("message"))
-                                .and_then(|m| m.as_str())
-                            {
-                                return Some((code, error_msg.to_string()));
-                            }
-                        }
+                    if let Some(error_msg) = self.extract_json_error_message(text) {
+                        return Some((code, error_msg));
                     }
 
                     // Fallback to friendly messages by known HTTP codes
@@ -432,17 +435,8 @@ impl JsonlMonitor {
                     })
                 {
                     // Same JSON parsing and fallback logic as above
-                    if let Some(json_start) = text.find('{') {
-                        let json_part = &text[json_start..];
-                        if let Ok(error_json) = serde_json::from_str::<Value>(json_part) {
-                            if let Some(error_msg) = error_json
-                                .get("error")
-                                .and_then(|e| e.get("message"))
-                                .and_then(|m| m.as_str())
-                            {
-                                return Some((code, error_msg.to_string()));
-                            }
-                        }
+                    if let Some(error_msg) = self.extract_json_error_message(text) {
+                        return Some((code, error_msg));
                     }
 
                     let message = match code {

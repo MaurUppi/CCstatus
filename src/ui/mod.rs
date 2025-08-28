@@ -8,6 +8,8 @@ pub mod events;
 pub mod layout;
 #[cfg(feature = "tui")]
 pub mod themes;
+#[cfg(feature = "tui")]
+pub mod utils;
 
 #[cfg(feature = "tui")]
 pub use app::App;

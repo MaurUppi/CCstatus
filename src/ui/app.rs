@@ -491,46 +491,14 @@ impl App {
         match self.selected_panel {
             Panel::SegmentList => {
                 // Toggle segment enabled/disabled in segment list
-                if let Some(segment) = self.config.segments.get_mut(self.selected_segment) {
-                    segment.enabled = !segment.enabled;
-                    let segment_name = match segment.id {
-                        SegmentId::Model => "Model",
-                        SegmentId::Directory => "Directory",
-                        SegmentId::Git => "Git",
-                        SegmentId::Usage => "Usage",
-                        SegmentId::Update => "Update",
-                    };
-                    let is_enabled = segment.enabled;
-                    self.status_message = Some(format!(
-                        "{} segment {}",
-                        segment_name,
-                        if is_enabled { "enabled" } else { "disabled" }
-                    ));
-                    self.preview.update_preview(&self.config);
-                }
+                self.toggle_segment_enabled();
             }
             Panel::Settings => {
                 // Edit field in settings panel
                 match self.selected_field {
                     FieldSelection::Enabled => {
-                        // Toggle enabled state in settings panel too
-                        if let Some(segment) = self.config.segments.get_mut(self.selected_segment) {
-                            segment.enabled = !segment.enabled;
-                            let segment_name = match segment.id {
-                                SegmentId::Model => "Model",
-                                SegmentId::Directory => "Directory",
-                                SegmentId::Git => "Git",
-                                SegmentId::Usage => "Usage",
-                                SegmentId::Update => "Update",
-                            };
-                            let is_enabled = segment.enabled;
-                            self.status_message = Some(format!(
-                                "{} segment {}",
-                                segment_name,
-                                if is_enabled { "enabled" } else { "disabled" }
-                            ));
-                            self.preview.update_preview(&self.config);
-                        }
+                        // Toggle enabled state in settings panel
+                        self.toggle_segment_enabled();
                     }
                     FieldSelection::Icon => self.open_icon_selector(),
                     FieldSelection::IconColor
@@ -687,6 +655,27 @@ impl App {
             Err(e) => {
                 self.status_message = Some(format!("Failed to save theme {}: {}", theme_name, e));
             }
+        }
+    }
+
+    /// Toggle the enabled state of the currently selected segment
+    fn toggle_segment_enabled(&mut self) {
+        if let Some(segment) = self.config.segments.get_mut(self.selected_segment) {
+            segment.enabled = !segment.enabled;
+            let segment_name = match segment.id {
+                SegmentId::Model => "Model",
+                SegmentId::Directory => "Directory",
+                SegmentId::Git => "Git",
+                SegmentId::Usage => "Usage",
+                SegmentId::Update => "Update",
+            };
+            let is_enabled = segment.enabled;
+            self.status_message = Some(format!(
+                "{} segment {}",
+                segment_name,
+                if is_enabled { "enabled" } else { "disabled" }
+            ));
+            self.preview.update_preview(&self.config);
         }
     }
 

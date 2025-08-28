@@ -1,4 +1,5 @@
 use crate::config::StyleMode;
+use crate::ui::utils::centered_rect;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
@@ -263,74 +264,62 @@ impl IconSelectorComponent {
         );
     }
 
-    fn render_plain_icons(&mut self, f: &mut Frame, area: Rect) {
-        let icons = get_plain_icons();
-        let items: Vec<ListItem> = icons
+    fn create_icon_list_items(icons: &[IconInfo]) -> Vec<ListItem> {
+        icons
             .iter()
             .map(|icon_info| {
                 let line = format!("{} {}", icon_info.icon, icon_info.name);
                 ListItem::new(line)
             })
-            .collect();
+            .collect()
+    }
 
-        let block = Block::default().borders(Borders::ALL).title("Emoji Icons");
+    fn render_icon_list(&mut self, f: &mut Frame, area: Rect, style: &IconStyle) {
+        let (icons, title) = match style {
+            IconStyle::Plain => (get_plain_icons(), "Emoji Icons"),
+            IconStyle::NerdFont => (get_nerd_font_icons(), "Nerd Font Icons"),
+        };
 
+        let items = Self::create_icon_list_items(&icons);
+        let block = Block::default().borders(Borders::ALL).title(title);
         let inner = block.inner(area);
-        let view_height = inner.height.saturating_sub(0) as usize; // No title inside list
+        let view_height = inner.height.saturating_sub(0) as usize;
 
-        // Adjust scrolling offset
-        self.adjust_plain_offset(view_height);
+        // Adjust scrolling offset based on style
+        match style {
+            IconStyle::Plain => self.adjust_plain_offset(view_height),
+            IconStyle::NerdFont => self.adjust_nerd_offset(view_height),
+        }
 
         // Render block
         f.render_widget(block, area);
 
-        // Render list with state
+        // Render list with appropriate state
         let list = List::new(items)
             .highlight_style(Style::default().add_modifier(ratatui::style::Modifier::REVERSED));
 
-        f.render_stateful_widget(list, inner, &mut self.plain_list_state);
+        match style {
+            IconStyle::Plain => f.render_stateful_widget(list, inner, &mut self.plain_list_state),
+            IconStyle::NerdFont => f.render_stateful_widget(list, inner, &mut self.nerd_list_state),
+        }
 
-        // Render scrollbar
+        // Render scrollbar with appropriate state
         let scrollbar = Scrollbar::default()
             .orientation(ScrollbarOrientation::VerticalRight)
             .style(Style::default().fg(Color::Gray));
-        f.render_stateful_widget(scrollbar, inner, &mut self.plain_scrollbar_state);
+
+        match style {
+            IconStyle::Plain => f.render_stateful_widget(scrollbar, inner, &mut self.plain_scrollbar_state),
+            IconStyle::NerdFont => f.render_stateful_widget(scrollbar, inner, &mut self.nerd_scrollbar_state),
+        }
+    }
+
+    fn render_plain_icons(&mut self, f: &mut Frame, area: Rect) {
+        self.render_icon_list(f, area, &IconStyle::Plain);
     }
 
     fn render_nerd_icons(&mut self, f: &mut Frame, area: Rect) {
-        let icons = get_nerd_font_icons();
-        let items: Vec<ListItem> = icons
-            .iter()
-            .map(|icon_info| {
-                let line = format!("{} {}", icon_info.icon, icon_info.name);
-                ListItem::new(line)
-            })
-            .collect();
-
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title("Nerd Font Icons");
-
-        let inner = block.inner(area);
-        let view_height = inner.height.saturating_sub(0) as usize; // No title inside list
-
-        // Adjust scrolling offset
-        self.adjust_nerd_offset(view_height);
-
-        // Render block
-        f.render_widget(block, area);
-
-        // Render list with state
-        let list = List::new(items)
-            .highlight_style(Style::default().add_modifier(ratatui::style::Modifier::REVERSED));
-
-        f.render_stateful_widget(list, inner, &mut self.nerd_list_state);
-
-        // Render scrollbar
-        let scrollbar = Scrollbar::default()
-            .orientation(ScrollbarOrientation::VerticalRight)
-            .style(Style::default().fg(Color::Gray));
-        f.render_stateful_widget(scrollbar, inner, &mut self.nerd_scrollbar_state);
+        self.render_icon_list(f, area, &IconStyle::NerdFont);
     }
 }
 
@@ -526,22 +515,3 @@ fn get_nerd_font_icons() -> Vec<IconInfo> {
     ]
 }
 
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
-}

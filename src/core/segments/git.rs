@@ -73,34 +73,37 @@ impl GitSegment {
             .unwrap_or(false)
     }
 
+    fn process_git_output(output: std::process::Output) -> Option<String> {
+        if output.status.success() {
+            let result = String::from_utf8(output.stdout).ok()?.trim().to_string();
+            if !result.is_empty() {
+                Some(result)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    fn try_git_command(&self, working_dir: &str, args: &[&str]) -> Option<String> {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(working_dir)
+            .output()
+            .ok()?;
+        
+        Self::process_git_output(output)
+    }
+
     fn get_branch(&self, working_dir: &str) -> Option<String> {
-        if let Ok(output) = Command::new("git")
-            .args(["branch", "--show-current"])
-            .current_dir(working_dir)
-            .output()
-        {
-            if output.status.success() {
-                let branch = String::from_utf8(output.stdout).ok()?.trim().to_string();
-                if !branch.is_empty() {
-                    return Some(branch);
-                }
-            }
+        // Try modern git command first
+        if let Some(branch) = self.try_git_command(working_dir, &["branch", "--show-current"]) {
+            return Some(branch);
         }
 
-        if let Ok(output) = Command::new("git")
-            .args(["symbolic-ref", "--short", "HEAD"])
-            .current_dir(working_dir)
-            .output()
-        {
-            if output.status.success() {
-                let branch = String::from_utf8(output.stdout).ok()?.trim().to_string();
-                if !branch.is_empty() {
-                    return Some(branch);
-                }
-            }
-        }
-
-        None
+        // Fallback to older approach
+        self.try_git_command(working_dir, &["symbolic-ref", "--short", "HEAD"])
     }
 
     fn get_status(&self, working_dir: &str) -> GitStatus {
@@ -158,16 +161,7 @@ impl GitSegment {
             .output()
             .ok()?;
 
-        if output.status.success() {
-            let sha = String::from_utf8(output.stdout).ok()?.trim().to_string();
-            if sha.is_empty() {
-                None
-            } else {
-                Some(sha)
-            }
-        } else {
-            None
-        }
+        Self::process_git_output(output)
     }
 }
 
