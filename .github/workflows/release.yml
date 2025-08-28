@@ -114,6 +114,7 @@ jobs:
         echo "OPENSSL_NO_VENDOR=1" >> $GITHUB_ENV
 
     - name: Build binary  
+      shell: bash
       run: |
         if [ "${{ matrix.variant }}" = "slim" ]; then
           # Slim build: smaller but requires system OpenSSL
@@ -125,6 +126,7 @@ jobs:
 
     - name: Package Linux/macOS
       if: matrix.target != 'x86_64-pc-windows-msvc'  # Package all non-Windows targets
+      shell: bash
       run: |
         mkdir -p dist
         cp target/${{ matrix.target }}/release/ccstatus dist/ccstatus
@@ -133,10 +135,12 @@ jobs:
 
     - name: Package Windows
       if: matrix.target == 'x86_64-pc-windows-msvc'
+      shell: bash
       run: |
         mkdir -p dist
         cp target/${{ matrix.target }}/release/ccstatus.exe dist/ccstatus.exe
-        Compress-Archive -Path "dist/ccstatus.exe" -DestinationPath "${{ matrix.name }}"
+        cd dist
+        powershell -Command "Compress-Archive -Path 'ccstatus.exe' -DestinationPath '../${{ matrix.name }}'"
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
