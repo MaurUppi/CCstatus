@@ -39,6 +39,33 @@ pub struct ProxyHealthOutcome {
     pub response_size: Option<usize>,
 }
 
+/// Build ProxyHealthOutcome with optional response data
+fn build_outcome_with_response(
+    level: Option<ProxyHealthLevel>,
+    detail: ProxyHealthDetail,
+    response: &HealthResponse,
+) -> ProxyHealthOutcome {
+    ProxyHealthOutcome {
+        level,
+        detail: Some(detail),
+        status_code: Some(response.status_code),
+        response_size: Some(response.body.len()),
+    }
+}
+
+/// Build ProxyHealthOutcome without response data
+fn build_outcome_no_response(
+    level: Option<ProxyHealthLevel>,
+    detail: Option<ProxyHealthDetail>,
+) -> ProxyHealthOutcome {
+    ProxyHealthOutcome {
+        level,
+        detail,
+        status_code: None,
+        response_size: None,
+    }
+}
+
 /// Assess proxy health using configurable strategy
 ///
 /// Performs health check with fallback and redirect logic based on configuration.
@@ -69,12 +96,7 @@ pub async fn assess_proxy_health(
 
     // Skip proxy health check for official Anthropic endpoint
     if is_official_base_url(base_url) {
-        return Ok(ProxyHealthOutcome {
-            level: None, // No proxy health check needed
-            detail: None,
-            status_code: None,
-            response_size: None,
-        });
+        return Ok(build_outcome_no_response(None, None));
     }
 
     // Determine primary and fallback URLs based on configuration
@@ -167,12 +189,7 @@ pub async fn assess_proxy_health(
     // If we only had network errors, treat as no proxy detected
     if had_network_error && !had_404_response {
         detail.reason = Some("timeout".to_string());
-        return Ok(ProxyHealthOutcome {
-            level: None, // No proxy detected due to network errors
-            detail: Some(detail),
-            status_code: None,
-            response_size: None,
-        });
+        return Ok(build_outcome_no_response(None, Some(detail)));
     }
     
     // If we only had 404 responses, treat as no health endpoint
@@ -188,12 +205,7 @@ pub async fn assess_proxy_health(
     
     // Mixed failures - treat as no proxy detected (not Bad)
     detail.reason = Some("timeout".to_string());
-    Ok(ProxyHealthOutcome {
-        level: None, // Mixed failures treated as no proxy detected
-        detail: Some(detail),
-        status_code: None,
-        response_size: None,
-    })
+    Ok(build_outcome_no_response(None, Some(detail)))
 }
 
 /// Handle successful HTTP response and determine health level
@@ -236,12 +248,11 @@ fn handle_response(
                 }
             }
             
-            Ok(Some(ProxyHealthOutcome {
+            Ok(Some(build_outcome_with_response(
                 level,
-                detail: Some(detail.clone()),
-                status_code: Some(response.status_code),
-                response_size: Some(response.body.len()),
-            }))
+                detail.clone(),
+                &response,
+            )))
         }
         403 | 503 | 429 => {
             // Check for Cloudflare challenge first
@@ -249,23 +260,21 @@ fn handle_response(
                 detail.success_method = Some(method.to_string());
                 detail.reason = Some("cloudflare_challenge".to_string());
                 
-                Ok(Some(ProxyHealthOutcome {
-                    level: Some(ProxyHealthLevel::Unknown),
-                    detail: Some(detail.clone()),
-                    status_code: Some(response.status_code),
-                    response_size: Some(response.body.len()),
-                }))
+                Ok(Some(build_outcome_with_response(
+                    Some(ProxyHealthLevel::Unknown),
+                    detail.clone(),
+                    &response,
+                )))
             } else if response.status_code == 429 {
                 // Rate limited - proxy exists but degraded (unchanged)
                 detail.success_method = Some(method.to_string());
                 detail.reason = None; // Keep existing behavior
                 
-                Ok(Some(ProxyHealthOutcome {
-                    level: Some(ProxyHealthLevel::Degraded),
-                    detail: Some(detail.clone()),
-                    status_code: Some(response.status_code),
-                    response_size: Some(response.body.len()),
-                }))
+                Ok(Some(build_outcome_with_response(
+                    Some(ProxyHealthLevel::Degraded),
+                    detail.clone(),
+                    &response,
+                )))
             } else {
                 // 403/503 without CF indicators - map to None (not Bad)
                 detail.reason = Some("non_200_no_cf".to_string());
@@ -277,12 +286,11 @@ fn handle_response(
             detail.success_method = Some(method.to_string());
             detail.reason = Some("server_error".to_string());
             
-            Ok(Some(ProxyHealthOutcome {
-                level: Some(ProxyHealthLevel::Bad),
-                detail: Some(detail.clone()),
-                status_code: Some(response.status_code),
-                response_size: Some(response.body.len()),
-            }))
+            Ok(Some(build_outcome_with_response(
+                Some(ProxyHealthLevel::Bad),
+                detail.clone(),
+                &response,
+            )))
         }
         300..=399 if response.status_code != 304 => {
             // Redirect response, let caller handle it

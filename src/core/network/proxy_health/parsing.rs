@@ -108,7 +108,7 @@ fn parse_mixed_schema(obj: &serde_json::Map<String, Value>) -> Option<ProxyHealt
                 .map(|status| status.eq_ignore_ascii_case("healthy"))
                 .unwrap_or(false)
         });
-        
+
         if all_healthy {
             return Some(ProxyHealthLevel::Healthy);
         } else {
