@@ -94,7 +94,14 @@ jobs:
     - name: Check code compiles
       run: cargo check --target ${{ matrix.target }}
 
-    - name: Build binary
+    # Force static linking for all dependencies on macOS
+    - name: Configure static linking for macOS
+      if: runner.os == 'macOS'
+      run: |
+        echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
+        echo "OPENSSL_NO_VENDOR=1" >> $GITHUB_ENV
+
+    - name: Build binary  
       run: cargo build --release --target ${{ matrix.target }} --features timings-curl-static
 
     - name: Package Linux/macOS
