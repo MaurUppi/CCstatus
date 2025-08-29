@@ -230,6 +230,22 @@ impl CurlProbeRunner for RealCurlRunner {
                 .timeout(std::time::Duration::from_millis(timeout_ms as u64))
                 .map_err(|e| format!("Timeout set failed: {}", e))?;
 
+            // Bot-fight protocol enhancements
+            handle
+                .http_version(curl::easy::HttpVersion::V2TLS)
+                .map_err(|e| format!("HTTP/2 version failed: {}", e))?;
+            handle
+                .accept_encoding("gzip, deflate, br")
+                .map_err(|e| format!("Accept-Encoding failed: {}", e))?;
+            handle
+                .useragent("claude-cli/1.0.80 (external, cli)")
+                .map_err(|e| format!("User-Agent failed: {}", e))?;
+
+            // Enable cookie engine for session continuity
+            handle
+                .cookie_file("")
+                .map_err(|e| format!("Cookie engine failed: {}", e))?;
+
             // Set headers
             let mut header_list = curl::easy::List::new();
             for (key, value) in headers {
@@ -796,6 +812,9 @@ impl HttpMonitor {
                     "claude-cli/1.0.80 (external, cli)".to_string(),
                 ),
                 ("anthropic-version", "2023-06-01".to_string()),
+                // Bot-fight mitigation headers
+                ("Accept", "application/json".to_string()),
+                ("Accept-Encoding", "gzip, deflate, br".to_string()),
             ];
 
             // Try curl first, fallback to isahc on failure for resiliency
@@ -852,6 +871,9 @@ impl HttpMonitor {
             "claude-cli/1.0.80 (external, cli)".to_string(),
         );
         headers.insert("anthropic-version".to_string(), "2023-06-01".to_string());
+        // Bot-fight mitigation headers
+        headers.insert("Accept".to_string(), "application/json".to_string());
+        headers.insert("Accept-Encoding".to_string(), "gzip, deflate, br".to_string());
 
         let (status_code, duration, breakdown) = self
             .http_client

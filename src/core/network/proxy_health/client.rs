@@ -65,6 +65,8 @@ impl HealthCheckClient for IsahcHealthCheckClient {
             .redirect_policy(RedirectPolicy::None) // Critical: Don't follow redirects
             .header("User-Agent", "claude-cli/1.0.80 (external, cli)")
             .header("Accept", "application/json")
+            .header("Accept-Encoding", "gzip, deflate, br") // Bot-fight mitigation
+            .header("Accept-Language", "en-US,en;q=0.9") // Bot-fight mitigation
             .body(Vec::new()) // Empty body for GET request
             .map_err(|e| format!("Health check request creation failed: {}", e))?;
 
@@ -106,6 +108,7 @@ impl IsahcHealthCheckClient {
     pub fn new() -> Result<Self, NetworkError> {
         let client = HttpClient::builder()
             .redirect_policy(RedirectPolicy::None) // Global redirect policy
+            .cookies() // Enable in-memory cookies for session continuity
             .build()
             .map_err(|e| {
                 NetworkError::HttpError(format!("Failed to create health check client: {}", e))

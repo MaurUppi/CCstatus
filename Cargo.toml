@@ -44,7 +44,7 @@ semver = { version = "1.0", optional = true }
 # 网络监控依赖
 # Minimize isahc: drop default features (no http2/cookies/static-curl)
 # isahc = { version = "1.7", features = ["json"], optional = true }
-isahc = { version = "1.7", default-features = false, features = ["static-curl"], optional = true }
+isahc = { version = "1.7", default-features = false, features = ["static-curl", "http2", "cookies"], optional = true }
 # Trim tokio: single-threaded runtime + only used pieces
 # tokio = { version = "1.47.1", features = ["rt", "rt-multi-thread", "time", "sync", "fs", "macros", "io-util"], optional = true }
 tokio = { version = "1.47.1", default-features = false, features = ["rt", "macros","time", "fs", "io-util", "sync"], optional = true }
@@ -52,7 +52,7 @@ thiserror = "2.0.15"
 url = "2.4"
 
 # Phase timings with curl (optional for real DNS/TCP/TLS measurements)
-curl = { version = "0.4", optional = true }
+curl = { version = "0.4", features = ["http2"], optional = true }
 
 [features]
 default = ["network-monitoring"]
