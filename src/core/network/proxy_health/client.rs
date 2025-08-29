@@ -66,7 +66,7 @@ impl HealthCheckClient for IsahcHealthCheckClient {
         let request = Request::get(&url)
             .timeout(Duration::from_millis(timeout_ms as u64))
             .redirect_policy(RedirectPolicy::None) // Critical: Don't follow redirects
-            .header("User-Agent", "claude-cli/1.0.80 (external, cli)")
+            .header("User-Agent", "claude-cli/1.0.93 (external, cli)")
             .header("Accept", "application/json")
             .header("Accept-Encoding", "gzip, deflate, br") // Bot-fight mitigation
             .header("Accept-Language", "en-US,en;q=0.9") // Bot-fight mitigation
@@ -152,7 +152,7 @@ impl CurlGetRunner {
                 .map_err(|e| format!("HTTP/2 version failed: {}", e))?;
             handle.accept_encoding("gzip, deflate, br")
                 .map_err(|e| format!("Accept-Encoding failed: {}", e))?;
-            handle.useragent("claude-cli/1.0.80 (external, cli)")
+            handle.useragent("claude-cli/1.0.93 (external, cli)")
                 .map_err(|e| format!("User-Agent failed: {}", e))?;
             handle.cookie_file("").map_err(|e| format!("Cookie engine failed: {}", e))?; // In-memory cookies
             
@@ -251,6 +251,49 @@ impl CurlGetRunner {
         .map_err(|e| e)?;
         
         Ok(result)
+    }
+}
+
+/// Curl-based health check client with enhanced timing capabilities
+/// 
+/// Provides detailed phase timings for proxy health checks when timings-curl feature is enabled.
+/// Falls back to standard HealthResponse interface while internally capturing PhaseTimings.
+#[cfg(all(feature = "network-monitoring", feature = "timings-curl"))]
+pub struct CurlHealthCheckClient {
+    runner: CurlGetRunner,
+}
+
+#[cfg(all(feature = "network-monitoring", feature = "timings-curl"))]
+#[async_trait::async_trait]
+impl HealthCheckClient for CurlHealthCheckClient {
+    async fn get_health(&self, url: String, timeout_ms: u32) -> Result<HealthResponse, String> {
+        // Use CurlGetRunner for enhanced timing, but only return HealthResponse for interface compatibility
+        let (health_response, _phase_timings) = self.runner
+            .get_health_with_timings(&url, timeout_ms)
+            .await?;
+            
+        Ok(health_response)
+    }
+}
+
+#[cfg(all(feature = "network-monitoring", feature = "timings-curl"))]
+impl CurlHealthCheckClient {
+    pub fn new() -> Result<Self, NetworkError> {
+        Ok(Self {
+            runner: CurlGetRunner,
+        })
+    }
+    
+    /// Get health check with detailed phase timings (curl-specific enhancement)
+    /// 
+    /// This method provides access to the enhanced timing information that curl captures,
+    /// beyond what the standard HealthCheckClient interface exposes.
+    pub async fn get_health_with_timings(
+        &self,
+        url: &str,
+        timeout_ms: u32,
+    ) -> Result<(HealthResponse, PhaseTimings), String> {
+        self.runner.get_health_with_timings(url, timeout_ms).await
     }
 }
 

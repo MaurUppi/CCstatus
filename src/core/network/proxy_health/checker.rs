@@ -14,6 +14,9 @@ use crate::core::network::proxy_health::{
     url::{build_root_health_url, build_path_health_url, extract_host, is_official_base_url},
 };
 
+#[cfg(feature = "timings-curl")]
+use crate::core::network::proxy_health::client::CurlGetRunner;
+
 #[derive(Debug, thiserror::Error)]
 pub enum ProxyHealthError {
     #[error("URL construction failed: {0}")]

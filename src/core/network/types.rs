@@ -80,6 +80,8 @@ pub struct NetworkMetrics {
     pub proxy_health_level: Option<ProxyHealthLevel>, // Enhanced tri-state health level
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_health_detail: Option<ProxyHealthDetail>, // Detailed health check information
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub http_version: Option<String>, // HTTP version used for request (e.g., "HTTP/1.1", "HTTP/2.0")
 }
 
 /// Credential source types (aligned with credential.md)
@@ -162,6 +164,8 @@ pub struct ProbeMetrics {
     pub last_http_status: u16,
     /// Standardized error type classification
     pub error_type: Option<String>,
+    /// HTTP version used for request (e.g., "HTTP/1.1", "HTTP/2.0")
+    pub http_version: Option<String>,
 }
 
 /// API configuration metadata
@@ -287,6 +291,7 @@ impl Default for NetworkMetrics {
             proxy_healthy: None,
             proxy_health_level: None,
             proxy_health_detail: None,
+            http_version: None,
         }
     }
 }

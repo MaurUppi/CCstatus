@@ -27,5 +27,8 @@ pub use crate::core::network::types::ProxyHealthDetail;
 #[cfg(feature = "network-monitoring")]
 pub use client::IsahcHealthCheckClient;
 
+#[cfg(all(feature = "network-monitoring", feature = "timings-curl"))]
+pub use client::CurlHealthCheckClient;
+
 #[cfg(not(feature = "network-monitoring"))]
 pub use client::MockHealthCheckClient;

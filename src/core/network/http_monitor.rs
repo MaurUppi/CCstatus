@@ -35,6 +35,9 @@ use serde_json;
 #[cfg(feature = "network-monitoring")]
 use crate::core::network::proxy_health::IsahcHealthCheckClient;
 
+#[cfg(all(feature = "network-monitoring", feature = "timings-curl"))]
+use crate::core::network::proxy_health::CurlHealthCheckClient;
+
 #[cfg(not(feature = "network-monitoring"))]
 use crate::core::network::proxy_health::MockHealthCheckClient;
 use crate::core::network::types::*;
@@ -81,14 +84,14 @@ pub trait CurlProbeRunner: Send + Sync {
 #[async_trait::async_trait]
 pub trait HttpClientTrait: Send + Sync {
     /// Execute HTTP request with timing measurement
-    /// Returns (status_code, duration, breakdown_string)
+    /// Returns (status_code, duration, breakdown_string, response_headers, http_version)
     async fn execute_request(
         &self,
         url: String,
         headers: std::collections::HashMap<String, String>,
         body: Vec<u8>,
         timeout_ms: u32,
-    ) -> Result<(u16, Duration, String), String>;
+    ) -> Result<(u16, Duration, String, std::collections::HashMap<String, String>, Option<String>), String>;
 }
 
 // HealthCheckClient and HealthResponse are now imported from proxy_health module
@@ -116,7 +119,7 @@ impl HttpClientTrait for IsahcHttpClient {
         headers: std::collections::HashMap<String, String>,
         body: Vec<u8>,
         timeout_ms: u32,
-    ) -> Result<(u16, Duration, String), String> {
+    ) -> Result<(u16, Duration, String, std::collections::HashMap<String, String>, Option<String>), String> {
         let start = Instant::now();
 
         let mut request = Request::post(&url)
@@ -143,6 +146,24 @@ impl HttpClientTrait for IsahcHttpClient {
         let ttfb_duration = start.elapsed();
 
         let status = response.status().as_u16();
+        
+        // Capture HTTP version for diagnostics
+        let http_version = match response.version() {
+            isahc::http::Version::HTTP_09 => Some("HTTP/0.9".to_string()),
+            isahc::http::Version::HTTP_10 => Some("HTTP/1.0".to_string()),
+            isahc::http::Version::HTTP_11 => Some("HTTP/1.1".to_string()),
+            isahc::http::Version::HTTP_2 => Some("HTTP/2.0".to_string()),
+            isahc::http::Version::HTTP_3 => Some("HTTP/3.0".to_string()),
+            _ => None, // Unknown version
+        };
+
+        // Capture response headers for Cloudflare bot challenge detection
+        let mut response_headers = std::collections::HashMap::new();
+        for (name, value) in response.headers() {
+            if let Ok(value_str) = value.to_str() {
+                response_headers.insert(name.to_string(), value_str.to_string());
+            }
+        }
 
         // Drain response body without allocating (zero-copy to sink)
         let mut body = response.into_body();
@@ -163,7 +184,7 @@ impl HttpClientTrait for IsahcHttpClient {
             dns_ms, tcp_ms, tls_ms, total_ms, total_ms
         );
 
-        Ok((status, ttfb_duration, breakdown))
+        Ok((status, ttfb_duration, breakdown, response_headers, http_version))
     }
 }
 
@@ -240,7 +261,7 @@ impl CurlProbeRunner for RealCurlRunner {
                 .accept_encoding("gzip, deflate, br")
                 .map_err(|e| format!("Accept-Encoding failed: {}", e))?;
             handle
-                .useragent("claude-cli/1.0.80 (external, cli)")
+                .useragent("claude-cli/1.0.93 (external, cli)")
                 .map_err(|e| format!("User-Agent failed: {}", e))?;
 
             // Enable cookie engine for session continuity
@@ -377,7 +398,10 @@ impl HttpMonitor {
         #[cfg(not(feature = "network-monitoring"))]
         let http_client: Box<dyn HttpClientTrait> = Box::new(MockHttpClient::default());
 
-        #[cfg(feature = "network-monitoring")]
+        // Health check client selection: prefer curl for enhanced timing when available
+        #[cfg(all(feature = "network-monitoring", feature = "timings-curl"))]
+        let health_client: Box<dyn HealthCheckClient> = Box::new(CurlHealthCheckClient::new()?);
+        #[cfg(all(feature = "network-monitoring", not(feature = "timings-curl")))]
         let health_client: Box<dyn HealthCheckClient> = Box::new(IsahcHealthCheckClient::new()?);
         #[cfg(not(feature = "network-monitoring"))]
         let health_client: Box<dyn HealthCheckClient> = Box::new(MockHealthCheckClient::default());
@@ -597,10 +621,10 @@ impl HttpMonitor {
             .execute_http_probe(&creds, timeout_ms, probe_start)
             .await;
 
-        let (status_code, latency_ms, breakdown, error_type) = match probe_result {
-            Ok((status, duration, breakdown)) => {
-                let error_type = self.classify_http_error(status);
-                (status, duration.as_millis() as u32, breakdown, error_type)
+        let (status_code, latency_ms, breakdown, error_type, http_version) = match probe_result {
+            Ok((status, duration, breakdown, response_headers, http_version)) => {
+                let error_type = self.classify_http_error(status, &response_headers);
+                (status, duration.as_millis() as u32, breakdown, error_type, http_version)
             }
             Err(err) => {
                 debug_logger
@@ -614,6 +638,7 @@ impl HttpMonitor {
                         probe_start.elapsed().as_millis()
                     ),
                     Some("connection_error".to_string()),
+                    None, // No HTTP version available for connection errors
                 )
             }
         };
@@ -624,6 +649,7 @@ impl HttpMonitor {
             breakdown: breakdown.clone(),
             last_http_status: status_code,
             error_type: error_type.clone(),
+            http_version: http_version.clone(),
         };
 
         // Process probe results and update state
@@ -794,7 +820,7 @@ impl HttpMonitor {
         creds: &ApiCredentials,
         timeout_ms: u32,
         _probe_start: Instant,
-    ) -> Result<(u16, Duration, String), NetworkError> {
+    ) -> Result<(u16, Duration, String, std::collections::HashMap<String, String>, Option<String>), NetworkError> {
         // Check if curl runner is available for detailed timing measurements
         #[cfg(feature = "timings-curl")]
         if let Some(ref curl_runner) = self.curl_runner {
@@ -818,7 +844,7 @@ impl HttpMonitor {
                 ("x-api-key", creds.auth_token.clone()),
                 (
                     "User-Agent",
-                    "claude-cli/1.0.80 (external, cli)".to_string(),
+                    "claude-cli/1.0.93 (external, cli)".to_string(),
                 ),
                 ("anthropic-version", "2023-06-01".to_string()),
                 // Bot-fight mitigation headers
@@ -841,7 +867,11 @@ impl HttpMonitor {
                         phase_timings.ttfb_ms,
                         phase_timings.total_ms
                     );
-                    return Ok((phase_timings.status, duration, breakdown));
+                    // Note: curl branch doesn't capture response headers in current implementation
+                    let empty_headers = std::collections::HashMap::new();
+                    // HTTP/2 is typically negotiated with curl when using HTTP/2 TLS version
+                    let http_version = Some("HTTP/2.0".to_string());
+                    return Ok((phase_timings.status, duration, breakdown, empty_headers, http_version));
                 }
                 Err(curl_error) => {
                     // Log curl failure and fallback to isahc for resiliency
@@ -877,28 +907,28 @@ impl HttpMonitor {
         headers.insert("x-api-key".to_string(), creds.auth_token.clone());
         headers.insert(
             "User-Agent".to_string(),
-            "claude-cli/1.0.80 (external, cli)".to_string(),
+            "claude-cli/1.0.93 (external, cli)".to_string(),
         );
         headers.insert("anthropic-version".to_string(), "2023-06-01".to_string());
         // Bot-fight mitigation headers
         headers.insert("Accept".to_string(), "application/json".to_string());
         headers.insert("Accept-Encoding".to_string(), "gzip, deflate, br".to_string());
 
-        let (status_code, duration, breakdown) = self
+        let (status_code, duration, breakdown, response_headers, http_version) = self
             .http_client
             .execute_request(endpoint, headers, body, timeout_ms)
             .await
             .map_err(NetworkError::HttpError)?;
 
-        Ok((status_code, duration, breakdown))
+        Ok((status_code, duration, breakdown, response_headers, http_version))
     }
 
     /// Classify HTTP status codes into standard error types
-    /// Enhanced Phase 2 bot challenge detection for Cloudflare protection
+    /// Enhanced Phase 2 bot challenge detection with header analysis for 429 responses
     /// 
-    /// Note: POST detection is currently status-code based due to architectural constraints.
+    /// Uses detect_cloudflare_challenge for comprehensive header-based CF detection on 429.
     /// GET detection uses comprehensive header/body analysis via detect_cloudflare_challenge.
-    fn classify_http_error(&self, status_code: u16) -> Option<String> {
+    fn classify_http_error(&self, status_code: u16, response_headers: &std::collections::HashMap<String, String>) -> Option<String> {
         match status_code {
             200..=299 => None, // Success
             0 => Some("connection_error".to_string()),
@@ -913,8 +943,15 @@ impl HttpMonitor {
             413 => Some("request_too_large".to_string()),
             429 => {
                 // 429 can be rate limiting OR bot challenge depending on context
-                // Conservative approach: treat as rate limit unless other indicators present
-                Some("rate_limit_error".to_string())
+                // Phase 2 enhancement: Use header analysis to detect Cloudflare challenges
+                use crate::core::network::proxy_health::parsing::detect_cloudflare_challenge;
+                
+                if detect_cloudflare_challenge(429, response_headers, &[]) {
+                    Some("bot_challenge".to_string())
+                } else {
+                    // No CF indicators - treat as legitimate rate limit
+                    Some("rate_limit_error".to_string())
+                }
             },
             500 => Some("api_error".to_string()),
             503 => {
@@ -974,6 +1011,7 @@ impl HttpMonitor {
             state.network.last_http_status = metrics.last_http_status;
             state.network.error_type = metrics.error_type.clone();
             state.network.breakdown_source = Some(breakdown_source.to_string());
+            state.network.http_version = metrics.http_version.clone();
         }
 
         #[cfg(feature = "timings-curl")]
@@ -983,6 +1021,7 @@ impl HttpMonitor {
             state.network.breakdown = metrics.breakdown.clone();
             state.network.last_http_status = metrics.last_http_status;
             state.network.error_type = metrics.error_type.clone();
+            state.network.http_version = metrics.http_version.clone();
 
             // Parse DNS timing from breakdown to determine connection reuse
             let dns_reused = if let Some(dns_part) = metrics.breakdown.split('|').next() {

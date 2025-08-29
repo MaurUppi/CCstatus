@@ -51,10 +51,11 @@ impl HttpClientTrait for MockHttpClient {
         _headers: HashMap<String, String>,
         _body: Vec<u8>,
         _timeout_ms: u32,
-    ) -> Result<(u16, Duration, String), String> {
+    ) -> Result<(u16, Duration, String, std::collections::HashMap<String, String>, Option<String>), String> {
         let duration = Duration::from_millis(250);
         let breakdown = "DNS:10ms|TCP:20ms|TLS:30ms|TTFB:190ms|Total:250ms".to_string();
-        Ok((200, duration, breakdown))
+        let empty_headers = std::collections::HashMap::new();
+        Ok((200, duration, breakdown, empty_headers, Some("HTTP/1.1".to_string())))
     }
 }
 
