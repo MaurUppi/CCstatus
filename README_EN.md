@@ -54,6 +54,7 @@ Model | Working Directory | Git Branch Status | Context Window | Network Status
 - **Model display** with simplified Claude model names
 - **Usage tracking** based on transcript analysis
 - **Network probing** with real-time Claude API connectivity status ⚡
+- **Trying to resolve** JS Challenge/Bot Fight detection and countermeasures (LOW EXPECTATION) 🛡️
 - **Directory display** showing current workspace
 - **Minimal design** using Nerd Font icons
 - **Simple configuration** via command line options
@@ -189,6 +190,13 @@ Token usage percentage based on transcript analysis with context limit tracking.
   - Intelligent health status assessment: Healthy/Degraded/Bad/Unknown
   - Multi-URL probe strategy: primary endpoint + fallback endpoint
   - IF detected Official endpoint then skip proxy check to avoid redundancy
+- **Bot Fight Intelligent Detection**: Bot challenge identification and mitigation 🛡️
+  - **Multi-dimensional Detection**: HTTP status codes (403/429/503) + Cloudflare header analysis
+  - **Shield Status Display**: Shows 🛡️ icon and total response time during bot challenges
+  - **P95 Contamination Protection**: Bot challenge responses automatically excluded from performance statistics
+  - **Secure Timing Suppression**: POST bot challenges don't display detailed timing breakdown
+  - **HTTP Version Tracking**: Records HTTP/1.1 vs HTTP/2.0 protocol usage
+- **Enhanced JSONL Logging**: Improved error information aggregation and analysis
 - P95 latency tracking with rolling 12-sample window
 - Frequency-gated probing to minimize API usage
 - Debug logging with `CCSTATUS_DEBUG=true`

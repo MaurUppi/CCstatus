@@ -57,6 +57,7 @@
 - **模型显示** 简化的 Claude 模型名称
 - **使用量跟踪** 基于转录文件分析
 - **网络探测** 实时 Claude API 连接状态监控 ⚡
+- **尝试减缓** JS Challenge/Bot Fight 挑战 (也不太指望。。。) 🛡️
 - **目录显示** 显示当前工作空间
 - **简洁设计** 使用 Nerd Font 图标
 - **简单配置** 通过命令行选项配置
@@ -182,6 +183,13 @@ Move-Item "ccstatus.exe" "$env:USERPROFILE\.claude\ccstatus\CCstatus.exe"
   - 智能健康状态评估：健康/降级/故障/未知
   - 多 URL 探测策略：主要端点 + 备用端点
   - 官方端点检测，跳过代理检查避免冗余
+- **Bot Fight 智能检测**：机器人挑战识别与缓解 🛡️
+  - **多维度检测**：HTTP 状态码 (403/429/503) + Cloudflare 头部分析
+  - **盾牌状态显示**：Bot 挑战时显示 🛡️ 图标和总响应时间
+  - **P95 污染防护**：Bot 挑战响应自动从性能统计中排除
+  - **安全时间抑制**：POST Bot 挑战时不显示详细计时分解
+  - **HTTP 版本追踪**：记录 HTTP/1.1 vs HTTP/2.0 协议使用情况
+- **JSONL 日志增强**：改进错误信息归集和分析能力
 - P95 延迟跟踪，滚动 12 样本窗口
 - 频率门控探测，最小化 API 使用
 - 使用 `CCSTATUS_DEBUG=true` 进行调试日志记录
@@ -221,7 +229,10 @@ cargo build --release
 # 构建（基础功能 + 网络探测 **分时显示**）
 cargo build --release --features timings-curl
 
-# 可选：添加自动更新功能
+# 构建 （全静态库）
+cargo build --release --features timings-curl-static
+
+# TODO：自动更新功能
 cargo build --release --features "self-update"
 ```
 
