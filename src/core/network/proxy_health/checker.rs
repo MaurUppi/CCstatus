@@ -42,6 +42,16 @@ pub struct ProxyHealthOutcome {
     pub response_size: Option<usize>,
 }
 
+/// Determine reason for Bad health level by analyzing JSON validity
+/// Returns "invalid_json_200" if body is not valid JSON, "unknown_schema_200" if valid JSON but unknown schema
+fn determine_bad_health_reason(response_body: &[u8]) -> String {
+    if serde_json::from_slice::<serde_json::Value>(response_body).is_err() {
+        "invalid_json_200".to_string()
+    } else {
+        "unknown_schema_200".to_string()
+    }
+}
+
 /// Build ProxyHealthOutcome with optional response data
 fn build_outcome_with_response(
     level: Option<ProxyHealthLevel>,
@@ -251,12 +261,7 @@ async fn handle_cloudflare_challenge(
                 // Set reason based on parsing outcome
                 match &level {
                     Some(ProxyHealthLevel::Bad) => {
-                        // Check if it's invalid JSON vs unknown schema
-                        if serde_json::from_slice::<serde_json::Value>(&retry_response.body).is_err() {
-                            detail.reason = Some("invalid_json_200".to_string());
-                        } else {
-                            detail.reason = Some("unknown_schema_200".to_string());
-                        }
+                        detail.reason = Some(determine_bad_health_reason(&retry_response.body));
                     },
                     Some(_) => {
                         // Healthy/Degraded - successful parsing
@@ -321,12 +326,7 @@ async fn handle_response(
             // Set reason based on parsing outcome
             match &level {
                 Some(ProxyHealthLevel::Bad) => {
-                    // Check if it's invalid JSON vs unknown schema
-                    if serde_json::from_slice::<serde_json::Value>(&response.body).is_err() {
-                        detail.reason = Some("invalid_json_200".to_string());
-                    } else {
-                        detail.reason = Some("unknown_schema_200".to_string());
-                    }
+                    detail.reason = Some(determine_bad_health_reason(&response.body));
                 },
                 Some(_) => {
                     // Healthy/Degraded - successful parsing
@@ -350,14 +350,14 @@ async fn handle_response(
                 detail.success_method = Some(method.to_string());
                 
                 // Use retry-once logic for CF challenges
-                return handle_cloudflare_challenge(
+                handle_cloudflare_challenge(
                     &response,
                     options,
                     client,
                     url,
                     detail,
                     start_time,
-                ).await;
+                ).await
             } else if response.status_code == 429 {
                 // Rate limited - proxy exists but degraded (unchanged)
                 detail.success_method = Some(method.to_string());
