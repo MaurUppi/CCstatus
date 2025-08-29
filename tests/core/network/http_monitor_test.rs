@@ -497,11 +497,12 @@ async fn test_error_classification() {
             Some("authentication_error"),
             "401 -> authentication_error",
         ),
-        (403, Some("permission_error"), "403 -> permission_error"),
+        (403, Some("bot_challenge"), "403 -> bot_challenge"),
         (404, Some("not_found_error"), "404 -> not_found_error"),
         (413, Some("request_too_large"), "413 -> request_too_large"),
         (429, Some("rate_limit_error"), "429 -> rate_limit_error"),
         (500, Some("api_error"), "500 -> api_error"),
+        (503, Some("bot_challenge"), "503 -> bot_challenge"),
         (504, Some("socket_hang_up"), "504 -> socket_hang_up"),
         (529, Some("overloaded_error"), "529 -> overloaded_error"),
         (499, Some("client_error"), "499 -> client_error"),
@@ -1375,6 +1376,249 @@ async fn test_session_persistence_across_monitor_instances() {
     // Verify the state file contains the session data
     let file_content = tokio::fs::read_to_string(&state_path).await.unwrap();
     assert!(file_content.contains(test_session_id));
+}
+
+// ====== Bot Fight Phase 0 Validation Tests ======
+
+#[tokio::test]
+async fn test_bot_challenge_prevents_p95_contamination() {
+    let temp_dir = TempDir::new().unwrap();
+    let (mut monitor, http_client, clock) = create_test_monitor(&temp_dir);
+
+    // First establish clean baseline rolling stats with successful probes
+    http_client.add_success(200, 1000).await;
+    http_client.add_success(200, 1100).await;
+    http_client.add_success(200, 1200).await;
+    clock.add_timestamp("2025-01-25T10:30:00-08:00").await;
+    clock.add_timestamp("2025-01-25T10:30:01-08:00").await;
+    clock.add_timestamp("2025-01-25T10:30:02-08:00").await;
+
+    for _ in 0..3 {
+        let _ = monitor
+            .probe(ProbeMode::Green, test_credentials(), None)
+            .await
+            .unwrap();
+    }
+
+    let baseline_state = monitor.load_state().await.unwrap();
+    assert_eq!(baseline_state.network.rolling_totals.len(), 3);
+    assert_eq!(baseline_state.network.p95_latency_ms, 1200);
+    let baseline_rolling_totals = baseline_state.network.rolling_totals.clone();
+
+    // Now send bot challenge response (403) - should NOT contaminate rolling stats
+    http_client.add_success(403, 5000).await; // Very high latency that would skew P95
+    clock.add_timestamp("2025-01-25T10:30:03-08:00").await;
+
+    let bot_result = monitor
+        .probe(ProbeMode::Green, test_credentials(), None)
+        .await
+        .unwrap();
+
+    // Verify bot challenge was detected
+    assert_eq!(bot_result.metrics.last_http_status, 403);
+    assert_eq!(bot_result.metrics.error_type.as_deref(), Some("bot_challenge"));
+    assert!(matches!(bot_result.status, NetworkStatus::Error));
+
+    // CRITICAL: Verify rolling stats were NOT contaminated
+    let contamination_check_state = monitor.load_state().await.unwrap();
+    assert_eq!(
+        contamination_check_state.network.rolling_totals.len(),
+        3,
+        "Bot challenge should not add to rolling window"
+    );
+    assert_eq!(
+        contamination_check_state.network.p95_latency_ms, 1200,
+        "P95 should remain unchanged after bot challenge"
+    );
+    assert_eq!(
+        contamination_check_state.network.rolling_totals,
+        baseline_rolling_totals,
+        "Rolling totals should be identical after bot challenge"
+    );
+}
+
+#[tokio::test]
+async fn test_bot_challenge_503_prevents_p95_contamination() {
+    let temp_dir = TempDir::new().unwrap();
+    let (mut monitor, http_client, clock) = create_test_monitor(&temp_dir);
+
+    // Establish baseline with 4 successful samples
+    let baseline_latencies = vec![800, 900, 1000, 1100];
+    for (i, &latency) in baseline_latencies.iter().enumerate() {
+        http_client.add_success(200, latency).await;
+        clock
+            .add_timestamp(&format!("2025-01-25T10:3{}:00-08:00", i))
+            .await;
+    }
+
+    for _ in 0..baseline_latencies.len() {
+        let _ = monitor
+            .probe(ProbeMode::Green, test_credentials(), None)
+            .await
+            .unwrap();
+    }
+
+    let baseline_state = monitor.load_state().await.unwrap();
+    assert_eq!(baseline_state.network.rolling_totals.len(), 4);
+    assert_eq!(baseline_state.network.p95_latency_ms, 1100); // P95 of [800,900,1000,1100]
+
+    // Send 503 Service Unavailable (bot challenge) with extremely high latency
+    http_client.add_success(503, 8000).await; // 8 seconds - would massively contaminate P95
+    clock.add_timestamp("2025-01-25T10:34:00-08:00").await;
+
+    let bot_challenge_result = monitor
+        .probe(ProbeMode::Green, test_credentials(), None)
+        .await
+        .unwrap();
+
+    // Verify 503 was classified as bot challenge
+    assert_eq!(bot_challenge_result.metrics.last_http_status, 503);
+    assert_eq!(bot_challenge_result.metrics.error_type.as_deref(), Some("bot_challenge"));
+    assert!(matches!(bot_challenge_result.status, NetworkStatus::Error));
+
+    // Verify rolling statistics are protected from contamination
+    let protected_state = monitor.load_state().await.unwrap();
+    assert_eq!(
+        protected_state.network.rolling_totals.len(),
+        4,
+        "503 bot challenge should not increase rolling window size"
+    );
+    assert_eq!(
+        protected_state.network.p95_latency_ms, 1100,
+        "P95 should be protected from 503 bot challenge contamination"
+    );
+
+    // Verify recovery still works with clean 200 responses
+    http_client.add_success(200, 950).await;
+    clock.add_timestamp("2025-01-25T10:35:00-08:00").await;
+
+    let recovery_result = monitor
+        .probe(ProbeMode::Green, test_credentials(), None)
+        .await
+        .unwrap();
+
+    assert_eq!(recovery_result.metrics.last_http_status, 200);
+    assert!(recovery_result.metrics.error_type.is_none());
+    assert!(matches!(recovery_result.status, NetworkStatus::Healthy));
+
+    // Verify recovery sample was properly added to rolling stats
+    let recovery_state = monitor.load_state().await.unwrap();
+    assert_eq!(recovery_state.network.rolling_totals.len(), 5);
+    assert!(recovery_state.network.rolling_totals.contains(&950));
+}
+
+#[tokio::test]
+async fn test_rate_limit_without_bot_challenge_still_affects_p95() {
+    let temp_dir = TempDir::new().unwrap();
+    let (mut monitor, http_client, clock) = create_test_monitor(&temp_dir);
+
+    // Establish baseline
+    http_client.add_success(200, 1000).await;
+    clock.add_timestamp("2025-01-25T10:30:00-08:00").await;
+    
+    let _baseline = monitor
+        .probe(ProbeMode::Green, test_credentials(), None)
+        .await
+        .unwrap();
+
+    let baseline_state = monitor.load_state().await.unwrap();
+    assert_eq!(baseline_state.network.rolling_totals.len(), 1);
+    assert_eq!(baseline_state.network.p95_latency_ms, 1000);
+
+    // Send 429 rate limit (NOT classified as bot challenge in our implementation)
+    // This should still result in degraded status but not add to rolling stats
+    http_client.add_success(429, 2000).await;
+    clock.add_timestamp("2025-01-25T10:30:01-08:00").await;
+
+    let rate_limit_result = monitor
+        .probe(ProbeMode::Green, test_credentials(), None)
+        .await
+        .unwrap();
+
+    // Verify rate limit behavior
+    assert_eq!(rate_limit_result.metrics.last_http_status, 429);
+    assert_eq!(rate_limit_result.metrics.error_type.as_deref(), Some("rate_limit_error"));
+    assert!(matches!(rate_limit_result.status, NetworkStatus::Degraded));
+
+    // Rate limits (without bot classification) should not add to rolling stats either
+    let after_rate_limit_state = monitor.load_state().await.unwrap();
+    assert_eq!(
+        after_rate_limit_state.network.rolling_totals.len(),
+        1,
+        "429 rate limit should not add to rolling window"
+    );
+    assert_eq!(
+        after_rate_limit_state.network.p95_latency_ms, 1000,
+        "P95 should remain unchanged after rate limit"
+    );
+}
+
+#[tokio::test]
+async fn test_mixed_bot_challenges_and_successful_responses() {
+    let temp_dir = TempDir::new().unwrap();
+    let (mut monitor, http_client, clock) = create_test_monitor(&temp_dir);
+
+    // Complex scenario: mix successful responses with various bot challenges
+    let test_sequence = vec![
+        (200, 1000, "successful baseline"),
+        (403, 5000, "403 bot challenge - should be ignored"),
+        (200, 1100, "successful recovery"),
+        (503, 7000, "503 bot challenge - should be ignored"),
+        (200, 1200, "successful recovery 2"),
+        (403, 4500, "another 403 bot challenge - should be ignored"),
+        (200, 1050, "final successful response"),
+    ];
+
+    for (i, (status, latency, description)) in test_sequence.iter().enumerate() {
+        http_client.add_success(*status, *latency).await;
+        clock
+            .add_timestamp(&format!("2025-01-25T10:3{}:00-08:00", i))
+            .await;
+
+        let result = monitor
+            .probe(ProbeMode::Green, test_credentials(), None)
+            .await
+            .unwrap();
+
+        println!("Step {}: {} - Status: {:?}, Rolling len: {}", 
+                 i, description, result.status, result.rolling_len);
+    }
+
+    // Verify final state contains only successful responses in rolling stats
+    let final_state = monitor.load_state().await.unwrap();
+    
+    // Should have 4 successful responses: 1000, 1100, 1200, 1050
+    assert_eq!(
+        final_state.network.rolling_totals.len(),
+        4,
+        "Only successful responses should be in rolling window"
+    );
+
+    let expected_samples = vec![1000, 1100, 1200, 1050];
+    for &expected in &expected_samples {
+        assert!(
+            final_state.network.rolling_totals.contains(&expected),
+            "Rolling totals should contain successful sample: {}ms",
+            expected
+        );
+    }
+
+    // Verify no bot challenge latencies contaminated the stats
+    let contaminating_values = vec![5000, 7000, 4500];
+    for &contaminator in &contaminating_values {
+        assert!(
+            !final_state.network.rolling_totals.contains(&contaminator),
+            "Rolling totals should NOT contain bot challenge latency: {}ms",
+            contaminator
+        );
+    }
+
+    // P95 should be calculated from clean samples only: [1000, 1050, 1100, 1200]
+    // Using nearest-rank method: ceil(0.95 * 4) = ceil(3.8) = 4, index = 3 -> 1200ms
+    assert_eq!(
+        final_state.network.p95_latency_ms, 1200,
+        "P95 should be calculated from uncontaminated samples only"
+    );
 }
 
 // ====== Curl Phase Timing Tests ======

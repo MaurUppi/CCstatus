@@ -863,21 +863,30 @@ impl HttpMonitor {
     }
 
     /// Classify HTTP status codes into standard error types
+    /// Enhanced with bot challenge detection for Cloudflare protection
     fn classify_http_error(&self, status_code: u16) -> Option<String> {
         match status_code {
             200..=299 => None, // Success
             0 => Some("connection_error".to_string()),
             400 => Some("invalid_request_error".to_string()),
             401 => Some("authentication_error".to_string()),
-            403 => Some("permission_error".to_string()),
+            403 => {
+                // 403 can indicate bot challenge - enhanced detection needed
+                // For now, assume 403 with API endpoints is likely bot challenge
+                Some("bot_challenge".to_string())
+            },
             404 => Some("not_found_error".to_string()),
             413 => Some("request_too_large".to_string()),
             429 => Some("rate_limit_error".to_string()),
             500 => Some("api_error".to_string()),
+            503 => {
+                // 503 Service Unavailable can indicate bot challenge
+                Some("bot_challenge".to_string())
+            },
             504 => Some("socket_hang_up".to_string()),
             529 => Some("overloaded_error".to_string()),
             402 | 405..=412 | 414..=428 | 430..=499 => Some("client_error".to_string()),
-            501..=503 | 505..=528 | 530..=599 => Some("server_error".to_string()),
+            501..=502 | 505..=528 | 530..=599 => Some("server_error".to_string()),
             _ => Some("unknown_error".to_string()),
         }
     }
@@ -1005,9 +1014,11 @@ impl HttpMonitor {
                 )
             }
             ProbeMode::Green | ProbeMode::Cold => {
-                // GREEN/COLD: Update rolling stats if HTTP 200, determine status by thresholds
-                let (status, p95, rolling_len) = if metrics.last_http_status == 200 {
-                    // Add to rolling totals and recalculate P95
+                // GREEN/COLD: Update rolling stats ONLY if HTTP 200 AND no bot challenge
+                let is_bot_blocked = metrics.error_type.as_ref() == Some(&"bot_challenge".to_string());
+                
+                let (status, p95, rolling_len) = if metrics.last_http_status == 200 && !is_bot_blocked {
+                    // Safe to add to rolling statistics - HTTP 200 with no bot challenge
                     state.network.rolling_totals.push(metrics.latency_ms);
                     if state.network.rolling_totals.len() > 12 {
                         state.network.rolling_totals.remove(0);
@@ -1027,13 +1038,15 @@ impl HttpMonitor {
                     };
 
                     (status, new_p95, state.network.rolling_totals.len())
-                } else if metrics.last_http_status == 429 {
+                } else if metrics.last_http_status == 429 && !is_bot_blocked {
+                    // Rate limited but not bot blocked - degraded status
                     (
                         NetworkStatus::Degraded,
                         state.network.p95_latency_ms,
                         state.network.rolling_totals.len(),
                     )
                 } else {
+                    // Bot blocked or error - don't contaminate stats
                     (
                         NetworkStatus::Error,
                         state.network.p95_latency_ms,
