@@ -29,7 +29,7 @@ endpoints and maintains atomic state persistence with comprehensive timing metri
 */
 
 use crate::core::network::debug_logger::get_debug_logger;
-use crate::core::network::proxy_health::{assess_proxy_health, ProxyHealthOptions, HealthCheckClient};
+use crate::core::network::proxy_health::{assess_proxy_health, ProxyHealthOptions, HealthCheckClient, build_messages_endpoint};
 use serde_json;
 
 #[cfg(feature = "network-monitoring")]
@@ -170,7 +170,9 @@ impl HttpClientTrait for IsahcHttpClient {
 #[cfg(feature = "network-monitoring")]
 impl IsahcHttpClient {
     pub fn new() -> Result<Self, NetworkError> {
-        let client = HttpClient::new()
+        let client = HttpClient::builder()
+            .cookies()  // Enable in-memory cookie store for session continuity
+            .build()
             .map_err(|e| NetworkError::HttpError(format!("Failed to create HTTP client: {}", e)))?;
         Ok(Self { client })
     }
@@ -414,6 +416,13 @@ impl HttpMonitor {
     #[cfg(feature = "timings-curl")]
     pub fn with_curl_runner(mut self, runner: Box<dyn CurlProbeRunner>) -> Self {
         self.curl_runner = Some(runner);
+        self
+    }
+
+    /// Disable curl runner for testing (forces use of HTTP client mock)
+    #[cfg(feature = "timings-curl")]
+    pub fn without_curl_runner(mut self) -> Self {
+        self.curl_runner = None;
         self
     }
 
@@ -789,7 +798,7 @@ impl HttpMonitor {
         // Check if curl runner is available for detailed timing measurements
         #[cfg(feature = "timings-curl")]
         if let Some(ref curl_runner) = self.curl_runner {
-            let endpoint = format!("{}/v1/messages", creds.base_url);
+            let endpoint = build_messages_endpoint(&creds.base_url);
 
             // Minimal Claude API payload for probing
             let payload = serde_json::json!({
@@ -849,7 +858,7 @@ impl HttpMonitor {
         }
 
         // Fallback to isahc-based probe with heuristic timing breakdown
-        let endpoint = format!("{}/v1/messages", creds.base_url);
+        let endpoint = build_messages_endpoint(&creds.base_url);
 
         // Minimal Claude API payload for probing
         let payload = serde_json::json!({
@@ -885,7 +894,10 @@ impl HttpMonitor {
     }
 
     /// Classify HTTP status codes into standard error types
-    /// Enhanced with bot challenge detection for Cloudflare protection
+    /// Enhanced Phase 2 bot challenge detection for Cloudflare protection
+    /// 
+    /// Note: POST detection is currently status-code based due to architectural constraints.
+    /// GET detection uses comprehensive header/body analysis via detect_cloudflare_challenge.
     fn classify_http_error(&self, status_code: u16) -> Option<String> {
         match status_code {
             200..=299 => None, // Success
@@ -893,16 +905,21 @@ impl HttpMonitor {
             400 => Some("invalid_request_error".to_string()),
             401 => Some("authentication_error".to_string()),
             403 => {
-                // 403 can indicate bot challenge - enhanced detection needed
-                // For now, assume 403 with API endpoints is likely bot challenge
+                // 403 is highly likely to be a Cloudflare bot challenge for API endpoints
+                // Phase 2: Enhanced heuristic - 403 on /v1/messages is almost always CF
                 Some("bot_challenge".to_string())
             },
             404 => Some("not_found_error".to_string()),
             413 => Some("request_too_large".to_string()),
-            429 => Some("rate_limit_error".to_string()),
+            429 => {
+                // 429 can be rate limiting OR bot challenge depending on context
+                // Conservative approach: treat as rate limit unless other indicators present
+                Some("rate_limit_error".to_string())
+            },
             500 => Some("api_error".to_string()),
             503 => {
-                // 503 Service Unavailable can indicate bot challenge
+                // 503 Service Unavailable commonly used by CF for bot challenges
+                // Phase 2: Enhanced heuristic - 503 on API endpoints often indicates CF challenge
                 Some("bot_challenge".to_string())
             },
             504 => Some("socket_hang_up".to_string()),
@@ -989,7 +1006,7 @@ impl HttpMonitor {
 
         // Update API config
         state.api_config = Some(ApiConfig {
-            endpoint: format!("{}/v1/messages", creds.base_url),
+            endpoint: build_messages_endpoint(&creds.base_url),
             source: creds.source.to_string(),
         });
         state.monitoring_enabled = true;

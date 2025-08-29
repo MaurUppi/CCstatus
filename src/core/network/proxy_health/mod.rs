@@ -17,7 +17,7 @@ pub mod checker;
 // Re-export public API
 pub use client::{HealthCheckClient, HealthResponse};
 pub use config::{ProxyHealthOptions, ProxyHealthLevel};
-pub use url::{build_root_health_url, build_path_health_url, normalize_base_url, is_official_base_url};
+pub use url::{build_root_health_url, build_path_health_url, normalize_base_url, is_official_base_url, build_messages_endpoint};
 pub use parsing::{parse_health_response, validate_health_json};
 pub use checker::{assess_proxy_health, ProxyHealthOutcome, ProxyHealthError};
 // ProxyHealthDetail is exported from types.rs to avoid conflicts

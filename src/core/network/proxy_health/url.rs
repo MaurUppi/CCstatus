@@ -117,3 +117,31 @@ pub fn extract_host(url_str: &str) -> Result<String, UrlError> {
         .ok_or(UrlError::MissingHost)
 }
 
+/// Build messages API endpoint with URL normalization support
+/// 
+/// Automatically handles URL normalization and appends the appropriate messages path.
+/// Prevents duplication when base_url already ends with /v1 or /api/v1.
+///
+/// # Examples
+/// - `https://api.anthropic.com` → `https://api.anthropic.com/v1/messages`
+/// - `https://proxy.com/api` → `https://proxy.com/api/v1/messages`  
+/// - `https://proxy.com/` → `https://proxy.com/v1/messages`
+/// - `https://custom.com/api/v1/` → `https://custom.com/api/v1/messages` (avoids duplication)
+/// - `https://proxy.com/v1` → `https://proxy.com/v1/messages` (avoids duplication)
+///
+/// # Arguments
+/// * `base_url` - The base URL to build messages endpoint from
+///
+/// # Returns
+/// * Complete messages API endpoint URL
+pub fn build_messages_endpoint(base_url: &str) -> String {
+    let normalized = normalize_base_url(base_url);
+    
+    // Check if path already ends with /v1 or /api/v1 to avoid duplication
+    if normalized.ends_with("/v1") || normalized.ends_with("/api/v1") {
+        format!("{}/messages", normalized)
+    } else {
+        format!("{}/v1/messages", normalized)
+    }
+}
+

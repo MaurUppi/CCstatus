@@ -171,10 +171,10 @@ pub fn validate_health_json(body: &[u8]) -> bool {
 
 /// Detect Cloudflare challenge responses that indicate Unknown proxy health status
 /// 
-/// Uses heuristic detection for Cloudflare challenges:
-/// 1. HTTP 403/503 status codes with Cloudflare-specific headers
-/// 2. cf-mitigated: challenge header indicating active challenge
-/// 3. HTML content with challenge markers ("Just a moment...", "Checking your browser...")
+/// Enhanced Phase 2 detection for Cloudflare challenges:
+/// 1. HTTP 403/503/429 status codes with Cloudflare-specific headers
+/// 2. Headers: cf-mitigated: challenge (high-confidence), cf-ray, server: cloudflare, CF set-cookies
+/// 3. Body content: "Just a moment", "Enable JavaScript and cookies to continue", /cdn-cgi/challenge-platform
 ///
 /// # Arguments
 /// * `status_code` - HTTP response status code
@@ -197,11 +197,18 @@ pub fn detect_cloudflare_challenge(
     // Second check: Cloudflare-specific headers (case-insensitive)
     let has_cf_headers = headers.iter().any(|(key, value)| {
         let key_lower = key.to_lowercase();
+        let value_lower = value.to_lowercase();
         match key_lower.as_str() {
             "cf-ray" => true, // Cloudflare request ID
-            "cf-mitigated" => value.to_lowercase().contains("challenge"), // Active challenge
-            "server" => value.to_lowercase().contains("cloudflare"), // CF server header
+            "cf-mitigated" => value_lower.contains("challenge"), // Active challenge (high-confidence)
+            "server" => value_lower.contains("cloudflare"), // CF server header
             "cf-cache-status" => true, // Any CF cache status
+            "set-cookie" => {
+                // Cloudflare-specific cookies indicating bot mitigation
+                value_lower.contains("cf_clearance") || 
+                value_lower.contains("__cf_bm") ||
+                value_lower.contains("cf_chl_jschl_tk")
+            },
             _ => false,
         }
     });
@@ -215,6 +222,7 @@ pub fn detect_cloudflare_challenge(
         let body_lower = body_str.to_lowercase();
         let challenge_markers = [
             "just a moment",
+            "enable javascript and cookies to continue", // Phase 2 marker
             "checking your browser",
             "cloudflare security",
             "cf-browser-verification",
@@ -222,6 +230,9 @@ pub fn detect_cloudflare_challenge(
             "cf-challenge-form",
             "please wait while we verify",
             "ddos protection by cloudflare",
+            "/cdn-cgi/challenge-platform", // Phase 2 script marker
+            "browser security check",
+            "ray id:", // Common in CF error pages
         ];
         
         for marker in &challenge_markers {

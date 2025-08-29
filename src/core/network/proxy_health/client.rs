@@ -12,6 +12,9 @@ use isahc::config::{Configurable, RedirectPolicy};
 #[cfg(feature = "network-monitoring")]
 use isahc::{AsyncReadResponseExt, HttpClient, Request};
 
+#[cfg(feature = "timings-curl")]
+use curl::easy::Easy;
+
 /// Health check response containing full response data for validation
 #[derive(Debug, Clone)]
 pub struct HealthResponse {
@@ -100,6 +103,154 @@ impl HealthCheckClient for IsahcHealthCheckClient {
             duration,
             headers,
         })
+    }
+}
+
+#[cfg(feature = "timings-curl")]
+use crate::core::network::http_monitor::PhaseTimings;
+
+/// Curl-based GET runner for enhanced proxy health timing
+/// 
+/// Provides detailed phase timings (DNS, TCP, TLS, TTFB, Total) using curl
+/// with bot-fight mitigation headers and HTTP/2 support.
+#[cfg(feature = "timings-curl")]
+pub struct CurlGetRunner;
+
+#[cfg(feature = "timings-curl")]
+impl CurlGetRunner {
+    /// Execute GET request with detailed phase timing extraction
+    /// 
+    /// # Arguments
+    /// * `url` - Complete health check URL
+    /// * `timeout_ms` - Request timeout in milliseconds
+    /// 
+    /// # Returns
+    /// * `Ok((HealthResponse, PhaseTimings))` - Response with detailed timings
+    /// * `Err(String)` - Network error or curl failure
+    /// 
+    /// # Bot-Fight Enhancements
+    /// * HTTP/2 negotiation with TLS fallback
+    /// * Compression support (gzip, deflate, br)
+    /// * Claude CLI user agent
+    /// * In-memory cookie engine for session continuity
+    pub async fn get_health_with_timings(
+        &self,
+        url: &str,
+        timeout_ms: u32,
+    ) -> Result<(HealthResponse, PhaseTimings), String> {
+        
+        let url = url.to_string();
+        let result = tokio::task::spawn_blocking(move || -> Result<(HealthResponse, PhaseTimings), String> {
+            let mut handle = curl::easy::Easy::new();
+            
+            // Configure GET request with bot-fight enhancements
+            handle.url(&url).map_err(|e| format!("URL set failed: {}", e))?;
+            handle.get(true).map_err(|e| format!("GET method failed: {}", e))?; // GET method
+            handle.timeout(std::time::Duration::from_millis(timeout_ms as u64))
+                .map_err(|e| format!("Timeout set failed: {}", e))?;
+            handle.http_version(curl::easy::HttpVersion::V2TLS)
+                .map_err(|e| format!("HTTP/2 version failed: {}", e))?;
+            handle.accept_encoding("gzip, deflate, br")
+                .map_err(|e| format!("Accept-Encoding failed: {}", e))?;
+            handle.useragent("claude-cli/1.0.80 (external, cli)")
+                .map_err(|e| format!("User-Agent failed: {}", e))?;
+            handle.cookie_file("").map_err(|e| format!("Cookie engine failed: {}", e))?; // In-memory cookies
+            
+            // Set headers for bot-fight mitigation
+            let mut header_list = curl::easy::List::new();
+            header_list.append("Accept: application/json")
+                .map_err(|e| format!("Accept header failed: {}", e))?;
+            header_list.append("Accept-Language: en-US,en;q=0.9")
+                .map_err(|e| format!("Accept-Language header failed: {}", e))?;
+            handle.http_headers(header_list)
+                .map_err(|e| format!("Headers set failed: {}", e))?;
+            
+            // Capture response using Arc<Mutex<>> for thread-safe shared ownership
+            use std::sync::{Arc, Mutex};
+            
+            let response_body = Arc::new(Mutex::new(Vec::new()));
+            let response_headers = Arc::new(Mutex::new(std::collections::HashMap::new()));
+            
+            {
+                let body_clone = response_body.clone();
+                handle.write_function(move |data| {
+                    body_clone.lock().unwrap().extend_from_slice(data);
+                    Ok(data.len())
+                }).map_err(|e| format!("Write function failed: {}", e))?;
+            }
+            
+            {
+                let headers_clone = response_headers.clone();
+                handle.header_function(move |data| {
+                    if let Ok(header_str) = std::str::from_utf8(data) {
+                        if let Some((key, value)) = header_str.split_once(':') {
+                            headers_clone.lock().unwrap().insert(
+                                key.trim().to_lowercase(),
+                                value.trim().to_string()
+                            );
+                        }
+                    }
+                    true
+                }).map_err(|e| format!("Header function failed: {}", e))?;
+            }
+            
+            // Execute request
+            handle.perform().map_err(|e| format!("Request perform failed: {}", e))?;
+            
+            // Extract timings and status
+            let status_code = handle.response_code().map_err(|e| format!("Response code failed: {}", e))? as u16;
+            
+            // Extract phase timings from libcurl (in seconds, convert to ms)
+            let dns_time = handle.namelookup_time()
+                .map_err(|e| format!("DNS time failed: {}", e))?
+                .as_secs_f64();
+            let connect_time = handle.connect_time()
+                .map_err(|e| format!("Connect time failed: {}", e))?
+                .as_secs_f64();
+            let appconnect_time = handle.appconnect_time()
+                .map_err(|e| format!("App connect time failed: {}", e))?
+                .as_secs_f64();
+            let starttransfer_time = handle.starttransfer_time()
+                .map_err(|e| format!("Start transfer time failed: {}", e))?
+                .as_secs_f64();
+            let total_time = handle.total_time()
+                .map_err(|e| format!("Total time failed: {}", e))?
+                .as_secs_f64();
+            
+            // Calculate phase durations and convert to milliseconds
+            let dns_ms = (dns_time * 1000.0).max(0.0) as u32;
+            let tcp_ms = ((connect_time - dns_time).max(0.0) * 1000.0) as u32;
+            let tls_ms = ((appconnect_time - connect_time).max(0.0) * 1000.0) as u32;
+            let ttfb_ms = ((starttransfer_time - appconnect_time).max(0.0) * 1000.0) as u32;
+            let total_ms = (total_time * 1000.0).max(0.0) as u32;
+            
+            // Extract data from Arc<Mutex<>>
+            let final_body = response_body.lock().unwrap().clone();
+            let final_headers = response_headers.lock().unwrap().clone();
+            
+            // Build response and timings
+            let health_response = HealthResponse {
+                status_code,
+                body: final_body,
+                duration: std::time::Duration::from_secs_f64(total_time),
+                headers: final_headers,
+            };
+            
+            let phase_timings = PhaseTimings {
+                status: status_code,
+                dns_ms,
+                tcp_ms,
+                tls_ms,
+                ttfb_ms,
+                total_ms,
+            };
+            
+            Ok((health_response, phase_timings))
+        }).await
+        .map_err(|e| format!("Curl GET task failed: {}", e))?
+        .map_err(|e| e)?;
+        
+        Ok(result)
     }
 }
 

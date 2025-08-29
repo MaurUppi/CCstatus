@@ -159,6 +159,12 @@ async fn test_proxy_health_integration_healthy() {
         .with_http_client(Box::new(MockHttpClient))
         .with_health_client(health_client)
         .with_clock(Box::new(MockClock::new()));
+        
+    // Disable curl runner when timings-curl feature is enabled to ensure mock is used
+    #[cfg(feature = "timings-curl")]
+    {
+        monitor = monitor.without_curl_runner();
+    }
 
     // Execute probe with proxy credentials
     let _result = monitor.probe(
@@ -202,6 +208,12 @@ async fn test_proxy_health_integration_degraded() {
         .with_http_client(Box::new(MockHttpClient))
         .with_health_client(health_client)
         .with_clock(Box::new(MockClock::new()));
+        
+    // Disable curl runner when timings-curl feature is enabled to ensure mock is used
+    #[cfg(feature = "timings-curl")]
+    {
+        monitor = monitor.without_curl_runner();
+    }
 
     // Execute probe
     let result = monitor.probe(
@@ -236,6 +248,12 @@ async fn test_proxy_health_integration_unhealthy() {
         .with_http_client(Box::new(MockHttpClient))
         .with_health_client(health_client)
         .with_clock(Box::new(MockClock::new()));
+        
+    // Disable curl runner when timings-curl feature is enabled to ensure mock is used
+    #[cfg(feature = "timings-curl")]
+    {
+        monitor = monitor.without_curl_runner();
+    }
 
     // Execute probe
     let _result = monitor.probe(
@@ -270,6 +288,12 @@ async fn test_proxy_health_integration_no_endpoint() {
         .with_http_client(Box::new(MockHttpClient))
         .with_health_client(health_client)
         .with_clock(Box::new(MockClock::new()));
+        
+    // Disable curl runner when timings-curl feature is enabled to ensure mock is used
+    #[cfg(feature = "timings-curl")]
+    {
+        monitor = monitor.without_curl_runner();
+    }
 
     // Execute probe
     let _result = monitor.probe(
@@ -301,6 +325,12 @@ async fn test_official_anthropic_endpoint_skips_proxy_check() {
         .with_http_client(Box::new(MockHttpClient))
         .with_health_client(health_client)
         .with_clock(Box::new(MockClock::new()));
+        
+    // Disable curl runner when timings-curl feature is enabled to ensure mock is used
+    #[cfg(feature = "timings-curl")]
+    {
+        monitor = monitor.without_curl_runner();
+    }
 
     // Execute probe with official credentials
     let result = monitor.probe(
@@ -395,6 +425,12 @@ async fn test_error_handling_in_integration() {
         .with_http_client(Box::new(MockHttpClient))
         .with_health_client(health_client)
         .with_clock(Box::new(MockClock::new()));
+        
+    // Disable curl runner when timings-curl feature is enabled to ensure mock is used
+    #[cfg(feature = "timings-curl")]
+    {
+        monitor = monitor.without_curl_runner();
+    }
 
     // Execute probe
     let result = monitor.probe(
