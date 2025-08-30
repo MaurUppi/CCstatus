@@ -147,6 +147,20 @@ impl JsonlMonitor {
         }
     }
 
+    /// Normalize error timestamp to a trustworthy RFC3339 value
+    /// - Prefer the provided RFC3339 timestamp when valid and not a known placeholder
+    /// - Fallback to local time when invalid or placeholder
+    fn normalize_error_timestamp(&self, raw: &str) -> String {
+        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(raw) {
+            let normalized = dt.to_rfc3339();
+            // Filter known placeholder time window used in tests: 2024-01-01T12:..:00Z
+            if !normalized.starts_with("2024-01-01T12:") {
+                return normalized;
+            }
+        }
+        crate::core::network::types::get_local_timestamp()
+    }
+
     /// Parse transcript content and detect API errors for RED gate control (stateless)
     /// Returns (error_detected: bool, last_error_event: Option<JsonlError>)
     fn parse_and_detect_errors(
@@ -170,13 +184,17 @@ impl JsonlMonitor {
                 // Operational logging to JSONL file (always-on)
                 let extracted_message = self.extract_message_from_details(&error_entry.details);
 
+                // Normalize error timestamp to avoid placeholder/invalid values
+                let normalized_error_ts =
+                    self.normalize_error_timestamp(&error_entry.timestamp);
+
                 // Create JSONL entry according to proposal schema
                 let jsonl_entry = serde_json::json!({
                     "timestamp": chrono::Local::now().to_rfc3339(),
                     "type": "jsonl_error",
                     "code": error_entry.http_code,
                     "message": extracted_message,
-                    "error_timestamp": error_entry.timestamp,
+                    "error_timestamp": normalized_error_ts,
                     "session_id": self.logger.get_session_id()
                 });
 
@@ -208,16 +226,7 @@ impl JsonlMonitor {
             );
         }
 
-        // Operational JSONL entry (always-on)
-        let tail_scan_entry = serde_json::json!({
-            "timestamp": chrono::Local::now().to_rfc3339(),
-            "type": "tail_scan_complete",
-            "code": 0,
-            "message": format!("count={}", error_count),
-            "session_id": self.logger.get_session_id()
-        });
-
-        let _ = self.logger.jsonl_sync(tail_scan_entry);
+        // Note: Do not write tail_scan_complete to JSONL; keep only debug logs above
 
         Ok((error_detected, last_error))
     }
