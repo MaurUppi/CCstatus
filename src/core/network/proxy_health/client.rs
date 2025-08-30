@@ -243,6 +243,7 @@ impl CurlGetRunner {
                 tls_ms,
                 ttfb_ms,
                 total_ms,
+                total_ttfb_ms: dns_ms + tcp_ms + tls_ms + ttfb_ms,
             };
             
             Ok((health_response, phase_timings))

@@ -236,6 +236,7 @@ impl FakeCurlRunner {
             tcp_ms,
             tls_ms,
             ttfb_ms,
+            total_ttfb_ms: dns_ms + tcp_ms + tls_ms + ttfb_ms, // End-to-end TTFB
             total_ms,
         };
         self.add_response(Ok(phase_timings)).await;
@@ -266,6 +267,7 @@ impl CurlProbeRunner for FakeCurlRunner {
                 tcp_ms: 30,
                 tls_ms: 35,
                 ttfb_ms: 1500,  // ttfb_ms becomes latency_ms in the outcome
+                total_ttfb_ms: 25 + 30 + 35 + 1500, // End-to-end TTFB
                 total_ms: 1590, // total should be sum of all phases (25+30+35+1500)
             })
         })
