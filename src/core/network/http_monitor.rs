@@ -63,7 +63,8 @@ pub struct PhaseTimings {
     pub dns_ms: u32,
     pub tcp_ms: u32,
     pub tls_ms: u32,
-    pub ttfb_ms: u32,
+    pub ttfb_ms: u32,        // ServerTTFB (isolated server processing time)
+    pub total_ttfb_ms: u32,  // TotalTTFB (end-to-end first byte time)
     pub total_ms: u32,
 }
 
@@ -174,15 +175,8 @@ impl HttpClientTrait for IsahcHttpClient {
         // Generate timing breakdown with stable numeric format
         let total_ms = ttfb_duration.as_millis() as u32;
 
-        // Keep breakdown numeric and parseable - always DNS|TCP|TLS|TTFB|Total format
-        // For now, we don't have individual timing phases from isahc, so estimate
-        let dns_ms = 0u32; // Connection reuse = 0ms for DNS
-        let tcp_ms = 0u32; // Connection reuse = 0ms for TCP
-        let tls_ms = 0u32; // Connection reuse = 0ms for TLS
-        let breakdown = format!(
-            "DNS:{}ms|TCP:{}ms|TLS:{}ms|TTFB:{}ms|Total:{}ms",
-            dns_ms, tcp_ms, tls_ms, total_ms, total_ms
-        );
+        // Simplified breakdown format for isahc - just Total time
+        let breakdown = format!("Total:{}ms", total_ms);
 
         Ok((status, ttfb_duration, breakdown, response_headers, http_version))
     }
@@ -320,6 +314,7 @@ impl CurlProbeRunner for RealCurlRunner {
             let tcp_ms = ((connect_time - dns_time).max(0.0) * 1000.0) as u32;
             let tls_ms = ((appconnect_time - connect_time).max(0.0) * 1000.0) as u32;
             let ttfb_ms = ((starttransfer_time - appconnect_time).max(0.0) * 1000.0) as u32;
+            let total_ttfb_ms = (starttransfer_time * 1000.0).max(0.0) as u32; // End-to-end TTFB
             let total_ms = (total_time * 1000.0).max(0.0) as u32;
 
             // Get response status
@@ -334,6 +329,7 @@ impl CurlProbeRunner for RealCurlRunner {
                 tcp_ms,
                 tls_ms,
                 ttfb_ms,
+                total_ttfb_ms,
                 total_ms,
             })
         })
@@ -630,13 +626,23 @@ impl HttpMonitor {
                 debug_logger
                     .error("HttpMonitor", &format!("Probe failed: {}", err))
                     .await;
+                
+                let elapsed_ms = probe_start.elapsed().as_millis();
+                
+                // Connection error breakdown - format based on feature
+                #[cfg(feature = "timings-curl")]
+                let breakdown = format!(
+                    "DNS:0ms|TCP:0ms|TLS:0ms|ServerTTFB:0ms/TotalTTFB:0ms|Total:{}ms",
+                    elapsed_ms
+                );
+                
+                #[cfg(not(feature = "timings-curl"))]
+                let breakdown = format!("Total:{}ms", elapsed_ms);
+                
                 (
                     0,
-                    probe_start.elapsed().as_millis() as u32,
-                    format!(
-                        "DNS:0ms|TCP:0ms|TLS:0ms|TTFB:0ms|Total:{}ms",
-                        probe_start.elapsed().as_millis()
-                    ),
+                    elapsed_ms as u32,
+                    breakdown,
                     Some("connection_error".to_string()),
                     None, // No HTTP version available for connection errors
                 )
@@ -859,14 +865,31 @@ impl HttpMonitor {
             {
                 Ok(phase_timings) => {
                     let duration = Duration::from_millis(phase_timings.ttfb_ms as u64);
-                    let breakdown = format!(
-                        "DNS:{}ms|TCP:{}ms|TLS:{}ms|TTFB:{}ms|Total:{}ms",
-                        phase_timings.dns_ms,
-                        phase_timings.tcp_ms,
-                        phase_timings.tls_ms,
-                        phase_timings.ttfb_ms,
-                        phase_timings.total_ms
-                    );
+                    
+                    // Pre-determine if likely degraded/error for breakdown format
+                    let is_degraded_or_error = phase_timings.status >= 400 || phase_timings.status == 0;
+                    
+                    let breakdown = if is_degraded_or_error {
+                        format!(
+                            "DNS:{}ms|TCP:{}ms|TLS:{}ms|ServerTTFB:{}ms/TotalTTFB:{}ms|Total:{}ms",
+                            phase_timings.dns_ms,
+                            phase_timings.tcp_ms,
+                            phase_timings.tls_ms,
+                            phase_timings.ttfb_ms,
+                            phase_timings.total_ttfb_ms,
+                            phase_timings.total_ms
+                        )
+                    } else {
+                        format!(
+                            "DNS:{}ms|TCP:{}ms|TLS:{}ms|TTFB:{}ms|Total:{}ms",
+                            phase_timings.dns_ms,
+                            phase_timings.tcp_ms,
+                            phase_timings.tls_ms,
+                            phase_timings.ttfb_ms,
+                            phase_timings.total_ms
+                        )
+                    };
+                    
                     // Note: curl branch doesn't capture response headers in current implementation
                     let empty_headers = std::collections::HashMap::new();
                     // HTTP/2 is typically negotiated with curl when using HTTP/2 TLS version
@@ -988,12 +1011,7 @@ impl HttpMonitor {
 
         #[cfg(not(feature = "timings-curl"))]
         {
-            // Keep breakdown numeric; log reuse heuristics (only for heuristic path)
-            let breakdown_numeric = format!(
-                "DNS:0ms|TCP:0ms|TLS:0ms|TTFB:{}ms|Total:{}ms",
-                metrics.latency_ms, metrics.latency_ms
-            );
-
+            // Isahc path: use simplified Total format (already set in isahc execute_request)
             let debug_logger = get_debug_logger();
             debug_logger
                 .debug(
@@ -1005,9 +1023,9 @@ impl HttpMonitor {
                 )
                 .await;
 
-            // Update immediate metrics with computed heuristic breakdown
+            // Update immediate metrics with isahc breakdown (already in Total:Xms format)
             state.network.latency_ms = metrics.latency_ms;
-            state.network.breakdown = breakdown_numeric;
+            state.network.breakdown = metrics.breakdown.clone();
             state.network.last_http_status = metrics.last_http_status;
             state.network.error_type = metrics.error_type.clone();
             state.network.breakdown_source = Some(breakdown_source.to_string());
