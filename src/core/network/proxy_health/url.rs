@@ -16,7 +16,7 @@ pub enum UrlError {
 }
 
 /// Build root-based health URL: scheme://host[:port]/health  
-/// 
+///
 /// This is the recommended approach as proxy health endpoints are typically
 /// exposed at the root level regardless of API path configuration.
 ///
@@ -33,11 +33,11 @@ pub enum UrlError {
 /// * `Err(UrlError)` - Invalid URL or missing host
 pub fn build_root_health_url(base_url: &str) -> Result<String, UrlError> {
     let url = Url::parse(base_url)?;
-    
+
     let host = url.host_str().ok_or(UrlError::MissingHost)?;
-    
+
     let mut root_url = format!("{}://{}", url.scheme(), host);
-    
+
     // Include port if present and not default for scheme
     if let Some(port) = url.port() {
         let default_port = match url.scheme() {
@@ -49,13 +49,13 @@ pub fn build_root_health_url(base_url: &str) -> Result<String, UrlError> {
             root_url.push_str(&format!(":{}", port));
         }
     }
-    
+
     root_url.push_str("/health");
     Ok(root_url)
 }
 
 /// Build path-based health URL: normalize(base_url) + "/health"
-/// 
+///
 /// This is the current behavior, maintained for backward compatibility.
 /// Less reliable than root-based approach as it depends on API path structure.
 ///
@@ -101,7 +101,7 @@ pub fn is_official_base_url(base_url: &str) -> bool {
 }
 
 /// Extract base host from URL for redirect validation
-/// 
+///
 /// Used to ensure redirect locations point to the same host for security.
 ///
 /// # Arguments
@@ -118,7 +118,7 @@ pub fn extract_host(url_str: &str) -> Result<String, UrlError> {
 }
 
 /// Build messages API endpoint with URL normalization support
-/// 
+///
 /// Automatically handles URL normalization and appends the appropriate messages path.
 /// Prevents duplication when base_url already ends with /v1 or /api/v1.
 ///
@@ -136,7 +136,7 @@ pub fn extract_host(url_str: &str) -> Result<String, UrlError> {
 /// * Complete messages API endpoint URL
 pub fn build_messages_endpoint(base_url: &str) -> String {
     let normalized = normalize_base_url(base_url);
-    
+
     // Check if path already ends with /v1 or /api/v1 to avoid duplication
     if normalized.ends_with("/v1") || normalized.ends_with("/api/v1") {
         format!("{}/messages", normalized)
@@ -144,4 +144,3 @@ pub fn build_messages_endpoint(base_url: &str) -> String {
         format!("{}/v1/messages", normalized)
     }
 }
-

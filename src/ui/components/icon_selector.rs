@@ -309,8 +309,12 @@ impl IconSelectorComponent {
             .style(Style::default().fg(Color::Gray));
 
         match style {
-            IconStyle::Plain => f.render_stateful_widget(scrollbar, inner, &mut self.plain_scrollbar_state),
-            IconStyle::NerdFont => f.render_stateful_widget(scrollbar, inner, &mut self.nerd_scrollbar_state),
+            IconStyle::Plain => {
+                f.render_stateful_widget(scrollbar, inner, &mut self.plain_scrollbar_state)
+            }
+            IconStyle::NerdFont => {
+                f.render_stateful_widget(scrollbar, inner, &mut self.nerd_scrollbar_state)
+            }
         }
     }
 
@@ -514,4 +518,3 @@ fn get_nerd_font_icons() -> Vec<IconInfo> {
         },
     ]
 }
-

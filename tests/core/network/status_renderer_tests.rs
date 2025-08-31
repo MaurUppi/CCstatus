@@ -23,7 +23,8 @@ fn test_healthy_status_rendering() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
 
@@ -48,7 +49,8 @@ fn test_degraded_status_rendering() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
 
@@ -76,7 +78,8 @@ fn test_degraded_rate_limit_rendering() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
 
@@ -104,7 +107,8 @@ fn test_error_status_rendering() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
 
@@ -132,7 +136,8 @@ fn test_error_timeout_rendering() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
 
@@ -159,7 +164,8 @@ fn test_error_http_status_rendering() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
 
@@ -186,7 +192,8 @@ fn test_unknown_status_rendering() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Unknown, &metrics);
 
@@ -210,7 +217,8 @@ fn test_empty_breakdown_handling() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
 
@@ -238,7 +246,8 @@ fn test_no_error_type_handling() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
 
@@ -266,7 +275,8 @@ fn test_edge_case_zero_p95() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
 
@@ -291,7 +301,8 @@ fn test_very_high_latencies() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
 
@@ -316,7 +327,8 @@ fn test_special_characters_in_error_type() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
 
@@ -345,7 +357,8 @@ fn test_long_breakdown_strings() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
 
@@ -410,7 +423,8 @@ fn test_line_wrapping_behavior() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
 
@@ -446,7 +460,8 @@ fn test_no_line_wrapping_for_short_content() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
 
@@ -476,7 +491,8 @@ fn test_zero_p95_in_degraded_status() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
 
@@ -503,7 +519,8 @@ fn test_empty_breakdown_in_error_status() {
         proxy_healthy: None,
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
 
@@ -531,7 +548,8 @@ fn test_proxy_healthy_prefix_none() {
         proxy_healthy: None, // Official endpoint, no proxy health check
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
 
@@ -556,7 +574,8 @@ fn test_proxy_healthy_prefix_true() {
         proxy_healthy: Some(true), // Healthy proxy
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
 
@@ -581,7 +600,8 @@ fn test_proxy_unhealthy_prefix_false() {
         proxy_healthy: Some(false), // Unhealthy proxy
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
 
@@ -607,7 +627,8 @@ fn test_proxy_healthy_with_error_status() {
         proxy_healthy: Some(true), // Healthy proxy but main API erroring
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
 
@@ -631,7 +652,8 @@ fn test_proxy_unhealthy_with_unknown_status() {
         proxy_healthy: Some(false), // Unhealthy proxy
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Unknown, &metrics);
 
@@ -657,7 +679,8 @@ fn test_proxy_health_with_line_wrapping() {
         proxy_healthy: Some(false), // Unhealthy proxy with long breakdown
         proxy_health_level: None,
         proxy_health_detail: None,
-        http_version: None,    };
+        http_version: None,
+    };
 
     let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
 
@@ -673,7 +696,7 @@ fn test_proxy_health_with_line_wrapping() {
 #[test]
 fn test_bot_challenge_both_blocked() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 1500,
         breakdown: "DNS:25ms|TCP:30ms|TLS:35ms|TTFB:1410ms|Total:1500ms".to_string(),
@@ -693,7 +716,7 @@ fn test_bot_challenge_both_blocked() {
     // Since render_bot_challenge is private, we need to test it through the main render_status method
     // This would require error_type = "bot_challenge" and specific conditions to trigger shield rendering
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
-    
+
     // Should contain bot challenge indicator (🛡️) and timing info
     assert!(result.contains("🛡️"));
 }
@@ -701,14 +724,14 @@ fn test_bot_challenge_both_blocked() {
 #[test]
 fn test_bot_challenge_get_only_with_zero_p95() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 800,
         breakdown: "DNS:25ms|TCP:30ms|TLS:35ms|TTFB:710ms|Total:800ms".to_string(),
         last_http_status: 429,
         error_type: Some("bot_challenge".to_string()),
         rolling_totals: vec![800], // Only one sample, so P95 should be 0
-        p95_latency_ms: 0, // Zero P95 due to insufficient samples
+        p95_latency_ms: 0,         // Zero P95 due to insufficient samples
         connection_reused: None,
         breakdown_source: None,
         proxy_healthy: None,
@@ -718,7 +741,7 @@ fn test_bot_challenge_get_only_with_zero_p95() {
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
-    
+
     // Should show bot challenge with P95:N/A when P95 is zero
     assert!(result.contains("🛡️"));
     // For direct testing, we'd need access to render_bot_challenge method
@@ -728,7 +751,7 @@ fn test_bot_challenge_get_only_with_zero_p95() {
 #[test]
 fn test_bot_challenge_post_only_high_latency() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 9999, // Very high latency
         breakdown: "DNS:100ms|TCP:200ms|TLS:300ms|TTFB:9399ms|Total:9999ms".to_string(),
@@ -745,7 +768,7 @@ fn test_bot_challenge_post_only_high_latency() {
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
-    
+
     // Should handle very high latencies in bot challenge scenarios
     assert!(result.contains("🛡️"));
     assert!(result.contains("9999ms")); // Should show the high latency
@@ -754,7 +777,7 @@ fn test_bot_challenge_post_only_high_latency() {
 #[test]
 fn test_bot_challenge_edge_case_empty_breakdown() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 1200,
         breakdown: "".to_string(), // Empty breakdown
@@ -771,7 +794,7 @@ fn test_bot_challenge_edge_case_empty_breakdown() {
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
-    
+
     // Should handle empty breakdown gracefully in bot challenge
     assert!(result.contains("🛡️"));
 }
@@ -779,7 +802,7 @@ fn test_bot_challenge_edge_case_empty_breakdown() {
 #[test]
 fn test_bot_challenge_neither_blocked_fallback() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 500,
         breakdown: "Total:500ms".to_string(),
@@ -796,7 +819,7 @@ fn test_bot_challenge_neither_blocked_fallback() {
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
-    
+
     // Should show fallback bot challenge message
     assert!(result.contains("🛡️"));
 }
@@ -804,7 +827,7 @@ fn test_bot_challenge_neither_blocked_fallback() {
 #[test]
 fn test_shield_rendering_with_proxy_health_combination() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 600,
         breakdown: "DNS:10ms|TCP:15ms|TLS:20ms|TTFB:555ms|Total:600ms".to_string(),
@@ -821,7 +844,7 @@ fn test_shield_rendering_with_proxy_health_combination() {
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
-    
+
     // Should show bot challenge shield with POST-only pattern (Total: XXms)
     assert!(result.contains("🛡️")); // Bot challenge shield
     assert!(result.contains("Total: 600ms")); // POST bot challenge shows total time
@@ -831,7 +854,7 @@ fn test_shield_rendering_with_proxy_health_combination() {
 #[test]
 fn test_shield_minimal_latency_values() {
     let renderer = StatusRenderer::new();
-    
+
     let metrics = NetworkMetrics {
         latency_ms: 1, // Minimal latency
         breakdown: "Total:1ms".to_string(),
@@ -848,7 +871,7 @@ fn test_shield_minimal_latency_values() {
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
-    
+
     // Should handle minimal timing values
     assert!(result.contains("🛡️"));
     assert!(result.contains("1ms")); // Should show the minimal latency
@@ -857,7 +880,7 @@ fn test_shield_minimal_latency_values() {
 #[test]
 fn test_post_bot_challenge_breakdown_suppression_with_timings_curl() {
     let renderer = StatusRenderer::new();
-    
+
     // Simulate detailed breakdown that would be generated by timings-curl feature
     let metrics = NetworkMetrics {
         latency_ms: 2500,
@@ -876,24 +899,39 @@ fn test_post_bot_challenge_breakdown_suppression_with_timings_curl() {
     };
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics);
-    
+
     // Verify breakdown suppression: should show shield with total time only
     assert!(result.contains("🛡️"));
     assert!(result.contains("Total: 2500ms"));
-    
+
     // Critical: Verify detailed breakdown components are NOT shown
-    assert!(!result.contains("DNS:50ms"), "DNS timing should be suppressed");
-    assert!(!result.contains("TCP:75ms"), "TCP timing should be suppressed");
-    assert!(!result.contains("TLS:100ms"), "TLS timing should be suppressed");
-    assert!(!result.contains("TTFB:2275ms"), "TTFB timing should be suppressed");
-    
+    assert!(
+        !result.contains("DNS:50ms"),
+        "DNS timing should be suppressed"
+    );
+    assert!(
+        !result.contains("TCP:75ms"),
+        "TCP timing should be suppressed"
+    );
+    assert!(
+        !result.contains("TLS:100ms"),
+        "TLS timing should be suppressed"
+    );
+    assert!(
+        !result.contains("TTFB:2275ms"),
+        "TTFB timing should be suppressed"
+    );
+
     // Verify no individual timing components leak through
     assert!(!result.contains("DNS:"), "No DNS timing should appear");
     assert!(!result.contains("TCP:"), "No TCP timing should appear");
     assert!(!result.contains("TLS:"), "No TLS timing should appear");
     assert!(!result.contains("TTFB:"), "No TTFB timing should appear");
-    
+
     // Should be exactly "🛡️ Total: 2500ms" format for POST-only bot challenge
-    assert_eq!(result, "🛡️ Total: 2500ms", 
-           "POST bot challenge should show exactly '🛡️ Total: 2500ms', got: '{}'", result);
+    assert_eq!(
+        result, "🛡️ Total: 2500ms",
+        "POST bot challenge should show exactly '🛡️ Total: 2500ms', got: '{}'",
+        result
+    );
 }

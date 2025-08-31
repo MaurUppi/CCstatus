@@ -139,4 +139,3 @@ pub fn check_for_updates() -> Result<Option<GitHubRelease>, Box<dyn std::error::
         Err(format!("HTTP {}", response.status()).into())
     }
 }
-

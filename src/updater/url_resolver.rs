@@ -1,10 +1,10 @@
 /// URL resolver for manifest fetching with geographic optimization
-/// 
+///
 /// For China users: Try hk.gh-proxy.com first, fallback to original, then give up
 /// For non-China users: Use original URL directly
 pub fn resolve_manifest_url(is_china: bool) -> Vec<String> {
     let original_url = "https://raw.githubusercontent.com/MaurUppi/CCstatus/main/latest.json";
-    
+
     if is_china {
         vec![
             format!("https://hk.gh-proxy.com/{}", original_url),
@@ -30,14 +30,14 @@ where
     F: FnMut(&str) -> Result<T, E>,
 {
     let mut last_error = None;
-    
+
     for url in urls {
         match fetch_fn(url) {
             Ok(result) => return Ok(result),
             Err(e) => last_error = Some(e),
         }
     }
-    
+
     // If we get here, all URLs failed
     match last_error {
         Some(e) => Err(e),
@@ -102,9 +102,7 @@ mod tests {
             "https://fail2.com".to_string(),
         ];
 
-        let result: Result<&str, &str> = try_urls_in_sequence(&urls, |_url| {
-            Err("Always fails")
-        });
+        let result: Result<&str, &str> = try_urls_in_sequence(&urls, |_url| Err("Always fails"));
 
         assert_eq!(result, Err("Always fails"));
     }

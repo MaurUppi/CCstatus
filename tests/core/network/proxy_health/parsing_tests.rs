@@ -1,4 +1,4 @@
-/*! 
+/*!
 Tests for proxy health JSON parsing module.
 
 Extracted from src/core/network/proxy_health/parsing.rs #[cfg(test)] module.
@@ -16,29 +16,29 @@ fn test_parse_status_field() {
         parse_health_response(br#"{"status": "healthy"}"#),
         Some(ProxyHealthLevel::Healthy)
     );
-    
+
     assert_eq!(
         parse_health_response(br#"{"STATUS": "OK"}"#),
         Some(ProxyHealthLevel::Healthy)
     );
-    
+
     // Degraded variants
     assert_eq!(
         parse_health_response(br#"{"status": "unhealthy"}"#),
         Some(ProxyHealthLevel::Degraded)
     );
-    
+
     assert_eq!(
         parse_health_response(br#"{"status": "warning"}"#),
         Some(ProxyHealthLevel::Degraded)
     );
-    
+
     // Bad variants
     assert_eq!(
         parse_health_response(br#"{"status": "error"}"#),
         Some(ProxyHealthLevel::Bad)
     );
-    
+
     assert_eq!(
         parse_health_response(br#"{"status": "down"}"#),
         Some(ProxyHealthLevel::Bad)
@@ -51,7 +51,7 @@ fn test_parse_healthy_field() {
         parse_health_response(br#"{"healthy": true}"#),
         Some(ProxyHealthLevel::Healthy)
     );
-    
+
     assert_eq!(
         parse_health_response(br#"{"HEALTHY": false}"#),
         Some(ProxyHealthLevel::Degraded)
@@ -72,7 +72,7 @@ fn test_parse_mixed_schema() {
         parse_health_response(components_json),
         Some(ProxyHealthLevel::Healthy)
     );
-    
+
     // Error indicators
     assert_eq!(
         parse_health_response(br#"{"error": "connection failed"}"#),
@@ -87,19 +87,19 @@ fn test_invalid_cases() {
         parse_health_response(b"not json"),
         Some(ProxyHealthLevel::Bad)
     );
-    
-    // Empty response  
+
+    // Empty response
     assert_eq!(parse_health_response(b""), None);
-    
+
     // Whitespace only
     assert_eq!(parse_health_response(b"   \n\t  "), None);
-    
+
     // Not an object
     assert_eq!(
         parse_health_response(br#""healthy""#),
         Some(ProxyHealthLevel::Bad)
     );
-    
+
     // Unknown schema
     assert_eq!(
         parse_health_response(br#"{"foo": "bar"}"#),
@@ -112,7 +112,7 @@ fn test_validate_health_json_legacy() {
     // Legacy function should only accept status="healthy"
     assert!(validate_health_json(br#"{"status": "healthy"}"#));
     assert!(validate_health_json(br#"{"STATUS": "HEALTHY"}"#));
-    
+
     assert!(!validate_health_json(br#"{"status": "ok"}"#));
     assert!(!validate_health_json(br#"{"healthy": true}"#));
     assert!(!validate_health_json(br#"{"status": "unhealthy"}"#));

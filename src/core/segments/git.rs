@@ -92,7 +92,7 @@ impl GitSegment {
             .current_dir(working_dir)
             .output()
             .ok()?;
-        
+
         Self::process_git_output(output)
     }
 

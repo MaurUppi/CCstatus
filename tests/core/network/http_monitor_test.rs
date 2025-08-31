@@ -13,8 +13,8 @@ Tests cover all major functionality including:
 - Mock dependencies for isolated testing
 */
 
-use ccstatus::core::network::*;
 use ccstatus::core::network::proxy_health::{HealthCheckClient, HealthResponse};
+use ccstatus::core::network::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -34,16 +34,47 @@ enum MockHttpMethod {
 /// Mock response for URL-based routing
 #[derive(Debug, Clone)]
 struct MockResponse {
-    result: Result<(u16, Duration, String, std::collections::HashMap<String, String>, Option<String>), String>,
+    result: Result<
+        (
+            u16,
+            Duration,
+            String,
+            std::collections::HashMap<String, String>,
+            Option<String>,
+        ),
+        String,
+    >,
 }
 
 /// URL-based mock HTTP client that routes responses by method and URL pattern
 #[derive(Clone)]
 struct TestHttpClient {
     // Legacy stack for backward compatibility
-    responses: Arc<Mutex<Vec<Result<(u16, Duration, String, std::collections::HashMap<String, String>, Option<String>), String>>>>,
+    responses: Arc<
+        Mutex<
+            Vec<
+                Result<
+                    (
+                        u16,
+                        Duration,
+                        String,
+                        std::collections::HashMap<String, String>,
+                        Option<String>,
+                    ),
+                    String,
+                >,
+            >,
+        >,
+    >,
     // New URL-based routing
-    route_responses: Arc<Mutex<std::collections::HashMap<(MockHttpMethod, String), std::collections::VecDeque<MockResponse>>>>,
+    route_responses: Arc<
+        Mutex<
+            std::collections::HashMap<
+                (MockHttpMethod, String),
+                std::collections::VecDeque<MockResponse>,
+            >,
+        >,
+    >,
     default_response: Arc<MockResponse>,
 }
 
@@ -59,7 +90,7 @@ impl TestHttpClient {
                 Some("HTTP/1.1".to_string()),
             )),
         };
-        
+
         Self {
             responses: Arc::new(Mutex::new(vec![])),
             route_responses: Arc::new(Mutex::new(std::collections::HashMap::new())),
@@ -68,42 +99,90 @@ impl TestHttpClient {
     }
 
     /// Add response for specific URL pattern (new URL-based routing)
-    async fn add_response_for_url(&self, method: MockHttpMethod, url_pattern: &str, response: Result<(u16, Duration, String, std::collections::HashMap<String, String>, Option<String>), String>) {
+    async fn add_response_for_url(
+        &self,
+        method: MockHttpMethod,
+        url_pattern: &str,
+        response: Result<
+            (
+                u16,
+                Duration,
+                String,
+                std::collections::HashMap<String, String>,
+                Option<String>,
+            ),
+            String,
+        >,
+    ) {
         let mock_response = MockResponse { result: response };
         let mut routes = self.route_responses.lock().await;
         let key = (method, url_pattern.to_string());
-        routes.entry(key).or_insert_with(std::collections::VecDeque::new).push_back(mock_response);
+        routes
+            .entry(key)
+            .or_insert_with(std::collections::VecDeque::new)
+            .push_back(mock_response);
     }
 
     /// Add response for POST /v1/messages calls (main API probe)
-    async fn add_api_response(&self, response: Result<(u16, Duration, String, std::collections::HashMap<String, String>, Option<String>), String>) {
-        self.add_response_for_url(MockHttpMethod::Post, "/v1/messages", response).await;
+    async fn add_api_response(
+        &self,
+        response: Result<
+            (
+                u16,
+                Duration,
+                String,
+                std::collections::HashMap<String, String>,
+                Option<String>,
+            ),
+            String,
+        >,
+    ) {
+        self.add_response_for_url(MockHttpMethod::Post, "/v1/messages", response)
+            .await;
     }
 
     /// Add response for GET health check calls
-    async fn add_health_response(&self, response: Result<(u16, Duration, String, std::collections::HashMap<String, String>, Option<String>), String>) {
+    async fn add_health_response(
+        &self,
+        response: Result<
+            (
+                u16,
+                Duration,
+                String,
+                std::collections::HashMap<String, String>,
+                Option<String>,
+            ),
+            String,
+        >,
+    ) {
         // Handle both common health check patterns
-        self.add_response_for_url(MockHttpMethod::Get, "/health", response.clone()).await;
-        self.add_response_for_url(MockHttpMethod::Get, "/v1/health", response).await;
+        self.add_response_for_url(MockHttpMethod::Get, "/health", response.clone())
+            .await;
+        self.add_response_for_url(MockHttpMethod::Get, "/v1/health", response)
+            .await;
     }
 
     /// Get next response for specific URL and method
-    async fn get_response_for_url(&self, method: MockHttpMethod, url: &str) -> Option<MockResponse> {
+    async fn get_response_for_url(
+        &self,
+        method: MockHttpMethod,
+        url: &str,
+    ) -> Option<MockResponse> {
         let mut routes = self.route_responses.lock().await;
-        
+
         // Try exact URL match first
         if let Some(queue) = routes.get_mut(&(method.clone(), url.to_string())) {
             if let Some(response) = queue.pop_front() {
                 return Some(response);
             }
         }
-        
+
         // Try pattern matching for common endpoints
         let patterns_to_try = match method {
             MockHttpMethod::Post => vec!["/v1/messages", "messages"],
             MockHttpMethod::Get => vec!["/health", "/v1/health", "health"],
         };
-        
+
         for pattern in patterns_to_try {
             if url.contains(pattern) {
                 if let Some(queue) = routes.get_mut(&(method.clone(), pattern.to_string())) {
@@ -113,11 +192,23 @@ impl TestHttpClient {
                 }
             }
         }
-        
+
         None
     }
 
-    async fn add_response(&self, response: Result<(u16, Duration, String, std::collections::HashMap<String, String>, Option<String>), String>) {
+    async fn add_response(
+        &self,
+        response: Result<
+            (
+                u16,
+                Duration,
+                String,
+                std::collections::HashMap<String, String>,
+                Option<String>,
+            ),
+            String,
+        >,
+    ) {
         let mut responses = self.responses.lock().await;
         responses.insert(0, response);
     }
@@ -130,7 +221,14 @@ impl TestHttpClient {
             duration_ms
         );
         let empty_headers = std::collections::HashMap::new();
-        self.add_response(Ok((status, duration, breakdown, empty_headers, Some("HTTP/1.1".to_string())))).await;
+        self.add_response(Ok((
+            status,
+            duration,
+            breakdown,
+            empty_headers,
+            Some("HTTP/1.1".to_string()),
+        )))
+        .await;
     }
 
     async fn add_timeout_error(&self) {
@@ -146,25 +244,34 @@ impl HttpClientTrait for TestHttpClient {
         _headers: HashMap<String, String>,
         body: Vec<u8>,
         _timeout_ms: u32,
-    ) -> Result<(u16, Duration, String, std::collections::HashMap<String, String>, Option<String>), String> {
+    ) -> Result<
+        (
+            u16,
+            Duration,
+            String,
+            std::collections::HashMap<String, String>,
+            Option<String>,
+        ),
+        String,
+    > {
         // Determine HTTP method based on request characteristics
         let method = if body.is_empty() {
             MockHttpMethod::Get
         } else {
             MockHttpMethod::Post
         };
-        
+
         // Try URL-based routing first
         if let Some(mock_response) = self.get_response_for_url(method, &url).await {
             return mock_response.result;
         }
-        
+
         // Fall back to legacy stack for backward compatibility
         let mut responses = self.responses.lock().await;
         if let Some(response) = responses.pop() {
             return response;
         }
-        
+
         // Use default response if no specific response is configured
         self.default_response.result.clone()
     }
@@ -266,7 +373,7 @@ impl CurlProbeRunner for FakeCurlRunner {
                 dns_ms: 25,
                 tcp_ms: 30,
                 tls_ms: 35,
-                ttfb_ms: 1500,  // ttfb_ms becomes latency_ms in the outcome
+                ttfb_ms: 1500, // ttfb_ms becomes latency_ms in the outcome
                 total_ttfb_ms: 25 + 30 + 35 + 1500, // End-to-end TTFB
                 total_ms: 1590, // total should be sum of all phases (25+30+35+1500)
             })
@@ -409,7 +516,14 @@ impl BreakdownValidator {
         validator
     }
 
-    fn assert_exact(&self, expected_dns: u32, expected_tcp: u32, expected_tls: u32, expected_ttfb: u32, expected_total: u32) {
+    fn assert_exact(
+        &self,
+        expected_dns: u32,
+        expected_tcp: u32,
+        expected_tls: u32,
+        expected_ttfb: u32,
+        expected_total: u32,
+    ) {
         assert_eq!(self.dns, Some(expected_dns), "DNS timing mismatch");
         assert_eq!(self.tcp, Some(expected_tcp), "TCP timing mismatch");
         assert_eq!(self.tls, Some(expected_tls), "TLS timing mismatch");
@@ -417,21 +531,59 @@ impl BreakdownValidator {
         assert_eq!(self.total, Some(expected_total), "Total timing mismatch");
     }
 
-    fn assert_within_tolerance(&self, expected_dns: u32, expected_tcp: u32, expected_tls: u32, expected_ttfb: u32, expected_total: u32, tolerance_ms: u32) {
+    fn assert_within_tolerance(
+        &self,
+        expected_dns: u32,
+        expected_tcp: u32,
+        expected_tls: u32,
+        expected_ttfb: u32,
+        expected_total: u32,
+        tolerance_ms: u32,
+    ) {
         if let Some(dns) = self.dns {
-            assert!(dns.abs_diff(expected_dns) <= tolerance_ms, "DNS timing {} not within {}ms of {}", dns, tolerance_ms, expected_dns);
+            assert!(
+                dns.abs_diff(expected_dns) <= tolerance_ms,
+                "DNS timing {} not within {}ms of {}",
+                dns,
+                tolerance_ms,
+                expected_dns
+            );
         }
         if let Some(tcp) = self.tcp {
-            assert!(tcp.abs_diff(expected_tcp) <= tolerance_ms, "TCP timing {} not within {}ms of {}", tcp, tolerance_ms, expected_tcp);
+            assert!(
+                tcp.abs_diff(expected_tcp) <= tolerance_ms,
+                "TCP timing {} not within {}ms of {}",
+                tcp,
+                tolerance_ms,
+                expected_tcp
+            );
         }
         if let Some(tls) = self.tls {
-            assert!(tls.abs_diff(expected_tls) <= tolerance_ms, "TLS timing {} not within {}ms of {}", tls, tolerance_ms, expected_tls);
+            assert!(
+                tls.abs_diff(expected_tls) <= tolerance_ms,
+                "TLS timing {} not within {}ms of {}",
+                tls,
+                tolerance_ms,
+                expected_tls
+            );
         }
         if let Some(ttfb) = self.ttfb {
-            assert!(ttfb.abs_diff(expected_ttfb) <= tolerance_ms, "TTFB timing {} not within {}ms of {}", ttfb, tolerance_ms, expected_ttfb);
+            assert!(
+                ttfb.abs_diff(expected_ttfb) <= tolerance_ms,
+                "TTFB timing {} not within {}ms of {}",
+                ttfb,
+                tolerance_ms,
+                expected_ttfb
+            );
         }
         if let Some(total) = self.total {
-            assert!(total.abs_diff(expected_total) <= tolerance_ms, "Total timing {} not within {}ms of {}", total, tolerance_ms, expected_total);
+            assert!(
+                total.abs_diff(expected_total) <= tolerance_ms,
+                "Total timing {} not within {}ms of {}",
+                total,
+                tolerance_ms,
+                expected_total
+            );
         }
     }
 
@@ -1639,7 +1791,10 @@ async fn test_bot_challenge_prevents_p95_contamination() {
 
     // Verify bot challenge was detected
     assert_eq!(bot_result.metrics.last_http_status, 403);
-    assert_eq!(bot_result.metrics.error_type.as_deref(), Some("bot_challenge"));
+    assert_eq!(
+        bot_result.metrics.error_type.as_deref(),
+        Some("bot_challenge")
+    );
     assert!(matches!(bot_result.status, NetworkStatus::Error));
 
     // CRITICAL: Verify rolling stats were NOT contaminated
@@ -1654,8 +1809,7 @@ async fn test_bot_challenge_prevents_p95_contamination() {
         "P95 should remain unchanged after bot challenge"
     );
     assert_eq!(
-        contamination_check_state.network.rolling_totals,
-        baseline_rolling_totals,
+        contamination_check_state.network.rolling_totals, baseline_rolling_totals,
         "Rolling totals should be identical after bot challenge"
     );
 }
@@ -1696,7 +1850,10 @@ async fn test_bot_challenge_503_prevents_p95_contamination() {
 
     // Verify 503 was classified as bot challenge
     assert_eq!(bot_challenge_result.metrics.last_http_status, 503);
-    assert_eq!(bot_challenge_result.metrics.error_type.as_deref(), Some("bot_challenge"));
+    assert_eq!(
+        bot_challenge_result.metrics.error_type.as_deref(),
+        Some("bot_challenge")
+    );
     assert!(matches!(bot_challenge_result.status, NetworkStatus::Error));
 
     // Verify rolling statistics are protected from contamination
@@ -1738,7 +1895,7 @@ async fn test_rate_limit_without_bot_challenge_still_affects_p95() {
     // Establish baseline
     http_client.add_success(200, 1000).await;
     clock.add_timestamp("2025-01-25T10:30:00-08:00").await;
-    
+
     let _baseline = monitor
         .probe(ProbeMode::Green, test_credentials(), None)
         .await
@@ -1760,7 +1917,10 @@ async fn test_rate_limit_without_bot_challenge_still_affects_p95() {
 
     // Verify rate limit behavior
     assert_eq!(rate_limit_result.metrics.last_http_status, 429);
-    assert_eq!(rate_limit_result.metrics.error_type.as_deref(), Some("rate_limit_error"));
+    assert_eq!(
+        rate_limit_result.metrics.error_type.as_deref(),
+        Some("rate_limit_error")
+    );
     assert!(matches!(rate_limit_result.status, NetworkStatus::Degraded));
 
     // Rate limits (without bot classification) should not add to rolling stats either
@@ -1803,13 +1963,15 @@ async fn test_mixed_bot_challenges_and_successful_responses() {
             .await
             .unwrap();
 
-        println!("Step {}: {} - Status: {:?}, Rolling len: {}", 
-                 i, description, result.status, result.rolling_len);
+        println!(
+            "Step {}: {} - Status: {:?}, Rolling len: {}",
+            i, description, result.status, result.rolling_len
+        );
     }
 
     // Verify final state contains only successful responses in rolling stats
     let final_state = monitor.load_state().await.unwrap();
-    
+
     // Should have 4 successful responses: 1000, 1100, 1200, 1050
     assert_eq!(
         final_state.network.rolling_totals.len(),
@@ -2050,7 +2212,7 @@ mod curl_timing_tests {
         let fake_curl_runner = FakeCurlRunner::new();
         fake_curl_runner.add_error("Could not resolve host").await;
         monitor = monitor.with_curl_runner(Box::new(fake_curl_runner));
-        
+
         // Also configure the HTTP client fallback to fail
         http_client.add_timeout_error().await;
 
@@ -2087,7 +2249,7 @@ mod curl_timing_tests {
         let test_cases = vec![
             // (dns_ms, tcp_ms, tls_ms, ttfb_ms, total_ms)
             (20, 25, 35, 420, 500),   // 20+25+35+420 = 500ms total
-            (30, 30, 35, 705, 800),   // 30+30+35+705 = 800ms total  
+            (30, 30, 35, 705, 800),   // 30+30+35+705 = 800ms total
             (15, 25, 35, 1125, 1200), // 15+25+35+1125 = 1200ms total
             (5, 15, 35, 245, 300),    // 5+15+35+245 = 300ms total
         ];
@@ -2101,23 +2263,14 @@ mod curl_timing_tests {
             source: CredentialSource::Environment,
         };
 
-        for (i, (dns_ms, tcp_ms, tls_ms, ttfb_ms, total_ms)) in
-            test_cases.iter().enumerate()
-        {
+        for (i, (dns_ms, tcp_ms, tls_ms, ttfb_ms, total_ms)) in test_cases.iter().enumerate() {
             clock
                 .add_timestamp(&format!("2025-01-25T10:3{}:00-08:00", i))
                 .await;
 
             let fake_curl_runner = FakeCurlRunner::new();
             fake_curl_runner
-                .add_timing_response(
-                    200,
-                    *dns_ms,
-                    *tcp_ms,
-                    *tls_ms,
-                    *ttfb_ms,
-                    *total_ms,
-                )
+                .add_timing_response(200, *dns_ms, *tcp_ms, *tls_ms, *ttfb_ms, *total_ms)
                 .await;
             monitor = monitor.with_curl_runner(Box::new(fake_curl_runner));
 
@@ -2284,7 +2437,7 @@ mod curl_timing_tests {
         let fake_curl_runner = FakeCurlRunner::new();
         fake_curl_runner.add_error("Operation timed out").await;
         monitor = monitor.with_curl_runner(Box::new(fake_curl_runner));
-        
+
         // Also configure the HTTP client fallback to fail
         http_client.add_timeout_error().await;
 
@@ -2331,7 +2484,7 @@ mod curl_timing_tests {
 
         // Test edge case: connection reuse (DNS ≈ 0, but other phases present)
         let fake_curl_runner = FakeCurlRunner::new();
-        // Convert timing: dns=1ms, tcp=19ms, tls=35ms, ttfb=545ms, total=600ms  
+        // Convert timing: dns=1ms, tcp=19ms, tls=35ms, ttfb=545ms, total=600ms
         fake_curl_runner
             .add_timing_response(200, 1, 19, 35, 545, 600)
             .await;
@@ -2368,7 +2521,10 @@ mod curl_timing_tests {
         );
 
         // Verify all phase durations are non-negative
-        assert!(result.metrics.latency_ms == 545, "Latency should be 545ms (ttfb_ms)");
+        assert!(
+            result.metrics.latency_ms == 545,
+            "Latency should be 545ms (ttfb_ms)"
+        );
     }
 
     #[tokio::test]
@@ -2392,7 +2548,7 @@ mod curl_timing_tests {
 
         // Verify isahc result format (uses TestHttpClient)
         assert_eq!(isahc_result.metrics.latency_ms, 1000); // From HTTP client latency
-        // When timings-curl is enabled but no curl runner injected, uses coordinated default
+                                                           // When timings-curl is enabled but no curl runner injected, uses coordinated default
         assert!(isahc_result.metrics.breakdown.contains("DNS:25ms"));
         assert!(isahc_result.metrics.breakdown.contains("TCP:30ms"));
 
@@ -2442,7 +2598,7 @@ mod curl_timing_tests {
         // Test parsing valid breakdown string
         let breakdown = "DNS:50ms|TCP:25ms|TLS:15ms|TTFB:100ms|Total:190ms";
         let validator = BreakdownValidator::parse(breakdown);
-        
+
         assert_eq!(validator.dns, Some(50));
         assert_eq!(validator.tcp, Some(25));
         assert_eq!(validator.tls, Some(15));
@@ -2451,30 +2607,30 @@ mod curl_timing_tests {
 
         // Test exact matching
         validator.assert_exact(50, 25, 15, 100, 190);
-        
+
         // Test tolerance matching
         validator.assert_within_tolerance(52, 23, 17, 102, 188, 5);
-        
+
         // Test phase presence
         validator.assert_contains_phases(&["DNS", "TCP", "TLS", "TTFB", "Total"]);
 
         // Test partial breakdown parsing
         let partial = "DNS:20ms|TTFB:150ms|Total:170ms";
         let partial_validator = BreakdownValidator::parse(partial);
-        
+
         assert_eq!(partial_validator.dns, Some(20));
         assert_eq!(partial_validator.tcp, None);
         assert_eq!(partial_validator.tls, None);
         assert_eq!(partial_validator.ttfb, Some(150));
         assert_eq!(partial_validator.total, Some(170));
-        
+
         // Should only check present phases
         partial_validator.assert_contains_phases(&["DNS", "TTFB", "Total"]);
-        
+
         // Test malformed input handling
         let malformed = "DNS:badms|TCP:25ms|Invalid";
         let malformed_validator = BreakdownValidator::parse(malformed);
-        
+
         assert_eq!(malformed_validator.dns, None); // "badms" not parsed
         assert_eq!(malformed_validator.tcp, Some(25));
         assert_eq!(malformed_validator.tls, None);
@@ -2489,17 +2645,20 @@ mod curl_timing_tests {
         // Test that HttpMonitor uses CurlHealthCheckClient when timings-curl is enabled
         let temp_dir = TempDir::new().unwrap();
         let state_path = temp_dir.path().join("monitoring.json");
-        
+
         // Create HttpMonitor - should automatically use CurlHealthCheckClient
         let mut monitor = HttpMonitor::new(Some(state_path)).unwrap();
-        
+
         // Verify that we can create and load state - indicates health check client is working
         let result = monitor.write_unknown(true).await;
-        assert!(result.is_ok(), "Should be able to write state with curl health client");
-        
+        assert!(
+            result.is_ok(),
+            "Should be able to write state with curl health client"
+        );
+
         let state = monitor.load_state().await;
         assert!(state.is_ok(), "Should be able to load state");
-        
+
         // The successful creation and basic operations indicate the CurlHealthCheckClient
         // was properly integrated. More detailed timing verification would require
         // mock proxy endpoints which are beyond this integration test scope.

@@ -1,6 +1,6 @@
 // Core types for network monitoring
-use std::path::PathBuf;
 use crate::core::network::proxy_health::config::ProxyHealthLevel;
+use std::path::PathBuf;
 
 // Re-export credential types from existing module (don't move them)
 // pub use super::credential::{CredentialManager, ShellType};
@@ -25,7 +25,7 @@ pub struct ProxyHealthDetail {
     /// Primary URL attempted
     pub primary_url: String,
     /// Fallback URL attempted (if any)
-    pub fallback_url: Option<String>, 
+    pub fallback_url: Option<String>,
     /// Redirect URL followed (if any)
     pub redirect_url: Option<String>,
     /// Which attempt succeeded: "primary" | "fallback" | "redirect"
@@ -35,7 +35,7 @@ pub struct ProxyHealthDetail {
     /// Response time in milliseconds
     pub response_time_ms: u64,
     /// Reason for health determination
-    /// Values: "cloudflare_challenge", "redirect_followed", "no_endpoint_404", 
+    /// Values: "cloudflare_challenge", "redirect_followed", "no_endpoint_404",
     /// "non_200_no_cf", "invalid_json_200", "unknown_schema_200", "timeout"
     pub reason: Option<String>,
 }
@@ -299,7 +299,7 @@ impl Default for NetworkMetrics {
 /// Centralized proxy health field management
 impl NetworkMetrics {
     /// Set proxy health with automatic field consistency
-    /// 
+    ///
     /// Updates both legacy proxy_healthy and new proxy_health_level fields
     /// to maintain backward compatibility while supporting enhanced tri-state levels.
     ///
@@ -312,18 +312,24 @@ impl NetworkMetrics {
     /// - Degraded → proxy_healthy=Some(false), proxy_health_level=Some(Degraded)  
     /// - Bad → proxy_healthy=Some(false), proxy_health_level=Some(Bad)
     /// - None → proxy_healthy=None, proxy_health_level=None
-    pub fn set_proxy_health(&mut self, level: Option<ProxyHealthLevel>, detail: Option<ProxyHealthDetail>) {
+    pub fn set_proxy_health(
+        &mut self,
+        level: Option<ProxyHealthLevel>,
+        detail: Option<ProxyHealthDetail>,
+    ) {
         self.proxy_health_level = level.clone();
         self.proxy_health_detail = detail;
-        
+
         // Maintain backward compatibility with legacy proxy_healthy field
         self.proxy_healthy = match level {
             Some(ProxyHealthLevel::Healthy) => Some(true),
-            Some(ProxyHealthLevel::Degraded) | Some(ProxyHealthLevel::Bad) | Some(ProxyHealthLevel::Unknown) => Some(false),
+            Some(ProxyHealthLevel::Degraded)
+            | Some(ProxyHealthLevel::Bad)
+            | Some(ProxyHealthLevel::Unknown) => Some(false),
             None => None,
         };
     }
-    
+
     /// Get proxy health level with fallback to legacy field
     ///
     /// Provides seamless access to proxy health status with automatic fallback
@@ -337,9 +343,9 @@ impl NetworkMetrics {
         // Priority: new field > legacy field mapping
         self.proxy_health_level.clone().or_else(|| {
             self.proxy_healthy.map(|healthy| {
-                if healthy { 
-                    ProxyHealthLevel::Healthy 
-                } else { 
+                if healthy {
+                    ProxyHealthLevel::Healthy
+                } else {
                     ProxyHealthLevel::Bad // Default mapping for false
                 }
             })

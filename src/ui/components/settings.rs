@@ -39,21 +39,28 @@ impl SettingsComponent {
                 StyleMode::NerdFont | StyleMode::Powerline => &segment.icon.nerd_font,
             };
             // Convert AnsiColor to ratatui Color
-            let icon_ratatui_color = segment.colors.icon
+            let icon_ratatui_color = segment
+                .colors
+                .icon
                 .as_ref()
                 .map(ansi_color_to_ratatui_color)
                 .unwrap_or(Color::White);
-            let text_ratatui_color = segment.colors.text
+            let text_ratatui_color = segment
+                .colors
+                .text
                 .as_ref()
                 .map(ansi_color_to_ratatui_color)
                 .unwrap_or(Color::White);
             let icon_color_desc = ansi_color_to_description(segment.colors.icon.as_ref());
             let text_color_desc = ansi_color_to_description(segment.colors.text.as_ref());
-            let background_ratatui_color = segment.colors.background
+            let background_ratatui_color = segment
+                .colors
+                .background
                 .as_ref()
                 .map(ansi_color_to_ratatui_color)
                 .unwrap_or(Color::White);
-            let mut background_color_desc = ansi_color_to_description(segment.colors.background.as_ref());
+            let mut background_color_desc =
+                ansi_color_to_description(segment.colors.background.as_ref());
             if segment.colors.background.is_none() {
                 background_color_desc = "None".to_string();
             }

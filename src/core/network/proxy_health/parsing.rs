@@ -44,22 +44,22 @@ pub fn parse_health_response(body: &[u8]) -> Option<ProxyHealthLevel> {
     };
 
     // Try parsing different schema patterns
-    
+
     // Pattern 1: status field (string)
     if let Some(status_level) = parse_status_field(obj) {
         return Some(status_level);
     }
-    
-    // Pattern 2: healthy field (boolean)  
+
+    // Pattern 2: healthy field (boolean)
     if let Some(healthy_level) = parse_healthy_field(obj) {
         return Some(healthy_level);
     }
-    
+
     // Pattern 3: Mixed patterns or complex schemas
     if let Some(mixed_level) = parse_mixed_schema(obj) {
         return Some(mixed_level);
     }
-    
+
     // Unknown schema - default to Bad for safety
     Some(ProxyHealthLevel::Bad)
 }
@@ -71,13 +71,15 @@ fn parse_status_field(obj: &serde_json::Map<String, Value>) -> Option<ProxyHealt
         .iter()
         .find(|(key, _)| key.eq_ignore_ascii_case("status"))
         .map(|(_, value)| value)?;
-        
+
     let status_str = status_value.as_str()?;
-    
+
     match status_str.to_ascii_lowercase().as_str() {
         "healthy" | "ok" | "up" | "running" => Some(ProxyHealthLevel::Healthy),
         "unhealthy" | "degraded" | "warning" => Some(ProxyHealthLevel::Degraded),
-        "error" | "down" | "fail" | "failed" | "critical" | "offline" => Some(ProxyHealthLevel::Bad),
+        "error" | "down" | "fail" | "failed" | "critical" | "offline" => {
+            Some(ProxyHealthLevel::Bad)
+        }
         _ => None, // Unknown status value, try other patterns
     }
 }
@@ -89,7 +91,7 @@ fn parse_healthy_field(obj: &serde_json::Map<String, Value>) -> Option<ProxyHeal
         .iter()
         .find(|(key, _)| key.eq_ignore_ascii_case("healthy"))
         .map(|(_, value)| value)?;
-        
+
     match healthy_value.as_bool()? {
         true => Some(ProxyHealthLevel::Healthy),
         false => Some(ProxyHealthLevel::Degraded), // Unhealthy but responding
@@ -115,7 +117,7 @@ fn parse_mixed_schema(obj: &serde_json::Map<String, Value>) -> Option<ProxyHealt
             return Some(ProxyHealthLevel::Degraded);
         }
     }
-    
+
     // Check for error conditions in various fields
     let error_indicators = ["error", "errors", "failure", "failures"];
     for indicator in &error_indicators {
@@ -123,12 +125,12 @@ fn parse_mixed_schema(obj: &serde_json::Map<String, Value>) -> Option<ProxyHealt
             return Some(ProxyHealthLevel::Bad);
         }
     }
-    
+
     None // No recognizable pattern
 }
 
 /// Legacy validation function for backward compatibility
-/// 
+///
 /// Only checks for `status="healthy"` (case-insensitive), maintaining
 /// exact behavior of existing validate_health_json function.
 ///
@@ -170,7 +172,7 @@ pub fn validate_health_json(body: &[u8]) -> bool {
 }
 
 /// Detect Cloudflare challenge responses that indicate Unknown proxy health status
-/// 
+///
 /// Enhanced Phase 2 detection for Cloudflare challenges:
 /// 1. HTTP 403/503/429 status codes with Cloudflare-specific headers
 /// 2. Headers: cf-mitigated: challenge (high-confidence), cf-ray, server: cloudflare, CF set-cookies
@@ -193,30 +195,30 @@ pub fn detect_cloudflare_challenge(
     if !matches!(status_code, 403 | 503 | 429) {
         return false;
     }
-    
+
     // Second check: Cloudflare-specific headers (case-insensitive)
     let has_cf_headers = headers.iter().any(|(key, value)| {
         let key_lower = key.to_lowercase();
         let value_lower = value.to_lowercase();
         match key_lower.as_str() {
-            "cf-ray" => true, // Cloudflare request ID
+            "cf-ray" => true,                                    // Cloudflare request ID
             "cf-mitigated" => value_lower.contains("challenge"), // Active challenge (high-confidence)
-            "server" => value_lower.contains("cloudflare"), // CF server header
-            "cf-cache-status" => true, // Any CF cache status
+            "server" => value_lower.contains("cloudflare"),      // CF server header
+            "cf-cache-status" => true,                           // Any CF cache status
             "set-cookie" => {
                 // Cloudflare-specific cookies indicating bot mitigation
-                value_lower.contains("cf_clearance") || 
-                value_lower.contains("__cf_bm") ||
-                value_lower.contains("cf_chl_jschl_tk")
-            },
+                value_lower.contains("cf_clearance")
+                    || value_lower.contains("__cf_bm")
+                    || value_lower.contains("cf_chl_jschl_tk")
+            }
             _ => false,
         }
     });
-    
+
     if has_cf_headers {
         return true;
     }
-    
+
     // Third check: HTML body content with challenge markers
     if let Ok(body_str) = std::str::from_utf8(body) {
         let body_lower = body_str.to_lowercase();
@@ -234,14 +236,13 @@ pub fn detect_cloudflare_challenge(
             "browser security check",
             "ray id:", // Common in CF error pages
         ];
-        
+
         for marker in &challenge_markers {
             if body_lower.contains(marker) {
                 return true;
             }
         }
     }
-    
+
     false
 }
-

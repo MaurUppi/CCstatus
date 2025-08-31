@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Update state file structure (stored as ccstatus-update.json)
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct UpdateStateFile {
     /// Last time we checked for updates
     pub last_check: Option<DateTime<Utc>>,
@@ -21,20 +21,6 @@ pub struct UpdateStateFile {
     pub green_ticks_since_check: u32,
 }
 
-impl Default for UpdateStateFile {
-    fn default() -> Self {
-        Self {
-            last_check: None,
-            last_prompted_version: None,
-            etag_map: HashMap::new(),
-            last_modified_map: HashMap::new(),
-            geo_verdict: None,
-            geo_checked_at: None,
-            green_ticks_since_check: 0,
-        }
-    }
-}
-
 impl UpdateStateFile {
     /// Load state from ccstatus-update.json
     pub fn load() -> Self {
@@ -46,11 +32,7 @@ impl UpdateStateFile {
         let state_file = config_dir.join("ccstatus-update.json");
 
         if let Ok(content) = std::fs::read_to_string(&state_file) {
-            if let Ok(state) = serde_json::from_str::<UpdateStateFile>(&content) {
-                state
-            } else {
-                Default::default()
-            }
+            serde_json::from_str::<UpdateStateFile>(&content).unwrap_or_default()
         } else {
             Default::default()
         }
@@ -76,12 +58,15 @@ impl UpdateStateFile {
     }
 
     /// Update system triggered from GREEN window
-    pub fn tick_from_green(&mut self, _green_window_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn tick_from_green(
+        &mut self,
+        _green_window_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.increment_green_ticks();
-        
+
         if self.should_trigger_green_check() {
             // Perform update check when threshold reached
-            if let Ok(_) = self.check_for_updates_internal() {
+            if self.check_for_updates_internal().is_ok() {
                 self.update_last_check();
             }
             self.reset_green_ticks();
@@ -92,8 +77,8 @@ impl UpdateStateFile {
 
     /// Internal update check implementation
     fn check_for_updates_internal(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
-        use crate::updater::{geo, url_resolver, manifest::ManifestClient};
-        
+        use crate::updater::{geo, manifest::ManifestClient, url_resolver};
+
         // Get or update geographic detection
         let is_china = if self.is_geo_verdict_valid() {
             self.geo_verdict.unwrap_or(false)
@@ -105,30 +90,28 @@ impl UpdateStateFile {
 
         // Resolve URLs based on geography
         let urls = url_resolver::resolve_manifest_url(is_china);
-        
+
         // Try each URL in sequence
         let mut client = ManifestClient::new();
         for url in &urls {
             if let Ok(host) = url::Url::parse(url).map(|u| u.host_str().unwrap_or("").to_string()) {
                 // Set cached headers if available
-                if let Some(etag) = self.etag_map.get(&host) {
+                if let Some(_etag) = self.etag_map.get(&host) {
                     // ManifestClient handles ETag internally
                 }
             }
         }
-        
+
         // Use url_resolver helper to try URLs in sequence
-        match url_resolver::try_urls_in_sequence(&urls, |url| {
-            client.fetch_manifest(url)
-        }) {
+        match url_resolver::try_urls_in_sequence(&urls, |url| client.fetch_manifest(url)) {
             Ok(Some(manifest)) => {
                 // Check if version is newer
-                if client.is_newer_version(&manifest.version)? {
-                    if self.should_prompt_for_version(&manifest.version) {
-                        self.mark_version_prompted(manifest.version.clone());
-                        // In V1, we only check and save state, no actual update
-                        return Ok(true);
-                    }
+                if client.is_newer_version(&manifest.version)?
+                    && self.should_prompt_for_version(&manifest.version)
+                {
+                    self.mark_version_prompted(manifest.version.clone());
+                    // In V1, we only check and save state, no actual update
+                    return Ok(true);
                 }
                 Ok(false)
             }
@@ -136,7 +119,7 @@ impl UpdateStateFile {
                 // No new version or 304 not modified
                 Ok(false)
             }
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
 

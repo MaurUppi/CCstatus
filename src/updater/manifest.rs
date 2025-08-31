@@ -52,9 +52,14 @@ impl ManifestClient {
     }
 
     /// Fetch manifest from URL with ETag/Last-Modified caching
-    pub fn fetch_manifest(&mut self, url: &str) -> Result<Option<Manifest>, Box<dyn std::error::Error>> {
-        let mut request = self.client.get(url)
-            .header("User-Agent", &format!("CCstatus/{}", env!("CARGO_PKG_VERSION")));
+    pub fn fetch_manifest(
+        &mut self,
+        url: &str,
+    ) -> Result<Option<Manifest>, Box<dyn std::error::Error>> {
+        let mut request = self.client.get(url).header(
+            "User-Agent",
+            &format!("CCstatus/{}", env!("CARGO_PKG_VERSION")),
+        );
 
         // Add conditional headers if we have cached values
         if let Some(etag) = self.etag_cache.get(url) {
@@ -69,10 +74,14 @@ impl ManifestClient {
                 if response.status().as_u16() == 200 {
                     // Update cache with new ETag/Last-Modified
                     if let Some(etag) = response.headers().get("ETag") {
-                        self.etag_cache.insert(url.to_string(), etag.to_str().unwrap_or("").to_string());
+                        self.etag_cache
+                            .insert(url.to_string(), etag.to_str().unwrap_or("").to_string());
                     }
                     if let Some(last_modified) = response.headers().get("Last-Modified") {
-                        self.last_modified_cache.insert(url.to_string(), last_modified.to_str().unwrap_or("").to_string());
+                        self.last_modified_cache.insert(
+                            url.to_string(),
+                            last_modified.to_str().unwrap_or("").to_string(),
+                        );
                     }
 
                     let manifest_text = response.body_mut().read_to_string()?;
@@ -85,7 +94,7 @@ impl ManifestClient {
                     Err(format!("HTTP {}", response.status().as_u16()).into())
                 }
             }
-            Err(e) => Err(e.into())
+            Err(e) => Err(e.into()),
         }
     }
 

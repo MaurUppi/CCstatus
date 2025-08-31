@@ -7,8 +7,8 @@ path-based health URLs, normalization, and official endpoint detection.
 */
 
 use ccstatus::core::network::proxy_health::url::{
-    build_root_health_url, build_path_health_url, normalize_base_url,
-    is_official_base_url, extract_host
+    build_path_health_url, build_root_health_url, extract_host, is_official_base_url,
+    normalize_base_url,
 };
 
 #[test]
@@ -18,24 +18,24 @@ fn test_build_root_health_url() {
         build_root_health_url("https://proxy.com/api/v1").unwrap(),
         "https://proxy.com/health"
     );
-    
+
     assert_eq!(
         build_root_health_url("http://localhost:3000/claude").unwrap(),
         "http://localhost:3000/health"
     );
-    
+
     // Custom ports
     assert_eq!(
         build_root_health_url("https://api.example.com:8443/path").unwrap(),
         "https://api.example.com:8443/health"
     );
-    
+
     // Default ports (should be omitted)
     assert_eq!(
         build_root_health_url("https://proxy.com:443/api").unwrap(),
         "https://proxy.com/health"
     );
-    
+
     assert_eq!(
         build_root_health_url("http://proxy.com:80/api").unwrap(),
         "http://proxy.com/health"
@@ -48,7 +48,7 @@ fn test_build_path_health_url() {
         build_path_health_url("https://proxy.com/api/v1/"),
         "https://proxy.com/api/v1/health"
     );
-    
+
     assert_eq!(
         build_path_health_url("https://api.example.com/claude"),
         "https://api.example.com/claude/health"
@@ -67,15 +67,18 @@ fn test_is_official_base_url() {
     assert!(is_official_base_url("https://api.anthropic.com"));
     assert!(is_official_base_url("https://api.anthropic.com/"));
     assert!(is_official_base_url("HTTPS://API.ANTHROPIC.COM"));
-    
+
     assert!(!is_official_base_url("https://proxy.com/api"));
     assert!(!is_official_base_url("https://api.anthropic.com.evil.com"));
 }
 
-#[test]  
+#[test]
 fn test_extract_host() {
     assert_eq!(extract_host("https://proxy.com/path").unwrap(), "proxy.com");
-    assert_eq!(extract_host("http://api.example.com:8080").unwrap(), "api.example.com");
-    
+    assert_eq!(
+        extract_host("http://api.example.com:8080").unwrap(),
+        "api.example.com"
+    );
+
     assert!(extract_host("not-a-url").is_err());
 }

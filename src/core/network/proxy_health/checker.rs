@@ -6,13 +6,13 @@
 //! - Optional redirect following with security validation
 //! - Detailed outcome reporting for debugging
 
-use crate::core::network::types::ProxyHealthDetail;
 use crate::core::network::proxy_health::{
     client::{HealthCheckClient, HealthResponse},
     config::{ProxyHealthLevel, ProxyHealthOptions},
-    parsing::{parse_health_response, detect_cloudflare_challenge},
-    url::{build_root_health_url, build_path_health_url, extract_host, is_official_base_url},
+    parsing::{detect_cloudflare_challenge, parse_health_response},
+    url::{build_path_health_url, build_root_health_url, extract_host, is_official_base_url},
 };
+use crate::core::network::types::ProxyHealthDetail;
 
 #[cfg(feature = "timings-curl")]
 use crate::core::network::proxy_health::client::CurlGetRunner;
@@ -145,23 +145,45 @@ pub async fn assess_proxy_health(
 
     let mut had_network_error = false;
     let mut had_404_response = false;
-    
+
     // Attempt 1: Primary URL
-    match client.get_health(primary_url.clone(), options.timeout_ms).await {
+    match client
+        .get_health(primary_url.clone(), options.timeout_ms)
+        .await
+    {
         Ok(response) => {
             if response.status_code == 404 {
                 had_404_response = true;
             }
-            
+
             // Check for redirect first (before consuming response)
             let is_redirect = (300..400).contains(&response.status_code);
-            
+
             // Handle redirect from primary if enabled
             if is_redirect && options.follow_redirect_once {
-                if let Some(outcome) = handle_redirect(&response, options, client, base_url, &mut detail, start_time).await? {
+                if let Some(outcome) = handle_redirect(
+                    &response,
+                    options,
+                    client,
+                    base_url,
+                    &mut detail,
+                    start_time,
+                )
+                .await?
+                {
                     return Ok(outcome);
                 }
-            } else if let Some(outcome) = handle_response(response, "primary", &mut detail, start_time, options, client, &primary_url).await? {
+            } else if let Some(outcome) = handle_response(
+                response,
+                "primary",
+                &mut detail,
+                start_time,
+                options,
+                client,
+                &primary_url,
+            )
+            .await?
+            {
                 return Ok(outcome);
             }
         }
@@ -172,21 +194,43 @@ pub async fn assess_proxy_health(
 
     // Attempt 2: Fallback URL (if configured)
     if let Some(fallback_url) = fallback_url {
-        match client.get_health(fallback_url.clone(), options.timeout_ms).await {
+        match client
+            .get_health(fallback_url.clone(), options.timeout_ms)
+            .await
+        {
             Ok(response) => {
                 if response.status_code == 404 {
                     had_404_response = true;
                 }
-                
+
                 // Check for redirect first (before consuming response)
                 let is_redirect = (300..400).contains(&response.status_code);
-                
+
                 // Handle redirect from fallback if enabled
                 if is_redirect && options.follow_redirect_once {
-                    if let Some(outcome) = handle_redirect(&response, options, client, base_url, &mut detail, start_time).await? {
+                    if let Some(outcome) = handle_redirect(
+                        &response,
+                        options,
+                        client,
+                        base_url,
+                        &mut detail,
+                        start_time,
+                    )
+                    .await?
+                    {
                         return Ok(outcome);
                     }
-                } else if let Some(outcome) = handle_response(response, "fallback", &mut detail, start_time, options, client, &fallback_url).await? {
+                } else if let Some(outcome) = handle_response(
+                    response,
+                    "fallback",
+                    &mut detail,
+                    start_time,
+                    options,
+                    client,
+                    &fallback_url,
+                )
+                .await?
+                {
                     return Ok(outcome);
                 }
             }
@@ -198,20 +242,22 @@ pub async fn assess_proxy_health(
 
     // Attempt 3: HEAD fallback (last resort) - try base URL root
     if options.try_fallback {
-        if let Some(outcome) = head_fallback_check(base_url, client, options, &mut detail, start_time).await? {
+        if let Some(outcome) =
+            head_fallback_check(base_url, client, options, &mut detail, start_time).await?
+        {
             return Ok(outcome);
         }
     }
-    
+
     // All attempts failed - determine appropriate response
     detail.response_time_ms = start_time.elapsed().as_millis() as u64;
-    
+
     // If we only had network errors, treat as no proxy detected
     if had_network_error && !had_404_response {
         detail.reason = Some("timeout".to_string());
         return Ok(build_outcome_no_response(None, Some(detail)));
     }
-    
+
     // If we only had 404 responses, treat as no health endpoint
     if had_404_response && !had_network_error {
         // Reason already set to "no_endpoint_404" in handle_response
@@ -222,7 +268,7 @@ pub async fn assess_proxy_health(
             response_size: Some(0),
         });
     }
-    
+
     // Mixed failures - treat as no proxy detected (not Bad)
     detail.reason = Some("timeout".to_string());
     Ok(build_outcome_no_response(None, Some(detail)))
@@ -231,48 +277,48 @@ pub async fn assess_proxy_health(
 /// Handle Cloudflare challenge with retry-once logic
 async fn handle_cloudflare_challenge(
     _response: &HealthResponse,
-    options: &ProxyHealthOptions, 
+    options: &ProxyHealthOptions,
     client: &dyn HealthCheckClient,
     url: &str,
     detail: &mut ProxyHealthDetail,
     start_time: std::time::Instant,
 ) -> Result<Option<ProxyHealthOutcome>, ProxyHealthError> {
     use crate::core::network::proxy_health::parsing::parse_health_response;
-    
+
     // Set initial CF challenge detection
     detail.reason = Some("cloudflare_challenge".to_string());
-    
+
     // Wait 300-500ms for any Set-Cookie to process
     tokio::time::sleep(std::time::Duration::from_millis(400)).await;
-    
+
     // Retry once with same URL
     match client.get_health(url.to_string(), options.timeout_ms).await {
         Ok(retry_response) => {
             detail.response_time_ms = start_time.elapsed().as_millis() as u64;
-            
+
             // If retry succeeds with 200, parse normally
             if retry_response.status_code == 200 {
                 detail.reason = Some("retry_after_challenge".to_string());
                 detail.success_method = Some("retry".to_string());
-                
+
                 // Parse response body for health level
                 let level = parse_health_response(&retry_response.body);
-                
+
                 // Set reason based on parsing outcome
                 match &level {
                     Some(ProxyHealthLevel::Bad) => {
                         detail.reason = Some(determine_bad_health_reason(&retry_response.body));
-                    },
+                    }
                     Some(_) => {
                         // Healthy/Degraded - successful parsing
                         detail.reason = Some("retry_after_challenge".to_string());
-                    },
+                    }
                     None => {
                         // Empty/whitespace response - treat as no endpoint
                         detail.reason = Some("no_endpoint_404".to_string());
                     }
                 }
-                
+
                 Ok(Some(build_outcome_with_response(
                     level,
                     detail.clone(),
@@ -289,12 +335,12 @@ async fn handle_cloudflare_challenge(
             }
         }
         Err(_) => {
-            // Retry failed - return Unknown with timeout reason  
+            // Retry failed - return Unknown with timeout reason
             detail.reason = Some("retry_timeout".to_string());
             detail.response_time_ms = start_time.elapsed().as_millis() as u64;
             Ok(Some(build_outcome_no_response(
-                Some(ProxyHealthLevel::Unknown), 
-                Some(detail.clone())
+                Some(ProxyHealthLevel::Unknown),
+                Some(detail.clone()),
             )))
         }
     }
@@ -311,7 +357,7 @@ async fn handle_response(
     url: &str,
 ) -> Result<Option<ProxyHealthOutcome>, ProxyHealthError> {
     detail.response_time_ms = start_time.elapsed().as_millis() as u64;
-    
+
     match response.status_code {
         404 => {
             // No health endpoint, continue to fallback/redirect attempts
@@ -322,22 +368,22 @@ async fn handle_response(
             // Parse response body for health level
             let level = parse_health_response(&response.body);
             detail.success_method = Some(method.to_string());
-            
+
             // Set reason based on parsing outcome
             match &level {
                 Some(ProxyHealthLevel::Bad) => {
                     detail.reason = Some(determine_bad_health_reason(&response.body));
-                },
+                }
                 Some(_) => {
                     // Healthy/Degraded - successful parsing
                     detail.reason = None;
-                },
+                }
                 None => {
                     // Empty/whitespace response - treat as no endpoint
                     detail.reason = Some("no_endpoint_404".to_string());
                 }
             }
-            
+
             Ok(Some(build_outcome_with_response(
                 level,
                 detail.clone(),
@@ -346,23 +392,18 @@ async fn handle_response(
         }
         403 | 503 | 429 => {
             // Check for Cloudflare challenge first
-            if detect_cloudflare_challenge(response.status_code, &response.headers, &response.body) {
+            if detect_cloudflare_challenge(response.status_code, &response.headers, &response.body)
+            {
                 detail.success_method = Some(method.to_string());
-                
+
                 // Use retry-once logic for CF challenges
-                handle_cloudflare_challenge(
-                    &response,
-                    options,
-                    client,
-                    url,
-                    detail,
-                    start_time,
-                ).await
+                handle_cloudflare_challenge(&response, options, client, url, detail, start_time)
+                    .await
             } else if response.status_code == 429 {
                 // Rate limited - proxy exists but degraded (unchanged)
                 detail.success_method = Some(method.to_string());
                 detail.reason = None; // Keep existing behavior
-                
+
                 Ok(Some(build_outcome_with_response(
                     Some(ProxyHealthLevel::Degraded),
                     detail.clone(),
@@ -378,7 +419,7 @@ async fn handle_response(
             // Server errors - proxy exists but unhealthy (Bad level)
             detail.success_method = Some(method.to_string());
             detail.reason = Some("server_error".to_string());
-            
+
             Ok(Some(build_outcome_with_response(
                 Some(ProxyHealthLevel::Bad),
                 detail.clone(),
@@ -411,26 +452,38 @@ async fn handle_redirect(
         Some(url) => url,
         None => return Ok(None), // No location header, can't redirect
     };
-    
+
     // Validate same-host redirect for security
     validate_redirect_host(base_url, &location_url)?;
-    
+
     // Follow redirect once
-    match client.get_health(location_url.clone(), options.timeout_ms).await {
+    match client
+        .get_health(location_url.clone(), options.timeout_ms)
+        .await
+    {
         Ok(redirect_response) => {
             // Set redirect URL in detail for tracking
             detail.redirect_url = Some(location_url.clone());
-            
+
             // Handle redirect response (no further redirects allowed)
-            let result = handle_response(redirect_response, "redirect", detail, start_time, options, client, &location_url).await?;
-            
+            let result = handle_response(
+                redirect_response,
+                "redirect",
+                detail,
+                start_time,
+                options,
+                client,
+                &location_url,
+            )
+            .await?;
+
             // If redirect was successful (returned Some outcome), mark as redirect_followed
             if let Some(ref outcome) = result {
                 if outcome.level.is_some() {
                     detail.reason = Some("redirect_followed".to_string());
                 }
             }
-            
+
             Ok(result)
         }
         Err(_) => {
@@ -451,23 +504,26 @@ fn extract_location_header(headers: &std::collections::HashMap<String, String>) 
 
 /// Validate that redirect URL points to same host (security check)
 fn validate_redirect_host(original_url: &str, redirect_url: &str) -> Result<(), ProxyHealthError> {
-    let original_host = extract_host(original_url)
-        .map_err(|e| ProxyHealthError::RedirectValidationFailed(format!("Invalid original URL: {}", e)))?;
-        
-    let redirect_host = extract_host(redirect_url)
-        .map_err(|e| ProxyHealthError::RedirectValidationFailed(format!("Invalid redirect URL: {}", e)))?;
+    let original_host = extract_host(original_url).map_err(|e| {
+        ProxyHealthError::RedirectValidationFailed(format!("Invalid original URL: {}", e))
+    })?;
+
+    let redirect_host = extract_host(redirect_url).map_err(|e| {
+        ProxyHealthError::RedirectValidationFailed(format!("Invalid redirect URL: {}", e))
+    })?;
 
     if original_host != redirect_host {
-        return Err(ProxyHealthError::RedirectValidationFailed(
-            format!("Redirect to different host: {} -> {}", original_host, redirect_host)
-        ));
+        return Err(ProxyHealthError::RedirectValidationFailed(format!(
+            "Redirect to different host: {} -> {}",
+            original_host, redirect_host
+        )));
     }
 
     Ok(())
 }
 
 /// HEAD-only health check as last resort fallback
-/// 
+///
 /// Makes a GET request to the base URL root and ignores the response body.
 /// If we get a 2xx/3xx response, it indicates the proxy is present but
 /// the health endpoint location is unknown.
@@ -495,18 +551,18 @@ async fn head_fallback_check(
     } else {
         format!("{}/", base_url)
     };
-    
+
     // Attempt GET request to root (simulating HEAD behavior)
     match client.get_health(head_url, options.timeout_ms).await {
         Ok(response) => {
             detail.response_time_ms = start_time.elapsed().as_millis() as u64;
-            
+
             // Check for success or redirect response (proxy present)
             if (200..400).contains(&response.status_code) {
                 // Same-host 2xx/3xx response indicates proxy present but health endpoint unknown
                 detail.reason = Some("head_fallback_ok".to_string());
                 detail.success_method = Some("head_fallback".to_string());
-                
+
                 Ok(Some(ProxyHealthOutcome {
                     level: Some(ProxyHealthLevel::Unknown), // Don't claim Healthy without health endpoint
                     detail: Some(detail.clone()),
@@ -524,4 +580,3 @@ async fn head_fallback_check(
         }
     }
 }
-

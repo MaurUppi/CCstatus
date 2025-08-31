@@ -47,7 +47,6 @@ impl JsonlMonitor {
         Self { logger }
     }
 
-
     /// Scan transcript tail for API error detection - optimized for RED gate control
     ///
     /// **Return Semantics for RED Gate Control:**
@@ -185,8 +184,7 @@ impl JsonlMonitor {
                 let extracted_message = self.extract_message_from_details(&error_entry.details);
 
                 // Normalize error timestamp to avoid placeholder/invalid values
-                let normalized_error_ts =
-                    self.normalize_error_timestamp(&error_entry.timestamp);
+                let normalized_error_ts = self.normalize_error_timestamp(&error_entry.timestamp);
 
                 // Create JSONL entry according to proposal schema
                 let jsonl_entry = serde_json::json!({

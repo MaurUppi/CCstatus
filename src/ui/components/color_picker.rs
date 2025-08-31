@@ -678,7 +678,6 @@ impl ColorPickerComponent {
     }
 }
 
-
 fn get_color_name(ansi: u8) -> &'static str {
     match ansi {
         0 => "Black",

@@ -33,16 +33,16 @@ async fn main_impl() -> Result<(), Box<dyn std::error::Error>> {
         }
         return Ok(());
     }
-    
+
     // Handle check-update command
     if cli.check_update {
         #[cfg(feature = "self-update")]
         {
-            use ccstatus::updater::{geo, url_resolver, manifest::ManifestClient};
-            
+            use ccstatus::updater::{geo, manifest::ManifestClient, url_resolver};
+
             // Perform immediate update check
             let mut state = ccstatus::updater::UpdateStateFile::load();
-            
+
             // Get geographic detection
             let is_china = if state.is_geo_verdict_valid() {
                 state.geo_verdict.unwrap_or(false)
@@ -52,14 +52,12 @@ async fn main_impl() -> Result<(), Box<dyn std::error::Error>> {
                 state.save().ok();
                 detected
             };
-            
+
             // Resolve URLs and try to fetch manifest
             let urls = url_resolver::resolve_manifest_url(is_china);
             let mut client = ManifestClient::new();
-            
-            match url_resolver::try_urls_in_sequence(&urls, |url| {
-                client.fetch_manifest(url)
-            }) {
+
+            match url_resolver::try_urls_in_sequence(&urls, |url| client.fetch_manifest(url)) {
                 Ok(Some(manifest)) => {
                     if client.is_newer_version(&manifest.version).unwrap_or(false) {
                         eprintln!(" v{} released ", manifest.version);

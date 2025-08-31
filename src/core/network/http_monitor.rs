@@ -29,7 +29,9 @@ endpoints and maintains atomic state persistence with comprehensive timing metri
 */
 
 use crate::core::network::debug_logger::get_debug_logger;
-use crate::core::network::proxy_health::{assess_proxy_health, ProxyHealthOptions, HealthCheckClient, build_messages_endpoint};
+use crate::core::network::proxy_health::{
+    assess_proxy_health, build_messages_endpoint, HealthCheckClient, ProxyHealthOptions,
+};
 use serde_json;
 
 #[cfg(feature = "network-monitoring")]
@@ -63,8 +65,8 @@ pub struct PhaseTimings {
     pub dns_ms: u32,
     pub tcp_ms: u32,
     pub tls_ms: u32,
-    pub ttfb_ms: u32,        // ServerTTFB (isolated server processing time)
-    pub total_ttfb_ms: u32,  // TotalTTFB (end-to-end first byte time)
+    pub ttfb_ms: u32,       // ServerTTFB (isolated server processing time)
+    pub total_ttfb_ms: u32, // TotalTTFB (end-to-end first byte time)
     pub total_ms: u32,
 }
 
@@ -92,7 +94,16 @@ pub trait HttpClientTrait: Send + Sync {
         headers: std::collections::HashMap<String, String>,
         body: Vec<u8>,
         timeout_ms: u32,
-    ) -> Result<(u16, Duration, String, std::collections::HashMap<String, String>, Option<String>), String>;
+    ) -> Result<
+        (
+            u16,
+            Duration,
+            String,
+            std::collections::HashMap<String, String>,
+            Option<String>,
+        ),
+        String,
+    >;
 }
 
 // HealthCheckClient and HealthResponse are now imported from proxy_health module
@@ -120,7 +131,16 @@ impl HttpClientTrait for IsahcHttpClient {
         headers: std::collections::HashMap<String, String>,
         body: Vec<u8>,
         timeout_ms: u32,
-    ) -> Result<(u16, Duration, String, std::collections::HashMap<String, String>, Option<String>), String> {
+    ) -> Result<
+        (
+            u16,
+            Duration,
+            String,
+            std::collections::HashMap<String, String>,
+            Option<String>,
+        ),
+        String,
+    > {
         let start = Instant::now();
 
         let mut request = Request::post(&url)
@@ -147,7 +167,7 @@ impl HttpClientTrait for IsahcHttpClient {
         let ttfb_duration = start.elapsed();
 
         let status = response.status().as_u16();
-        
+
         // Capture HTTP version for diagnostics
         let http_version = match response.version() {
             isahc::http::Version::HTTP_09 => Some("HTTP/0.9".to_string()),
@@ -178,7 +198,13 @@ impl HttpClientTrait for IsahcHttpClient {
         // Simplified breakdown format for isahc - just Total time
         let breakdown = format!("Total:{}ms", total_ms);
 
-        Ok((status, ttfb_duration, breakdown, response_headers, http_version))
+        Ok((
+            status,
+            ttfb_duration,
+            breakdown,
+            response_headers,
+            http_version,
+        ))
     }
 }
 
@@ -186,7 +212,7 @@ impl HttpClientTrait for IsahcHttpClient {
 impl IsahcHttpClient {
     pub fn new() -> Result<Self, NetworkError> {
         let client = HttpClient::builder()
-            .cookies()  // Enable in-memory cookie store for session continuity
+            .cookies() // Enable in-memory cookie store for session continuity
             .build()
             .map_err(|e| NetworkError::HttpError(format!("Failed to create HTTP client: {}", e)))?;
         Ok(Self { client })
@@ -620,25 +646,31 @@ impl HttpMonitor {
         let (status_code, latency_ms, breakdown, error_type, http_version) = match probe_result {
             Ok((status, duration, breakdown, response_headers, http_version)) => {
                 let error_type = self.classify_http_error(status, &response_headers);
-                (status, duration.as_millis() as u32, breakdown, error_type, http_version)
+                (
+                    status,
+                    duration.as_millis() as u32,
+                    breakdown,
+                    error_type,
+                    http_version,
+                )
             }
             Err(err) => {
                 debug_logger
                     .error("HttpMonitor", &format!("Probe failed: {}", err))
                     .await;
-                
+
                 let elapsed_ms = probe_start.elapsed().as_millis();
-                
+
                 // Connection error breakdown - format based on feature
                 #[cfg(feature = "timings-curl")]
                 let breakdown = format!(
                     "DNS:0ms|TCP:0ms|TLS:0ms|ServerTTFB:0ms/TotalTTFB:0ms|Total:{}ms",
                     elapsed_ms
                 );
-                
+
                 #[cfg(not(feature = "timings-curl"))]
                 let breakdown = format!("Total:{}ms", elapsed_ms);
-                
+
                 (
                     0,
                     elapsed_ms as u32,
@@ -826,7 +858,16 @@ impl HttpMonitor {
         creds: &ApiCredentials,
         timeout_ms: u32,
         _probe_start: Instant,
-    ) -> Result<(u16, Duration, String, std::collections::HashMap<String, String>, Option<String>), NetworkError> {
+    ) -> Result<
+        (
+            u16,
+            Duration,
+            String,
+            std::collections::HashMap<String, String>,
+            Option<String>,
+        ),
+        NetworkError,
+    > {
         // Check if curl runner is available for detailed timing measurements
         #[cfg(feature = "timings-curl")]
         if let Some(ref curl_runner) = self.curl_runner {
@@ -865,10 +906,11 @@ impl HttpMonitor {
             {
                 Ok(phase_timings) => {
                     let duration = Duration::from_millis(phase_timings.ttfb_ms as u64);
-                    
+
                     // Pre-determine if likely degraded/error for breakdown format
-                    let is_degraded_or_error = phase_timings.status >= 400 || phase_timings.status == 0;
-                    
+                    let is_degraded_or_error =
+                        phase_timings.status >= 400 || phase_timings.status == 0;
+
                     let breakdown = if is_degraded_or_error {
                         format!(
                             "DNS:{}ms|TCP:{}ms|TLS:{}ms|ServerTTFB:{}ms/TotalTTFB:{}ms|Total:{}ms",
@@ -889,12 +931,18 @@ impl HttpMonitor {
                             phase_timings.total_ms
                         )
                     };
-                    
+
                     // Note: curl branch doesn't capture response headers in current implementation
                     let empty_headers = std::collections::HashMap::new();
                     // HTTP/2 is typically negotiated with curl when using HTTP/2 TLS version
                     let http_version = Some("HTTP/2.0".to_string());
-                    return Ok((phase_timings.status, duration, breakdown, empty_headers, http_version));
+                    return Ok((
+                        phase_timings.status,
+                        duration,
+                        breakdown,
+                        empty_headers,
+                        http_version,
+                    ));
                 }
                 Err(curl_error) => {
                     // Log curl failure and fallback to isahc for resiliency
@@ -935,7 +983,10 @@ impl HttpMonitor {
         headers.insert("anthropic-version".to_string(), "2023-06-01".to_string());
         // Bot-fight mitigation headers
         headers.insert("Accept".to_string(), "application/json".to_string());
-        headers.insert("Accept-Encoding".to_string(), "gzip, deflate, br".to_string());
+        headers.insert(
+            "Accept-Encoding".to_string(),
+            "gzip, deflate, br".to_string(),
+        );
 
         let (status_code, duration, breakdown, response_headers, http_version) = self
             .http_client
@@ -943,15 +994,25 @@ impl HttpMonitor {
             .await
             .map_err(NetworkError::HttpError)?;
 
-        Ok((status_code, duration, breakdown, response_headers, http_version))
+        Ok((
+            status_code,
+            duration,
+            breakdown,
+            response_headers,
+            http_version,
+        ))
     }
 
     /// Classify HTTP status codes into standard error types
     /// Enhanced Phase 2 bot challenge detection with header analysis for 429 responses
-    /// 
+    ///
     /// Uses detect_cloudflare_challenge for comprehensive header-based CF detection on 429.
     /// GET detection uses comprehensive header/body analysis via detect_cloudflare_challenge.
-    fn classify_http_error(&self, status_code: u16, response_headers: &std::collections::HashMap<String, String>) -> Option<String> {
+    fn classify_http_error(
+        &self,
+        status_code: u16,
+        response_headers: &std::collections::HashMap<String, String>,
+    ) -> Option<String> {
         match status_code {
             200..=299 => None, // Success
             0 => Some("connection_error".to_string()),
@@ -961,27 +1022,27 @@ impl HttpMonitor {
                 // 403 is highly likely to be a Cloudflare bot challenge for API endpoints
                 // Phase 2: Enhanced heuristic - 403 on /v1/messages is almost always CF
                 Some("bot_challenge".to_string())
-            },
+            }
             404 => Some("not_found_error".to_string()),
             413 => Some("request_too_large".to_string()),
             429 => {
                 // 429 can be rate limiting OR bot challenge depending on context
                 // Phase 2 enhancement: Use header analysis to detect Cloudflare challenges
                 use crate::core::network::proxy_health::parsing::detect_cloudflare_challenge;
-                
+
                 if detect_cloudflare_challenge(429, response_headers, &[]) {
                     Some("bot_challenge".to_string())
                 } else {
                     // No CF indicators - treat as legitimate rate limit
                     Some("rate_limit_error".to_string())
                 }
-            },
+            }
             500 => Some("api_error".to_string()),
             503 => {
                 // 503 Service Unavailable commonly used by CF for bot challenges
                 // Phase 2: Enhanced heuristic - 503 on API endpoints often indicates CF challenge
                 Some("bot_challenge".to_string())
-            },
+            }
             504 => Some("socket_hang_up".to_string()),
             529 => Some("overloaded_error".to_string()),
             402 | 405..=412 | 414..=428 | 430..=499 => Some("client_error".to_string()),
@@ -1075,13 +1136,16 @@ impl HttpMonitor {
             follow_redirect_once: true, // Enable safe same-host redirect following
             timeout_ms: 1500,
         };
-        
-        let proxy_health_outcome = assess_proxy_health(&creds.base_url, &proxy_health_options, &*self.health_client).await;
-        
+
+        let proxy_health_outcome =
+            assess_proxy_health(&creds.base_url, &proxy_health_options, &*self.health_client).await;
+
         // Use centralized mapping function to set both legacy and new fields
         match proxy_health_outcome {
             Ok(outcome) => {
-                state.network.set_proxy_health(outcome.level, outcome.detail);
+                state
+                    .network
+                    .set_proxy_health(outcome.level, outcome.detail);
             }
             Err(_) => {
                 // Health check errors: no proxy detected or internal error
@@ -1111,44 +1175,46 @@ impl HttpMonitor {
             }
             ProbeMode::Green | ProbeMode::Cold => {
                 // GREEN/COLD: Update rolling stats ONLY if HTTP 200 AND no bot challenge
-                let is_bot_blocked = metrics.error_type.as_ref() == Some(&"bot_challenge".to_string());
-                
-                let (status, p95, rolling_len) = if metrics.last_http_status == 200 && !is_bot_blocked {
-                    // Safe to add to rolling statistics - HTTP 200 with no bot challenge
-                    state.network.rolling_totals.push(metrics.latency_ms);
-                    if state.network.rolling_totals.len() > 12 {
-                        state.network.rolling_totals.remove(0);
-                    }
+                let is_bot_blocked =
+                    metrics.error_type.as_ref() == Some(&"bot_challenge".to_string());
 
-                    let new_p95 = self.calculate_p95(&state.network.rolling_totals);
-                    state.network.p95_latency_ms = new_p95;
+                let (status, p95, rolling_len) =
+                    if metrics.last_http_status == 200 && !is_bot_blocked {
+                        // Safe to add to rolling statistics - HTTP 200 with no bot challenge
+                        state.network.rolling_totals.push(metrics.latency_ms);
+                        if state.network.rolling_totals.len() > 12 {
+                            state.network.rolling_totals.remove(0);
+                        }
 
-                    // Determine status based on P80/P95 thresholds
-                    let p80 = self.calculate_p80(&state.network.rolling_totals);
-                    let status = if metrics.latency_ms <= p80 {
-                        NetworkStatus::Healthy
-                    } else if metrics.latency_ms <= new_p95 {
-                        NetworkStatus::Degraded
+                        let new_p95 = self.calculate_p95(&state.network.rolling_totals);
+                        state.network.p95_latency_ms = new_p95;
+
+                        // Determine status based on P80/P95 thresholds
+                        let p80 = self.calculate_p80(&state.network.rolling_totals);
+                        let status = if metrics.latency_ms <= p80 {
+                            NetworkStatus::Healthy
+                        } else if metrics.latency_ms <= new_p95 {
+                            NetworkStatus::Degraded
+                        } else {
+                            NetworkStatus::Error
+                        };
+
+                        (status, new_p95, state.network.rolling_totals.len())
+                    } else if metrics.last_http_status == 429 && !is_bot_blocked {
+                        // Rate limited but not bot blocked - degraded status
+                        (
+                            NetworkStatus::Degraded,
+                            state.network.p95_latency_ms,
+                            state.network.rolling_totals.len(),
+                        )
                     } else {
-                        NetworkStatus::Error
+                        // Bot blocked or error - don't contaminate stats
+                        (
+                            NetworkStatus::Error,
+                            state.network.p95_latency_ms,
+                            state.network.rolling_totals.len(),
+                        )
                     };
-
-                    (status, new_p95, state.network.rolling_totals.len())
-                } else if metrics.last_http_status == 429 && !is_bot_blocked {
-                    // Rate limited but not bot blocked - degraded status
-                    (
-                        NetworkStatus::Degraded,
-                        state.network.p95_latency_ms,
-                        state.network.rolling_totals.len(),
-                    )
-                } else {
-                    // Bot blocked or error - don't contaminate stats
-                    (
-                        NetworkStatus::Error,
-                        state.network.p95_latency_ms,
-                        state.network.rolling_totals.len(),
-                    )
-                };
 
                 state.status = status.clone();
                 state.monitoring_state.state = status.clone();
@@ -1269,8 +1335,6 @@ impl HttpMonitor {
 
         Ok(())
     }
-
-
 }
 
 // Proxy health check implementation complete

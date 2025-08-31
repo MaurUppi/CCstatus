@@ -238,13 +238,13 @@ impl UpdateState {
 #[cfg(feature = "self-update")]
 pub mod github;
 
+#[cfg(feature = "self-update")]
+pub mod geo;
 /// New V1 update system modules
 #[cfg(feature = "self-update")]
 pub mod manifest;
 #[cfg(feature = "self-update")]
 pub mod state;
-#[cfg(feature = "self-update")]
-pub mod geo;
 #[cfg(feature = "self-update")]
 pub mod url_resolver;
 

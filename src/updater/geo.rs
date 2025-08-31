@@ -9,13 +9,7 @@ pub struct GeoResult {
 /// TTL: 24 hours, no environment variables used
 pub fn detect_china_ttl24h() -> bool {
     // Try to detect China location by checking myip.ipip.net
-    match detect_china_online() {
-        Ok(is_china) => is_china,
-        Err(_) => {
-            // Default to non-China if detection fails
-            false
-        }
-    }
+    detect_china_online().unwrap_or_default()
 }
 
 /// Perform online China detection via myip.ipip.net
@@ -24,7 +18,10 @@ fn detect_china_online() -> Result<bool, Box<dyn std::error::Error>> {
 
     let mut response = client
         .get("http://myip.ipip.net")
-        .header("User-Agent", &format!("CCstatus/{}", env!("CARGO_PKG_VERSION")))
+        .header(
+            "User-Agent",
+            &format!("CCstatus/{}", env!("CARGO_PKG_VERSION")),
+        )
         .call()?;
 
     if response.status().as_u16() == 200 {
@@ -53,9 +50,7 @@ mod tests {
         // Test with invalid URL to ensure error handling works
         let client = ureq::Agent::new_with_defaults();
 
-        let result = client
-            .get("http://invalid.nonexistent.domain.test")
-            .call();
+        let result = client.get("http://invalid.nonexistent.domain.test").call();
 
         assert!(result.is_err());
     }

@@ -1,6 +1,6 @@
 // Statusline UI rendering for network monitoring
-use crate::core::network::types::{NetworkMetrics, NetworkStatus};
 use crate::core::network::proxy_health::config::ProxyHealthLevel;
+use crate::core::network::types::{NetworkMetrics, NetworkStatus};
 
 /// Renders network status for statusline display
 pub struct StatusRenderer;
@@ -17,25 +17,33 @@ impl StatusRenderer {
     /// Shield: 🛡️ indicators for bot challenges (GET and/or POST)
     pub fn render_status(&self, status: &NetworkStatus, metrics: &NetworkMetrics) -> String {
         // Check for bot challenges first - they take precedence over normal rendering
-        let proxy_has_bot_challenge = metrics.proxy_health_detail.as_ref()
+        let proxy_has_bot_challenge = metrics
+            .proxy_health_detail
+            .as_ref()
             .and_then(|detail| detail.reason.as_ref())
             .map(|reason| reason == "cloudflare_challenge")
             .unwrap_or(false);
-            
-        let post_has_bot_challenge = metrics.error_type.as_ref()
+
+        let post_has_bot_challenge = metrics
+            .error_type
+            .as_ref()
             .map(|et| et == "bot_challenge")
             .unwrap_or(false);
-            
+
         // Bot challenge rendering takes precedence
         if proxy_has_bot_challenge || post_has_bot_challenge {
-            return self.render_bot_challenge(proxy_has_bot_challenge, post_has_bot_challenge, metrics);
+            return self.render_bot_challenge(
+                proxy_has_bot_challenge,
+                post_has_bot_challenge,
+                metrics,
+            );
         }
         // Determine proxy health prefix based on enhanced tri-state levels with fallback
         let proxy_prefix = match metrics.get_proxy_health_level() {
-            Some(ProxyHealthLevel::Healthy) => Some("🟢 | "),  // Healthy proxy
+            Some(ProxyHealthLevel::Healthy) => Some("🟢 | "), // Healthy proxy
             Some(ProxyHealthLevel::Degraded) => Some("🟡 | "), // Degraded proxy
             Some(ProxyHealthLevel::Bad) => Some("🔴 | "),     // Unhealthy proxy
-            Some(ProxyHealthLevel::Unknown) => Some("⚪ | "),  // Unknown proxy (Cloudflare challenges, etc.)
+            Some(ProxyHealthLevel::Unknown) => Some("⚪ | "), // Unknown proxy (Cloudflare challenges, etc.)
             None => None, // No proxy health check (official endpoint or no health endpoint)
         };
 
@@ -91,11 +99,19 @@ impl StatusRenderer {
     /// GET bot challenge: 🛡️ Bot challenge
     /// POST bot challenge: 🛡️ Total: XXms  
     /// Both combined when applicable
-    fn render_bot_challenge(&self, proxy_blocked: bool, post_blocked: bool, metrics: &NetworkMetrics) -> String {
+    fn render_bot_challenge(
+        &self,
+        proxy_blocked: bool,
+        post_blocked: bool,
+        metrics: &NetworkMetrics,
+    ) -> String {
         match (proxy_blocked, post_blocked) {
             (true, true) => {
                 // Both GET and POST blocked
-                format!("GET 🛡️ Bot challenge | POST 🛡️ Total: {}ms", metrics.latency_ms)
+                format!(
+                    "GET 🛡️ Bot challenge | POST 🛡️ Total: {}ms",
+                    metrics.latency_ms
+                )
             }
             (true, false) => {
                 // Only GET blocked - show proxy challenge with normal P95 info

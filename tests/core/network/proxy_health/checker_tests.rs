@@ -31,7 +31,8 @@ impl MockHealthClient {
     }
 
     fn add_error(&mut self, url: &str, error: &str) {
-        self.responses.insert(url.to_string(), Err(error.to_string()));
+        self.responses
+            .insert(url.to_string(), Err(error.to_string()));
     }
 }
 
@@ -50,11 +51,9 @@ async fn test_assess_official_endpoint() {
     let client = MockHealthClient::default();
     let options = ProxyHealthOptions::default();
 
-    let outcome = assess_proxy_health(
-        "https://api.anthropic.com",
-        &options,
-        &client,
-    ).await.unwrap();
+    let outcome = assess_proxy_health("https://api.anthropic.com", &options, &client)
+        .await
+        .unwrap();
 
     assert!(outcome.level.is_none());
     assert!(outcome.detail.is_none());
@@ -71,15 +70,13 @@ async fn test_assess_healthy_proxy() {
 
     let options = ProxyHealthOptions::default();
 
-    let outcome = assess_proxy_health(
-        "https://proxy.com/api",
-        &options,
-        &client,
-    ).await.unwrap();
+    let outcome = assess_proxy_health("https://proxy.com/api", &options, &client)
+        .await
+        .unwrap();
 
     assert_eq!(outcome.level, Some(ProxyHealthLevel::Healthy));
     assert_eq!(outcome.status_code, Some(200));
-    
+
     let detail = outcome.detail.unwrap();
     assert_eq!(detail.success_method, Some("primary".to_string()));
 }
@@ -87,16 +84,12 @@ async fn test_assess_healthy_proxy() {
 #[tokio::test]
 async fn test_assess_with_fallback() {
     let mut client = MockHealthClient::default();
-    
+
     // Primary fails with 404
     client.add_response("https://proxy.com/api/health", 404, "");
-    
+
     // Fallback succeeds
-    client.add_response(
-        "https://proxy.com/health",
-        200,
-        r#"{"status": "healthy"}"#,
-    );
+    client.add_response("https://proxy.com/health", 200, r#"{"status": "healthy"}"#);
 
     let options = ProxyHealthOptions {
         use_root_urls: false,
@@ -104,17 +97,18 @@ async fn test_assess_with_fallback() {
         ..Default::default()
     };
 
-    let outcome = assess_proxy_health(
-        "https://proxy.com/api",
-        &options,
-        &client,
-    ).await.unwrap();
+    let outcome = assess_proxy_health("https://proxy.com/api", &options, &client)
+        .await
+        .unwrap();
 
     assert_eq!(outcome.level, Some(ProxyHealthLevel::Healthy));
-    
+
     let detail = outcome.detail.unwrap();
     assert_eq!(detail.success_method, Some("fallback".to_string()));
-    assert_eq!(detail.fallback_url, Some("https://proxy.com/health".to_string()));
+    assert_eq!(
+        detail.fallback_url,
+        Some("https://proxy.com/health".to_string())
+    );
 }
 
 // Note: validate_redirect_host is now private, tested indirectly through assess_proxy_health
