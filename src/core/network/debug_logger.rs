@@ -153,6 +153,67 @@ impl RotatingLogger {
     }
 }
 
+/// Configuration for JsonL logger and debug settings
+/// Replaces direct environment variable access for better testability
+#[derive(Clone, Debug)]
+pub struct JsonlLoggerConfig {
+    pub jsonl_path: PathBuf,
+    pub debug_log_path: PathBuf,
+    pub debug_enabled: bool,
+}
+
+impl JsonlLoggerConfig {
+    /// Create default configuration using environment variables and standard paths
+    pub fn default() -> Self {
+        Self {
+            jsonl_path: Self::get_default_jsonl_path(),
+            debug_log_path: Self::get_default_debug_path(),
+            debug_enabled: Self::parse_debug_enabled(),
+        }
+    }
+
+    /// Create configuration with custom JSONL path (for testing)
+    pub fn with_jsonl_path(jsonl_path: PathBuf) -> Self {
+        Self {
+            jsonl_path,
+            debug_log_path: Self::get_default_debug_path(),
+            debug_enabled: Self::parse_debug_enabled(),
+        }
+    }
+
+    /// Get default JSONL log path, checking environment variable first
+    fn get_default_jsonl_path() -> PathBuf {
+        // Check if environment variable is set (primarily for testing)
+        if let Ok(jsonl_path) = std::env::var("CCSTATUS_JSONL_FILE") {
+            return PathBuf::from(jsonl_path);
+        }
+        
+        // Default path
+        let mut log_path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        log_path.push(".claude");
+        log_path.push("ccstatus");
+        log_path.push("ccstatus-jsonl-error.json");
+        log_path
+    }
+
+    /// Get default debug log path
+    fn get_default_debug_path() -> PathBuf {
+        let mut log_path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        log_path.push(".claude");
+        log_path.push("ccstatus");
+        log_path.push("ccstatus-debug.log");
+        log_path
+    }
+
+    /// Parse debug enabled flag from environment
+    fn parse_debug_enabled() -> bool {
+        match std::env::var("CCSTATUS_DEBUG").as_deref() {
+            Ok("true") | Ok("1") | Ok("yes") | Ok("on") => true,
+            _ => false,
+        }
+    }
+}
+
 pub struct EnhancedDebugLogger {
     enabled: bool,
     debug_logger: Option<Arc<Mutex<RotatingLogger>>>, // Flat text debug log (CCSTATUS_DEBUG gated)
@@ -190,6 +251,33 @@ impl EnhancedDebugLogger {
         }
     }
 
+    /// Create EnhancedDebugLogger from configuration
+    /// This replaces environment variable dependency for better testability
+    pub fn from_config(config: JsonlLoggerConfig) -> Self {
+        let session_id = Uuid::new_v4().to_string()[..8].to_string();
+
+        // Debug logger - only created when debug is enabled
+        let debug_logger = if config.debug_enabled {
+            Some(Arc::new(Mutex::new(RotatingLogger::new(config.debug_log_path))))
+        } else {
+            None
+        };
+
+        // JSONL logger - always created (always-on operational logging)
+        let jsonl_logger = Arc::new(Mutex::new(RotatingLogger::new(config.jsonl_path)));
+
+        // Compile redaction patterns once at startup
+        let redaction_patterns = Self::compile_redaction_patterns();
+
+        Self {
+            enabled: config.debug_enabled,
+            debug_logger,
+            jsonl_logger,
+            session_id,
+            redaction_patterns,
+        }
+    }
+
     /// Parse debug enabled status from CCSTATUS_DEBUG environment variable only
     /// Supports: true/false (case insensitive)
     fn parse_debug_enabled() -> bool {
@@ -205,6 +293,12 @@ impl EnhancedDebugLogger {
     }
 
     pub fn get_jsonl_log_path() -> PathBuf {
+        // Check if environment variable is set (primarily for testing)
+        if let Ok(jsonl_path) = std::env::var("CCSTATUS_JSONL_FILE") {
+            return PathBuf::from(jsonl_path);
+        }
+        
+        // Default path
         let mut log_path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
         log_path.push(".claude");
         log_path.push("ccstatus");
@@ -496,6 +590,7 @@ impl Default for EnhancedDebugLogger {
 }
 
 // Factory function for backward compatibility
+// Uses default configuration to reduce environment variable dependency
 pub fn get_debug_logger() -> EnhancedDebugLogger {
-    EnhancedDebugLogger::new()
+    EnhancedDebugLogger::from_config(JsonlLoggerConfig::default())
 }
