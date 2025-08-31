@@ -56,6 +56,90 @@ impl UpdateStateFile {
         }
     }
 
+    /// Update system triggered from COLD window
+    pub fn tick_from_cold(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if !self.should_check_for_updates() {
+            return Ok(()); // Throttled
+        }
+
+        // Perform update check with short timeout and silent failure
+        match self.check_for_updates_internal() {
+            Ok(_) => {
+                self.update_last_check();
+                self.save().ok(); // Silent failure on save
+            }
+            Err(_) => {
+                // Silent failure as specified in plan
+            }
+        }
+        Ok(())
+    }
+
+    /// Update system triggered from GREEN window
+    pub fn tick_from_green(&mut self, _green_window_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+        self.increment_green_ticks();
+        
+        if self.should_trigger_green_check() {
+            // Perform update check when threshold reached
+            if let Ok(_) = self.check_for_updates_internal() {
+                self.update_last_check();
+            }
+            self.reset_green_ticks();
+            self.save().ok(); // Silent failure on save
+        }
+        Ok(())
+    }
+
+    /// Internal update check implementation
+    fn check_for_updates_internal(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+        use crate::updater::{geo, url_resolver, manifest::ManifestClient};
+        
+        // Get or update geographic detection
+        let is_china = if self.is_geo_verdict_valid() {
+            self.geo_verdict.unwrap_or(false)
+        } else {
+            let detected = geo::detect_china_ttl24h();
+            self.update_geo_verdict(detected);
+            detected
+        };
+
+        // Resolve URLs based on geography
+        let urls = url_resolver::resolve_manifest_url(is_china);
+        
+        // Try each URL in sequence
+        let mut client = ManifestClient::new();
+        for url in &urls {
+            if let Ok(host) = url::Url::parse(url).map(|u| u.host_str().unwrap_or("").to_string()) {
+                // Set cached headers if available
+                if let Some(etag) = self.etag_map.get(&host) {
+                    // ManifestClient handles ETag internally
+                }
+            }
+        }
+        
+        // Use url_resolver helper to try URLs in sequence
+        match url_resolver::try_urls_in_sequence(&urls, |url| {
+            client.fetch_manifest(url)
+        }) {
+            Ok(Some(manifest)) => {
+                // Check if version is newer
+                if client.is_newer_version(&manifest.version)? {
+                    if self.should_prompt_for_version(&manifest.version) {
+                        self.mark_version_prompted(manifest.version.clone());
+                        // In V1, we only check and save state, no actual update
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
+            Ok(None) => {
+                // No new version or 304 not modified
+                Ok(false)
+            }
+            Err(e) => Err(e)
+        }
+    }
+
     /// Save state to ccstatus-update.json
     pub fn save(&self) -> Result<(), std::io::Error> {
         let config_dir = dirs::home_dir()
