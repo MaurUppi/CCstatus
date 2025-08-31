@@ -292,14 +292,14 @@ jobs:
 
     # NPM Publishing Steps - Added after GitHub Release
     - name: Setup Node.js for NPM
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') || needs.precheck.outputs.create_tag == 'true'
       uses: actions/setup-node@v4
       with:
         node-version: '18'
         registry-url: 'https://registry.npmjs.org'
 
     - name: Extract binaries from artifacts
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') || needs.precheck.outputs.create_tag == 'true'
       run: |
         mkdir -p extracted
         
@@ -322,7 +322,7 @@ jobs:
         ls -la extracted/
 
     - name: Prepare NPM packages
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') || needs.precheck.outputs.create_tag == 'true'
       run: |
         node npm/scripts/prepare-packages.js
         
@@ -342,7 +342,7 @@ jobs:
         find npm-publish -name "package.json" -exec echo "=== {} ===" \; -exec head -5 {} \;
 
     - name: Publish platform packages to NPM
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') || needs.precheck.outputs.create_tag == 'true'
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       run: |
@@ -355,13 +355,13 @@ jobs:
         done
 
     - name: Wait for NPM registry
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') || needs.precheck.outputs.create_tag == 'true'
       run: |
         echo "⏳ Waiting for platform packages to be available..."
         sleep 30
 
     - name: Publish main package to NPM
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') || needs.precheck.outputs.create_tag == 'true'
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       run: |
