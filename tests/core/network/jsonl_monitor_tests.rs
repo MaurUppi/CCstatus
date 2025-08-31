@@ -920,3 +920,449 @@ async fn test_nbsp_whitespace_handling() {
     assert_eq!(error.code, 503);
     assert_eq!(error.message, "Service Unavailable");
 }
+
+// =============================================================================
+// NEW JSONL SCHEMA TESTS: Field Renaming and Type/Code Source
+// =============================================================================
+
+/// Test new JSONL schema: field naming and values
+#[tokio::test]
+async fn test_new_jsonl_schema_field_naming() {
+    use std::io::Read;
+    use tempfile::NamedTempFile;
+    
+    let temp_dir = tempdir().unwrap();
+    let transcript_path = temp_dir.path().join("schema_test.jsonl");
+    
+    // Create a temporary file for JSONL output
+    let jsonl_file = NamedTempFile::new().unwrap();
+    let jsonl_path = jsonl_file.path().to_str().unwrap();
+    
+    // Set up environment to direct JSONL output to our temp file
+    env::set_var("CCSTATUS_JSONL_FILE", jsonl_path);
+
+    let error_entry = r#"{"isApiErrorMessage":true,"parentUuid":"schema-test","timestamp":"2024-01-01T12:00:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
+    fs::write(&transcript_path, error_entry).unwrap();
+
+    let monitor = JsonlMonitor::new();
+    let result = monitor.scan_tail(&transcript_path).await;
+
+    assert!(result.is_ok());
+    let (error_detected, _) = result.unwrap();
+    assert!(error_detected);
+
+    // Read JSONL output to verify new schema
+    let mut jsonl_content = String::new();
+    let mut file = std::fs::File::open(jsonl_path).unwrap();
+    file.read_to_string(&mut jsonl_content).unwrap();
+    
+    // Should contain new fields
+    assert!(jsonl_content.contains("\"logged_at\""), "Should contain logged_at field");
+    assert!(jsonl_content.contains("\"occurred_at\""), "Should contain occurred_at field");
+    assert!(jsonl_content.contains("\"type\""), "Should contain type field");
+    assert!(jsonl_content.contains("\"code_source\""), "Should contain code_source field");
+    assert!(jsonl_content.contains("\"isApiErrorMessage\""), "Should contain isApiErrorMessage type");
+    
+    // Should NOT contain old fields
+    assert!(!jsonl_content.contains("\"timestamp\""), "Should not contain old timestamp field");
+    assert!(!jsonl_content.contains("\"error_timestamp\""), "Should not contain old error_timestamp field");
+    assert!(!jsonl_content.contains("\"jsonl_error\""), "Should not contain old jsonl_error type");
+    
+    env::remove_var("CCSTATUS_JSONL_FILE");
+}
+
+/// Test type field values: isApiErrorMessage vs fallback
+#[tokio::test]
+async fn test_type_field_values() {
+    use std::io::Read;
+    use tempfile::NamedTempFile;
+    
+    let temp_dir = tempdir().unwrap();
+    let transcript_path = temp_dir.path().join("type_test.jsonl");
+    
+    let jsonl_file = NamedTempFile::new().unwrap();
+    let jsonl_path = jsonl_file.path().to_str().unwrap();
+    env::set_var("CCSTATUS_JSONL_FILE", jsonl_path);
+
+    // Mix of primary detection and fallback detection
+    let primary_entry = r#"{"isApiErrorMessage":true,"parentUuid":"primary-test","timestamp":"2024-01-01T12:00:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
+    let fallback_entry = r#"{"isApiErrorMessage":false,"parentUuid":"fallback-test","timestamp":"2024-01-01T12:01:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"API Error: 500 Server Error"}]}}"#;
+    
+    let content = format!("{}\n{}", primary_entry, fallback_entry);
+    fs::write(&transcript_path, content).unwrap();
+
+    let monitor = JsonlMonitor::new();
+    let result = monitor.scan_tail(&transcript_path).await;
+
+    assert!(result.is_ok());
+    let (error_detected, _) = result.unwrap();
+    assert!(error_detected);
+
+    // Read JSONL output
+    let mut jsonl_content = String::new();
+    let mut file = std::fs::File::open(jsonl_path).unwrap();
+    file.read_to_string(&mut jsonl_content).unwrap();
+    
+    // Should contain both types
+    assert!(jsonl_content.contains("\"type\":\"isApiErrorMessage\""), "Should contain isApiErrorMessage type");
+    assert!(jsonl_content.contains("\"type\":\"fallback\""), "Should contain fallback type");
+    
+    env::remove_var("CCSTATUS_JSONL_FILE");
+}
+
+/// Test code_source field values: parsed vs none
+#[tokio::test]
+async fn test_code_source_field_values() {
+    use std::io::Read;
+    use tempfile::NamedTempFile;
+    
+    let temp_dir = tempdir().unwrap();
+    let transcript_path = temp_dir.path().join("code_source_test.jsonl");
+    
+    let jsonl_file = NamedTempFile::new().unwrap();
+    let jsonl_path = jsonl_file.path().to_str().unwrap();
+    env::set_var("CCSTATUS_JSONL_FILE", jsonl_path);
+
+    // Entry with valid HTTP code (should be "parsed")
+    let with_code = r#"{"isApiErrorMessage":true,"parentUuid":"with-code","timestamp":"2024-01-01T12:00:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
+    // Entry without code (should be "none")
+    let without_code = r#"{"isApiErrorMessage":false,"parentUuid":"without-code","timestamp":"2024-01-01T12:01:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"API Error occurred"}]}}"#;
+    
+    let content = format!("{}\n{}", with_code, without_code);
+    fs::write(&transcript_path, content).unwrap();
+
+    let monitor = JsonlMonitor::new();
+    let result = monitor.scan_tail(&transcript_path).await;
+
+    assert!(result.is_ok());
+    let (error_detected, _) = result.unwrap();
+    assert!(error_detected);
+
+    // Read JSONL output
+    let mut jsonl_content = String::new();
+    let mut file = std::fs::File::open(jsonl_path).unwrap();
+    file.read_to_string(&mut jsonl_content).unwrap();
+    
+    // Should contain both code sources
+    assert!(jsonl_content.contains("\"code_source\":\"parsed\""), "Should contain parsed code_source");
+    assert!(jsonl_content.contains("\"code_source\":\"none\""), "Should contain none code_source");
+    
+    env::remove_var("CCSTATUS_JSONL_FILE");
+}
+
+// =============================================================================
+// TIMESTAMP NORMALIZATION TESTS
+// =============================================================================
+
+/// Test timestamp normalization: placeholder timestamps should be replaced
+#[tokio::test]
+async fn test_timestamp_normalization() {
+    use std::io::Read;
+    use tempfile::NamedTempFile;
+    
+    let temp_dir = tempdir().unwrap();
+    let transcript_path = temp_dir.path().join("timestamp_test.jsonl");
+    
+    let jsonl_file = NamedTempFile::new().unwrap();
+    let jsonl_path = jsonl_file.path().to_str().unwrap();
+    env::set_var("CCSTATUS_JSONL_FILE", jsonl_path);
+
+    // Entry with placeholder timestamp (should be normalized to local time)
+    let placeholder_entry = r#"{"isApiErrorMessage":true,"parentUuid":"placeholder-test","timestamp":"2024-01-01T12:30:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
+    fs::write(&transcript_path, placeholder_entry).unwrap();
+
+    let monitor = JsonlMonitor::new();
+    let result = monitor.scan_tail(&transcript_path).await;
+
+    assert!(result.is_ok());
+    let (error_detected, _) = result.unwrap();
+    assert!(error_detected);
+
+    // Read JSONL output
+    let mut jsonl_content = String::new();
+    let mut file = std::fs::File::open(jsonl_path).unwrap();
+    file.read_to_string(&mut jsonl_content).unwrap();
+    
+    // occurred_at should NOT contain the placeholder time pattern
+    assert!(!jsonl_content.contains("\"occurred_at\":\"2024-01-01T12:30:00Z\""), 
+           "Should not contain placeholder timestamp in occurred_at");
+    assert!(jsonl_content.contains("\"occurred_at\""), "Should contain occurred_at field");
+    
+    env::remove_var("CCSTATUS_JSONL_FILE");
+}
+
+/// Test that valid timestamps are preserved
+#[tokio::test]
+async fn test_valid_timestamp_preservation() {
+    use std::io::Read;
+    use tempfile::NamedTempFile;
+    
+    let temp_dir = tempdir().unwrap();
+    let transcript_path = temp_dir.path().join("valid_timestamp_test.jsonl");
+    
+    let jsonl_file = NamedTempFile::new().unwrap();
+    let jsonl_path = jsonl_file.path().to_str().unwrap();
+    env::set_var("CCSTATUS_JSONL_FILE", jsonl_path);
+
+    // Entry with valid (non-placeholder) timestamp
+    let valid_entry = r#"{"isApiErrorMessage":true,"parentUuid":"valid-test","timestamp":"2024-08-31T20:50:11.785832+08:00","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"API Error: 500 Server Error"}]}}"#;
+    fs::write(&transcript_path, valid_entry).unwrap();
+
+    let monitor = JsonlMonitor::new();
+    let result = monitor.scan_tail(&transcript_path).await;
+
+    assert!(result.is_ok());
+    let (error_detected, _) = result.unwrap();
+    assert!(error_detected);
+
+    // Read JSONL output
+    let mut jsonl_content = String::new();
+    let mut file = std::fs::File::open(jsonl_path).unwrap();
+    file.read_to_string(&mut jsonl_content).unwrap();
+    
+    // occurred_at should preserve the valid timestamp
+    assert!(jsonl_content.contains("\"occurred_at\":\"2024-08-31T"), 
+           "Should preserve valid timestamp in occurred_at");
+    
+    env::remove_var("CCSTATUS_JSONL_FILE");
+}
+
+// =============================================================================
+// DEDUPLICATION TESTS
+// =============================================================================
+
+/// Test 60s deduplication window: same dedup_key should only log once within 60s
+#[tokio::test]
+async fn test_60s_deduplication_window() {
+    use std::io::Read;
+    use tempfile::NamedTempFile;
+    
+    let temp_dir = tempdir().unwrap();
+    let transcript_path = temp_dir.path().join("dedup_test.jsonl");
+    
+    let jsonl_file = NamedTempFile::new().unwrap();
+    let jsonl_path = jsonl_file.path().to_str().unwrap();
+    env::set_var("CCSTATUS_JSONL_FILE", jsonl_path);
+
+    // Same error (same session_id + occurred_at + code = same dedup_key)
+    let error1 = r#"{"isApiErrorMessage":true,"parentUuid":"dedup-1","timestamp":"2024-08-31T20:50:11.785832+08:00","sessionId":"test-session","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
+    let error2 = r#"{"isApiErrorMessage":true,"parentUuid":"dedup-2","timestamp":"2024-08-31T20:50:11.785832+08:00","sessionId":"test-session","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
+    
+    let content = format!("{}\n{}", error1, error2);
+    fs::write(&transcript_path, content).unwrap();
+
+    let monitor = JsonlMonitor::new();
+    let result = monitor.scan_tail(&transcript_path).await;
+
+    assert!(result.is_ok());
+    let (error_detected, _) = result.unwrap();
+    assert!(error_detected); // RED detection should still work
+
+    // Read JSONL output
+    let mut jsonl_content = String::new();
+    let mut file = std::fs::File::open(jsonl_path).unwrap();
+    file.read_to_string(&mut jsonl_content).unwrap();
+    
+    // Should only contain ONE log entry due to deduplication
+    let log_count = jsonl_content.lines().filter(|line| !line.trim().is_empty()).count();
+    assert_eq!(log_count, 1, "Should only log the first occurrence within 60s window");
+    
+    env::remove_var("CCSTATUS_JSONL_FILE");
+}
+
+/// Test deduplication with different occurred_at times (should log both)
+#[tokio::test]
+async fn test_deduplication_different_occurred_at() {
+    use std::io::Read;
+    use tempfile::NamedTempFile;
+    
+    let temp_dir = tempdir().unwrap();
+    let transcript_path = temp_dir.path().join("dedup_diff_time_test.jsonl");
+    
+    let jsonl_file = NamedTempFile::new().unwrap();
+    let jsonl_path = jsonl_file.path().to_str().unwrap();
+    env::set_var("CCSTATUS_JSONL_FILE", jsonl_path);
+
+    // Different occurred_at times = different dedup_keys
+    let error1 = r#"{"isApiErrorMessage":true,"parentUuid":"diff-1","timestamp":"2024-08-31T20:50:11.785832+08:00","sessionId":"test-session","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
+    let error2 = r#"{"isApiErrorMessage":true,"parentUuid":"diff-2","timestamp":"2024-08-31T20:51:11.785832+08:00","sessionId":"test-session","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
+    
+    let content = format!("{}\n{}", error1, error2);
+    fs::write(&transcript_path, content).unwrap();
+
+    let monitor = JsonlMonitor::new();
+    let result = monitor.scan_tail(&transcript_path).await;
+
+    assert!(result.is_ok());
+    let (error_detected, _) = result.unwrap();
+    assert!(error_detected);
+
+    // Read JSONL output
+    let mut jsonl_content = String::new();
+    let mut file = std::fs::File::open(jsonl_path).unwrap();
+    file.read_to_string(&mut jsonl_content).unwrap();
+    
+    // Should contain TWO log entries (different timestamps)
+    let log_count = jsonl_content.lines().filter(|line| !line.trim().is_empty()).count();
+    assert_eq!(log_count, 2, "Should log both entries with different occurred_at times");
+    
+    env::remove_var("CCSTATUS_JSONL_FILE");
+}
+
+/// Test deduplication with different codes (should log both)
+#[tokio::test]
+async fn test_deduplication_different_codes() {
+    use std::io::Read;
+    use tempfile::NamedTempFile;
+    
+    let temp_dir = tempdir().unwrap();
+    let transcript_path = temp_dir.path().join("dedup_diff_code_test.jsonl");
+    
+    let jsonl_file = NamedTempFile::new().unwrap();
+    let jsonl_path = jsonl_file.path().to_str().unwrap();
+    env::set_var("CCSTATUS_JSONL_FILE", jsonl_path);
+
+    // Different codes = different dedup_keys
+    let error1 = r#"{"isApiErrorMessage":true,"parentUuid":"code-1","timestamp":"2024-08-31T20:50:11.785832+08:00","sessionId":"test-session","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
+    let error2 = r#"{"isApiErrorMessage":true,"parentUuid":"code-2","timestamp":"2024-08-31T20:50:11.785832+08:00","sessionId":"test-session","cwd":"/test/path","message":{"content":[{"text":"API Error: 500 Server Error"}]}}"#;
+    
+    let content = format!("{}\n{}", error1, error2);
+    fs::write(&transcript_path, content).unwrap();
+
+    let monitor = JsonlMonitor::new();
+    let result = monitor.scan_tail(&transcript_path).await;
+
+    assert!(result.is_ok());
+    let (error_detected, _) = result.unwrap();
+    assert!(error_detected);
+
+    // Read JSONL output
+    let mut jsonl_content = String::new();
+    let mut file = std::fs::File::open(jsonl_path).unwrap();
+    file.read_to_string(&mut jsonl_content).unwrap();
+    
+    // Should contain TWO log entries (different codes)
+    let log_count = jsonl_content.lines().filter(|line| !line.trim().is_empty()).count();
+    assert_eq!(log_count, 2, "Should log both entries with different error codes");
+    
+    env::remove_var("CCSTATUS_JSONL_FILE");
+}
+
+// =============================================================================
+// RED JUDGMENT UNAFFECTED TESTS
+// =============================================================================
+
+/// Test that RED gate detection is not affected by deduplication
+#[tokio::test]
+async fn test_red_detection_unaffected_by_deduplication() {
+    let temp_dir = tempdir().unwrap();
+    let transcript_path = temp_dir.path().join("red_unaffected_test.jsonl");
+    
+    // Same error repeated (should deduplicate JSONL but still trigger RED)
+    let error1 = r#"{"isApiErrorMessage":true,"parentUuid":"red-1","timestamp":"2024-08-31T20:50:11.785832+08:00","sessionId":"test-session","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
+    let error2 = r#"{"isApiErrorMessage":true,"parentUuid":"red-2","timestamp":"2024-08-31T20:50:11.785832+08:00","sessionId":"test-session","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
+    let error3 = r#"{"isApiErrorMessage":true,"parentUuid":"red-3","timestamp":"2024-08-31T20:50:11.785832+08:00","sessionId":"test-session","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
+    
+    let content = format!("{}\n{}\n{}", error1, error2, error3);
+    fs::write(&transcript_path, content).unwrap();
+
+    let monitor = JsonlMonitor::new();
+    let result = monitor.scan_tail(&transcript_path).await;
+
+    assert!(result.is_ok());
+    let (error_detected, last_error) = result.unwrap();
+    
+    // RED detection should work normally despite deduplication
+    assert!(error_detected, "RED detection should work despite JSONL deduplication");
+    assert!(last_error.is_some(), "Should return error details for RED gate");
+    
+    let error = last_error.unwrap();
+    assert_eq!(error.code, 429, "Should return last detected error");
+    assert_eq!(error.message, "Rate Limited", "Should extract correct message");
+}
+
+/// Test that scan_tail return semantics remain consistent
+#[tokio::test]
+async fn test_scan_tail_semantics_consistency() {
+    let temp_dir = tempdir().unwrap();
+    let transcript_path = temp_dir.path().join("semantics_test.jsonl");
+    
+    // Multiple different errors
+    let error1 = r#"{"isApiErrorMessage":true,"parentUuid":"sem-1","timestamp":"2024-08-31T20:50:00.000000+08:00","sessionId":"session-1","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
+    let error2 = r#"{"isApiErrorMessage":false,"parentUuid":"sem-2","timestamp":"2024-08-31T20:51:00.000000+08:00","sessionId":"session-2","cwd":"/test/path","message":{"content":[{"text":"API Error: 500 Server Error"}]}}"#;
+    let error3 = r#"{"parentUuid":"sem-3","timestamp":"2024-08-31T20:52:00.000000+08:00","sessionId":"session-3","cwd":"/test/path","message":{"content":[{"text":"api error: 502 Bad Gateway"}]}}"#;
+    
+    let content = format!("{}\n{}\n{}", error1, error2, error3);
+    fs::write(&transcript_path, content).unwrap();
+
+    let monitor = JsonlMonitor::new();
+    let result = monitor.scan_tail(&transcript_path).await;
+
+    assert!(result.is_ok());
+    
+    // Test explicit return semantics for RED gate control
+    let (error_detected, last_error_event) = result.unwrap();
+    
+    assert!(error_detected, "Should detect errors for RED state trigger");
+    assert!(last_error_event.is_some(), "Should provide last error event details");
+    
+    let error = last_error_event.unwrap();
+    assert_eq!(error.code, 502, "Should return most recent error (last in sequence)");
+    assert_eq!(error.timestamp, "2024-08-31T20:52:00.000000+08:00", "Should use transcript timestamp");
+}
+
+/// Test combined phase 2 enhancements with deduplication
+#[tokio::test] 
+async fn test_combined_phase2_enhancements() {
+    use std::io::Read;
+    use tempfile::NamedTempFile;
+    
+    let temp_dir = tempdir().unwrap();
+    let transcript_path = temp_dir.path().join("combined_phase2_test.jsonl");
+    
+    let jsonl_file = NamedTempFile::new().unwrap();
+    let jsonl_path = jsonl_file.path().to_str().unwrap();
+    env::set_var("CCSTATUS_JSONL_FILE", jsonl_path);
+
+    // Test all enhancements together
+    let primary_dedup = r#"{"isApiErrorMessage":true,"parentUuid":"phase2-1","timestamp":"2024-08-31T20:50:11.785832+08:00","sessionId":"combined-session","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
+    let primary_dedup2 = r#"{"isApiErrorMessage":true,"parentUuid":"phase2-2","timestamp":"2024-08-31T20:50:11.785832+08:00","sessionId":"combined-session","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
+    let fallback_whitespace = r#"{"isApiErrorMessage":false,"parentUuid":"phase2-3","timestamp":"2024-08-31T20:51:11.000000+08:00","sessionId":"combined-session","cwd":"/test/path","message":{"content":[{"text":"API   error 500 server failure"}]}}"#;
+    let placeholder_normalize = r#"{"parentUuid":"phase2-4","timestamp":"2024-01-01T12:35:00Z","sessionId":"combined-session","cwd":"/test/path","message":{"content":[{"text":"api\terror: 502"}]}}"#;
+    
+    let content = format!("{}\n{}\n{}\n{}", primary_dedup, primary_dedup2, fallback_whitespace, placeholder_normalize);
+    fs::write(&transcript_path, content).unwrap();
+
+    let monitor = JsonlMonitor::new();
+    let result = monitor.scan_tail(&transcript_path).await;
+
+    assert!(result.is_ok());
+    let (error_detected, last_error) = result.unwrap();
+    assert!(error_detected, "Should detect all errors");
+    assert!(last_error.is_some());
+
+    // RED detection should return the last error (502)
+    let error = last_error.unwrap();
+    assert_eq!(error.code, 502);
+
+    // Check JSONL output
+    let mut jsonl_content = String::new();
+    let mut file = std::fs::File::open(jsonl_path).unwrap();
+    file.read_to_string(&mut jsonl_content).unwrap();
+    
+    // Should have 3 entries (one deduplicated)
+    let log_count = jsonl_content.lines().filter(|line| !line.trim().is_empty()).count();
+    assert_eq!(log_count, 3, "Should log 3 entries (1 deduplicated)");
+    
+    // Should contain all schema features
+    assert!(jsonl_content.contains("\"type\":\"isApiErrorMessage\""));
+    assert!(jsonl_content.contains("\"type\":\"fallback\""));
+    assert!(jsonl_content.contains("\"code_source\":\"parsed\""));
+    assert!(jsonl_content.contains("\"logged_at\""));
+    assert!(jsonl_content.contains("\"occurred_at\""));
+    
+    // Placeholder should be normalized (not contain the 2024-01-01T12:35:00Z)
+    assert!(!jsonl_content.contains("\"occurred_at\":\"2024-01-01T12:35:00Z\""));
+    
+    env::remove_var("CCSTATUS_JSONL_FILE");
+}
