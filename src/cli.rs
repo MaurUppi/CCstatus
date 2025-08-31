@@ -8,6 +8,10 @@ pub struct Cli {
     /// Check for updates
     #[arg(short = 'u', long = "update")]
     pub update: bool,
+    
+    /// Check for updates and exit
+    #[arg(long = "check-update")]
+    pub check_update: bool,
 }
 
 impl Cli {

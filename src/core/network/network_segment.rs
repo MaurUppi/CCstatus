@@ -365,7 +365,7 @@ impl NetworkSegment {
                                 #[cfg(feature = "self-update")]
                                 {
                                     let mut update_state = crate::updater::UpdateStateFile::load();
-                                    if let Err(e) = update_state.tick_from_green(&green_id) {
+                                    if let Err(e) = update_state.tick_from_green(&green_id.to_string()) {
                                         debug_logger
                                             .debug(
                                                 "NetworkSegment",

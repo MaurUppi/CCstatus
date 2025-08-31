@@ -33,6 +33,57 @@ async fn main_impl() -> Result<(), Box<dyn std::error::Error>> {
         }
         return Ok(());
     }
+    
+    // Handle check-update command
+    if cli.check_update {
+        #[cfg(feature = "self-update")]
+        {
+            use ccstatus::updater::{geo, url_resolver, manifest::ManifestClient};
+            
+            // Perform immediate update check
+            let mut state = ccstatus::updater::UpdateStateFile::load();
+            
+            // Get geographic detection
+            let is_china = if state.is_geo_verdict_valid() {
+                state.geo_verdict.unwrap_or(false)
+            } else {
+                let detected = geo::detect_china_ttl24h();
+                state.update_geo_verdict(detected);
+                state.save().ok();
+                detected
+            };
+            
+            // Resolve URLs and try to fetch manifest
+            let urls = url_resolver::resolve_manifest_url(is_china);
+            let mut client = ManifestClient::new();
+            
+            match url_resolver::try_urls_in_sequence(&urls, |url| {
+                client.fetch_manifest(url)
+            }) {
+                Ok(Some(manifest)) => {
+                    if client.is_newer_version(&manifest.version).unwrap_or(false) {
+                        eprintln!(" v{} released ", manifest.version);
+                        std::process::exit(10);
+                    } else {
+                        std::process::exit(0);
+                    }
+                }
+                Ok(None) => {
+                    // No new version (304 not modified)
+                    std::process::exit(0);
+                }
+                Err(_) => {
+                    eprintln!("Failed to check for updates");
+                    std::process::exit(1);
+                }
+            }
+        }
+        #[cfg(not(feature = "self-update"))]
+        {
+            eprintln!("Update check not available (self-update feature disabled)");
+            std::process::exit(1);
+        }
+    }
 
     // Load configuration
     let config = Config::load().unwrap_or_else(|_| Config::default());
