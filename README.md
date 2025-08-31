@@ -67,10 +67,15 @@
 
 ### NPM 安装（推荐）
 
-最简单的安装方式是通过 npm：
+- 最简单的安装方式是通过 npm：
 
 ```bash
 npm install -g @mauruppi/ccstatus
+```
+
+- 使用镜像源加速下载：
+```bash
+npm install -g @mauruppi/ccstatus --registry https://registry.npmmirror.com
 ```
 
 **特性：**

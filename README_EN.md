@@ -64,10 +64,15 @@ Model | Working Directory | Git Branch Status | Context Window | Network Status
 
 ### NPM Installation (Recommended)
 
-The easiest way to install CCstatus is via npm:
+- The easiest way to install CCstatus is via npm:
 
 ```bash
 npm install -g @mauruppi/ccstatus
+```
+
+- Use mirror registry acceleration
+```bash
+npm install -g @mauruppi/ccstatus --registry https://registry.npmmirror.com
 ```
 
 **Features:**
