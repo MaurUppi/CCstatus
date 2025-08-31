@@ -102,7 +102,7 @@ mod tests {
             "https://fail2.com".to_string(),
         ];
 
-        let result = try_urls_in_sequence(&urls, |_url| {
+        let result: Result<&str, &str> = try_urls_in_sequence(&urls, |_url| {
             Err("Always fails")
         });
 
