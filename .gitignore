@@ -3,6 +3,7 @@ target/
 
 # Documentation and development files
 claude*
+AGENTS.md
 .claude/
 .cursor/
 .idea/
