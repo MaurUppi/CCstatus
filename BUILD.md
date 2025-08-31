@@ -1,10 +1,9 @@
 ## CCstatus Build and Configuration (Concise)
 
 ### Targets and Features
-- Default features: `network-monitoring`
+- Default features: `["network-monitoring", "self-update"]`
 - Optional features:
   - `tui` (Ratatui-based config UI)
-  - `self-update` (update checks)
   - `timings-curl` (DNS/TCP/TLS/TTFB via libcurl; auto-wired runner)
   - `timings-curl-static` (static curl; primarily for Windows/Linux portability)
 
@@ -17,9 +16,9 @@ cargo build --release
 ```bash
 cargo build --release --features tui
 ```
-- With self-update:
+- Network monitoring only (without self-update):
 ```bash
-cargo build --release --features self-update
+cargo build --release --features network-monitoring --no-default-features
 ```
 - With timings (phase metrics via curl):
 ```bash
@@ -29,9 +28,9 @@ cargo build --release --features timings-curl
 ```bash
 cargo build --release --features timings-curl-static
 ```
-- Full (UI + updates + timings):
+- Full (UI + timings with default self-update):
 ```bash
-cargo build --release --features "tui,self-update,timings-curl"
+cargo build --release --features "tui,timings-curl"
 ```
 - Minimal (no defaults):
 ```bash
@@ -60,26 +59,26 @@ cargo test --release --features timings-curl
 ### Binary Size Optimization
 
 **Size Comparison (ARM64 macOS)**:
-- **Slim** (`network-monitoring`): ~3.2MB (requires system OpenSSL 3.x)
-- **Static** (`timings-curl-static`): ~6.7MB (fully static, zero dependencies)
+- **Slim** (`network-monitoring,self-update`): ~3.2MB (requires system OpenSSL 3.x)
+- **Static** (`timings-curl-static,self-update`): ~6.7MB (fully static, zero dependencies)
 
 **Optimization Strategies**:
 ```bash
-# Minimal size with system dependencies (may have OpenSSL path issues)
-cargo build --release --features network-monitoring
+# Minimal size with system dependencies (excludes self-update, may have OpenSSL path issues)
+cargo build --release --features network-monitoring --no-default-features
 
-# Balanced: static linking with size optimization
+# Balanced: static linking with size optimization (includes self-update by default)
 RUSTFLAGS="-C opt-level=z -C codegen-units=1 -C panic=abort" \
 OPENSSL_STATIC=1 \
 cargo build --release --features timings-curl-static
 
-# Development: fastest build time
-cargo build --features network-monitoring
+# Development: fastest build time (excludes self-update)
+cargo build --features network-monitoring --no-default-features
 ```
 
 **Distribution Strategy**:
-- **Static builds** (`timings-curl-static`): Universal compatibility, no system dependencies (recommended)
-- **Slim builds** (`network-monitoring`): Smaller size, requires `brew install openssl@3` on macOS
+- **Static builds** (`timings-curl-static,self-update`): Universal compatibility, no system dependencies (recommended)
+- **Slim builds** (`network-monitoring,self-update`): Smaller size, requires `brew install openssl@3` on macOS
 
 ### CI Matrix (actual)
 ```yaml
@@ -118,9 +117,9 @@ jobs:
       - name: Build binary  
         run: |
           if [ "${{ matrix.variant }}" = "slim" ]; then
-            cargo build --release --target ${{ matrix.target }} --features network-monitoring
+            cargo build --release --target ${{ matrix.target }} --features "network-monitoring,self-update"
           else
-            cargo build --release --target ${{ matrix.target }} --features timings-curl-static
+            cargo build --release --target ${{ matrix.target }} --features "timings-curl-static,self-update"
           fi
 ```
 

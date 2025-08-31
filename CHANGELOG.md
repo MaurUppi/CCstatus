@@ -5,6 +5,91 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.3] - 2025-08-31
+
+### 🔄 Self-Update System V1
+
+#### ✨ 核心自动更新功能
+- **内置版本检查系统**: 默认启用的自动更新能力
+  - **手动检查模式**: `ccstatus --check-update` 命令行工具立即检查更新
+  - **后台集成检查**: 状态栏正常使用时自动进行版本检测
+  - **智能更新提醒**: 发现新版本时状态栏显示闪烁文本提醒用户
+  - **跨会话状态持久化**: 更新检查历史和节流状态跨会话保持
+  
+#### 🌍 地理路由优化
+- **中国大陆网络优化**: 自动检测地理位置并优化下载路径
+  - **代理加速**: 中国用户自动使用 `hk.gh-proxy.com` 代理加速访问 GitHub
+  - **智能降级**: 代理失败时自动回退到官方 `raw.githubusercontent.com`
+  - **双路径策略**: 主要路径 + 备用路径确保更新检查可靠性
+  - **24小时缓存**: 地理检测结果缓存24小时，减少重复检测开销
+
+#### ⚡ 高性能缓存系统
+- **HTTP 缓存优化**: 基于 ETag 和 Last-Modified 的智能缓存
+  - **条件请求**: 支持 `If-None-Match` 和 `If-Modified-Since` 头部
+  - **304 Not Modified**: 无变化时服务器返回 304，节省带宽和时间
+  - **主机级缓存**: 按主机名分离缓存，支持代理和官方地址独立缓存
+  - **持久化状态**: 缓存信息持久化到 `~/.claude/ccstatus/update-state.json`
+
+#### 🏗️ 架构设计与模块化
+- **专业模块分离**: 清晰的关注点分离设计
+  - `updater/state.rs`: 状态文件管理和更新逻辑协调
+  - `updater/manifest.rs`: 清单文件获取和版本解析客户端
+  - `updater/url_resolver.rs`: URL解析和地理路由策略
+  - `updater/geo.rs`: 地理位置检测和TTL缓存管理
+  - `updater/github.rs`: GitHub API 集成和资产查找
+- **状态栏集成**: 与现有 `update.rs` 段无缝集成，支持闪烁提醒
+- **错误恢复**: 全面的错误处理和降级机制，确保更新检查不影响主要功能
+
+#### 🛠️ 开发与构建系统改进
+- **默认特性更新**: `self-update` 现已纳入默认构建特性
+  - **新默认**: `["network-monitoring", "self-update"]`
+  - **向后兼容**: 现有用户无需修改，自动获得更新功能
+  - **大小优化**: 默认构建从 3MB 增至 4.1MB，增加更新能力
+- **CI/CD 修复**: GitHub Actions 工作流修复，确保所有发布包含自动更新
+  - **Slim 构建**: `"network-monitoring,self-update"` 
+  - **Static 构建**: `"timings-curl-static,self-update"`
+  - **发布一致性**: 所有 GitHub Release 二进制文件均支持 `--check-update`
+
+#### 🧪 全面测试覆盖
+- **单元测试完整性**: 新增 26 个更新系统相关测试
+  - **状态管理测试**: ETag/Last-Modified 缓存逻辑验证
+  - **URL 解析测试**: 地理路由策略和代理降级测试  
+  - **清单解析测试**: JSON 解析和版本比较逻辑测试
+  - **GitHub API 测试**: 版本解析和资产查找功能测试
+- **测试重组优化**: 更新系统测试统一组织
+  - **测试目录重构**: `tests/update/` → `tests/updater/` 统一命名
+  - **内联测试提取**: 所有 `#[cfg(test)]` 模块提取为独立测试文件
+  - **测试命名规范**: 统一 `{module}_test.rs` 命名约定
+  - **完整覆盖验证**: 136 个测试全部通过，无回归问题
+
+### 🔧 质量与兼容性改进
+
+#### 🛡️ API 兼容性修复  
+- **ureq 3.1.0 兼容**: 修复 HTTP 客户端 API 变更导致的编译问题
+  - **头部提取修复**: 从 `.header()` 更新为 `.headers().get()` API
+  - **响应体处理**: 确保 `response` 可变性用于 `.body_mut().read_to_string()`
+  - **类型安全**: 移除未使用的 HashMap 导入和辅助函数
+  
+#### 📋 文档全面更新
+- **README 双语更新**: 中英文档同步更新 Self-Update V1 能力描述
+- **构建说明更新**: 反映新的默认特性和构建选项
+- **CHANGELOG 详细记录**: 完整记录 Self-Update V1 实现细节
+- **BUILD.md 修订**: 更新默认特性说明和构建矩阵
+
+#### 🎯 用户体验提升
+- **即开即用**: 默认构建即包含自动更新，无需额外配置
+- **智能提醒**: 状态栏闪烁提醒平衡了可见性和干扰性
+- **网络友好**: 缓存和地理优化减少网络开销和延迟
+- **透明操作**: 更新检查不影响正常状态栏功能和性能
+
+### 🛡️ 安全与隐私
+- **无自动下载**: 仅检查版本，不自动下载或安装
+- **用户控制**: 用户完全控制何时检查和如何更新
+- **网络最小化**: 通过缓存和条件请求最小化网络活动
+- **状态透明**: 所有更新检查活动对用户可见
+
+---
+
 ## [2.2.2] - 2025-08-30
 
 ### 📦 NPM Package Distribution

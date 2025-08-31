@@ -222,8 +222,13 @@ Token usage percentage based on transcript analysis with context limit tracking.
 - P95 latency tracking with rolling 12-sample window
 - Frequency-gated probing to minimize API usage
 - Debug logging with `CCSTATUS_DEBUG=true`
-- Built-in update system with `--check-update` flag and geographic routing
-  - **Flashing text** will be noticeable on statusline. 
+- **Built-in Self-Update System V1** with intelligent update management 🔄
+  - **Manual checks**: `--check-update` command-line tool for immediate version checking
+  - **Background integration**: Automatic update detection during normal statusline usage
+  - **Smart notifications**: Flashing text alerts on statusline when updates are available
+  - **Geographic routing**: Automatic China mainland optimization via hk.gh-proxy.com proxy
+  - **Persistent caching**: ETag/Last-Modified HTTP caching reduces unnecessary network requests
+  - **Update state tracking**: Cross-session persistence of update check history and throttling
 - State persistence across sessions
 
 ## Performance
@@ -252,19 +257,21 @@ See changelog: [`CHANGELOG.md`](CHANGELOG.md)
 git clone https://github.com/MaurUppi/CCstatus.git
 cd CCstatus
 
-# Default build (foundation + network probing **without timing display**)
+# Default build (foundation + network probing + self-update)
 cargo build --release
 
 # Build (foundation + network probing **with timing display**)
 cargo build --release --features timings-curl
 
-# Optional: Add self-update feature
-cargo build --release --features "self-update"
+# Network monitoring only (without self-update)
+cargo build --release --features network-monitoring --no-default-features
 ```
 
 **Build Options:**
-- **Default**: Core functionality + network probing (with timing display) (~3MB)
-- **+ self-update**: Auto-update notifications (~4.1MB)
+- **Default**: Core functionality + network probing + self-update (~4.1MB)
+- **Network monitoring only**: Core functionality + network probing (without updates) (~3MB) 
+- **+ timings-curl**: High-precision timing display (~4.3MB)
+- **+ timings-curl-static**: Full static build (~7MB)
 
 </p>
 </details>
