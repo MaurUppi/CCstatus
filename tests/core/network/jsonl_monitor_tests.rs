@@ -1,4 +1,5 @@
 use ccstatus::core::network::{get_debug_logger, EnhancedDebugLogger, JsonlMonitor};
+use serial_test::serial;
 use std::env;
 use std::fs;
 use std::sync::Arc;
@@ -927,6 +928,7 @@ async fn test_nbsp_whitespace_handling() {
 
 /// Test new JSONL schema: field naming and values
 #[tokio::test]
+#[serial]
 async fn test_new_jsonl_schema_field_naming() {
     use std::io::Read;
     use tempfile::NamedTempFile;
@@ -938,13 +940,12 @@ async fn test_new_jsonl_schema_field_naming() {
     let jsonl_file = NamedTempFile::new().unwrap();
     let jsonl_path = jsonl_file.path().to_str().unwrap();
     
-    // Set up environment to direct JSONL output to our temp file
+    // Set up environment to direct JSONL output to our temp file BEFORE creating monitor
     env::set_var("CCSTATUS_JSONL_FILE", jsonl_path);
+    let monitor = JsonlMonitor::new();
 
     let error_entry = r#"{"isApiErrorMessage":true,"parentUuid":"schema-test","timestamp":"2024-01-01T12:00:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
     fs::write(&transcript_path, error_entry).unwrap();
-
-    let monitor = JsonlMonitor::new();
     let result = monitor.scan_tail(&transcript_path).await;
 
     assert!(result.is_ok());
@@ -973,6 +974,7 @@ async fn test_new_jsonl_schema_field_naming() {
 
 /// Test type field values: isApiErrorMessage vs fallback
 #[tokio::test]
+#[serial]
 async fn test_type_field_values() {
     use std::io::Read;
     use tempfile::NamedTempFile;
@@ -983,6 +985,7 @@ async fn test_type_field_values() {
     let jsonl_file = NamedTempFile::new().unwrap();
     let jsonl_path = jsonl_file.path().to_str().unwrap();
     env::set_var("CCSTATUS_JSONL_FILE", jsonl_path);
+    let monitor = JsonlMonitor::new();
 
     // Mix of primary detection and fallback detection
     let primary_entry = r#"{"isApiErrorMessage":true,"parentUuid":"primary-test","timestamp":"2024-01-01T12:00:00Z","sessionId":"session-123","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
@@ -990,8 +993,6 @@ async fn test_type_field_values() {
     
     let content = format!("{}\n{}", primary_entry, fallback_entry);
     fs::write(&transcript_path, content).unwrap();
-
-    let monitor = JsonlMonitor::new();
     let result = monitor.scan_tail(&transcript_path).await;
 
     assert!(result.is_ok());
@@ -1012,6 +1013,7 @@ async fn test_type_field_values() {
 
 /// Test code_source field values: parsed vs none
 #[tokio::test]
+#[serial]
 async fn test_code_source_field_values() {
     use std::io::Read;
     use tempfile::NamedTempFile;
@@ -1056,6 +1058,7 @@ async fn test_code_source_field_values() {
 
 /// Test timestamp normalization: placeholder timestamps should be replaced
 #[tokio::test]
+#[serial]
 async fn test_timestamp_normalization() {
     use std::io::Read;
     use tempfile::NamedTempFile;
@@ -1093,6 +1096,7 @@ async fn test_timestamp_normalization() {
 
 /// Test that valid timestamps are preserved
 #[tokio::test]
+#[serial]
 async fn test_valid_timestamp_preservation() {
     use std::io::Read;
     use tempfile::NamedTempFile;
@@ -1133,6 +1137,7 @@ async fn test_valid_timestamp_preservation() {
 
 /// Test 60s deduplication window: same dedup_key should only log once within 60s
 #[tokio::test]
+#[serial]
 async fn test_60s_deduplication_window() {
     use std::io::Read;
     use tempfile::NamedTempFile;
@@ -1143,6 +1148,7 @@ async fn test_60s_deduplication_window() {
     let jsonl_file = NamedTempFile::new().unwrap();
     let jsonl_path = jsonl_file.path().to_str().unwrap();
     env::set_var("CCSTATUS_JSONL_FILE", jsonl_path);
+    let monitor = JsonlMonitor::new();
 
     // Same error (same session_id + occurred_at + code = same dedup_key)
     let error1 = r#"{"isApiErrorMessage":true,"parentUuid":"dedup-1","timestamp":"2024-08-31T20:50:11.785832+08:00","sessionId":"test-session","cwd":"/test/path","message":{"content":[{"text":"API Error: 429 Rate Limited"}]}}"#;
@@ -1150,8 +1156,6 @@ async fn test_60s_deduplication_window() {
     
     let content = format!("{}\n{}", error1, error2);
     fs::write(&transcript_path, content).unwrap();
-
-    let monitor = JsonlMonitor::new();
     let result = monitor.scan_tail(&transcript_path).await;
 
     assert!(result.is_ok());
@@ -1172,6 +1176,7 @@ async fn test_60s_deduplication_window() {
 
 /// Test deduplication with different occurred_at times (should log both)
 #[tokio::test]
+#[serial]
 async fn test_deduplication_different_occurred_at() {
     use std::io::Read;
     use tempfile::NamedTempFile;
@@ -1211,6 +1216,7 @@ async fn test_deduplication_different_occurred_at() {
 
 /// Test deduplication with different codes (should log both)
 #[tokio::test]
+#[serial]
 async fn test_deduplication_different_codes() {
     use std::io::Read;
     use tempfile::NamedTempFile;
@@ -1312,8 +1318,9 @@ async fn test_scan_tail_semantics_consistency() {
 }
 
 /// Test combined phase 2 enhancements with deduplication
-#[tokio::test] 
-async fn test_combined_phase2_enhancements() {
+#[tokio::test]
+#[serial]
+async fn test_combined_phase2_enhancements_with_dedup() {
     use std::io::Read;
     use tempfile::NamedTempFile;
     

@@ -10,7 +10,7 @@ pub mod types;
 
 // Re-export commonly used items
 pub use credential::CredentialManager;
-pub use debug_logger::{get_debug_logger, EnhancedDebugLogger};
+pub use debug_logger::{get_debug_logger, EnhancedDebugLogger, JsonlLoggerConfig};
 pub use http_monitor::{ClockTrait, HttpClientTrait, HttpMonitor};
 pub use jsonl_monitor::JsonlMonitor;
 pub use network_segment::{CostInfo, NetworkSegment, StatuslineInput, WindowDecision};

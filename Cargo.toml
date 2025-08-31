@@ -36,6 +36,7 @@ flate2 = "1.0"
 fs2 = "0.4"
 async-trait = "0.1"
 futures = "0.3"
+sha2 = "0.10"
 
 # 可选：更新功能
 ureq = { version = "3.1.0", features = ["json"], optional = true }
@@ -66,6 +67,7 @@ timings-curl-static = ["timings-curl", "curl/static-curl"]
 
 [dev-dependencies]
 tempfile = "3.0"
+serial_test = "3.0"
 
 [profile.release]
 # Size-focused profile

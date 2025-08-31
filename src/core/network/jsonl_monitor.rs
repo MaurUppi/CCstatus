@@ -1,5 +1,5 @@
 // JSONL transcript monitoring for RED gate control (stateless)
-use crate::core::network::debug_logger::{get_debug_logger, EnhancedDebugLogger};
+use crate::core::network::debug_logger::{get_debug_logger, EnhancedDebugLogger, JsonlLoggerConfig};
 use crate::core::network::types::{JsonlError, NetworkError};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -51,6 +51,17 @@ impl JsonlMonitor {
         });
 
         Self { 
+            logger,
+            dedup_cache: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Create JsonlMonitor with custom configuration (preferred for testability)
+    /// This replaces environment variable dependency with explicit configuration
+    pub fn with_config(config: JsonlLoggerConfig) -> Self {
+        let logger = Arc::new(EnhancedDebugLogger::from_config(config));
+
+        Self {
             logger,
             dedup_cache: Arc::new(Mutex::new(HashMap::new())),
         }
