@@ -53,27 +53,80 @@ async fn main_impl() -> Result<(), Box<dyn std::error::Error>> {
                 detected
             };
 
-            // Resolve URLs and try to fetch manifest
+            // Resolve URLs for sequential trying with persistent caching
             let urls = url_resolver::resolve_manifest_url(is_china);
             let mut client = ManifestClient::new();
+            let mut update_found = false;
+            let mut fetch_successful = false;
 
-            match url_resolver::try_urls_in_sequence(&urls, |url| client.fetch_manifest(url)) {
-                Ok(Some(manifest)) => {
-                    if client.is_newer_version(&manifest.version).unwrap_or(false) {
-                        eprintln!(" v{} released ", manifest.version);
-                        std::process::exit(10);
-                    } else {
-                        std::process::exit(0);
+            // Try URLs with persistent caching - short-circuit on first 304
+            for url in &urls {
+                match client.fetch_manifest_with_persistent_cache(
+                    url,
+                    &state.etag_map,
+                    &state.last_modified_map,
+                ) {
+                    Ok((manifest_opt, new_etag, new_last_modified)) => {
+                        fetch_successful = true;
+                        
+                        if manifest_opt.is_none() {
+                            // 304 Not Modified - no update available, short-circuit
+                            std::process::exit(0);
+                        }
+                        
+                        let manifest = manifest_opt.unwrap();
+                        
+                        // Update persistent cache if we have new headers
+                        let host = url_resolver::extract_host_from_url(url)
+                            .unwrap_or_else(|| url.to_string());
+                        let mut cache_updated = false;
+                        
+                        if let Some(etag) = new_etag {
+                            state.etag_map.insert(host.clone(), etag);
+                            cache_updated = true;
+                        }
+                        if let Some(last_modified) = new_last_modified {
+                            state.last_modified_map.insert(host, last_modified);
+                            cache_updated = true;
+                        }
+                        
+                        if cache_updated {
+                            state.save().ok();
+                        }
+
+                        // Check if newer version available
+                        if client.is_newer_version(&manifest.version).unwrap_or(false) {
+                            // Check if blinking output is enabled (default: true)
+                            let flash_enabled = std::env::var("CCSTATUS_FLASH")
+                                .map(|v| v.to_lowercase() != "0" && v.to_lowercase() != "false")
+                                .unwrap_or(true);
+                            
+                            let output = if flash_enabled {
+                                format!("\x1b[5m v{} released \x1b[0m ({})", 
+                                    manifest.version, manifest.notes_url)
+                            } else {
+                                format!("v{} released ({})", 
+                                    manifest.version, manifest.notes_url)
+                            };
+                            eprintln!("{}", output);
+                            update_found = true;
+                        }
+                        break; // Successfully processed first working URL
+                    }
+                    Err(_) => {
+                        // Try next URL
+                        continue;
                     }
                 }
-                Ok(None) => {
-                    // No new version (304 not modified)
-                    std::process::exit(0);
-                }
-                Err(_) => {
-                    eprintln!("Failed to check for updates");
-                    std::process::exit(1);
-                }
+            }
+
+            if !fetch_successful {
+                eprintln!("Failed to check for updates");
+                std::process::exit(1);
+            } else if update_found {
+                std::process::exit(10);
+            } else {
+                std::process::exit(0);
             }
         }
         #[cfg(not(feature = "self-update"))]

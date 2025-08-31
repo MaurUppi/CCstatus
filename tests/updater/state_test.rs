@@ -13,7 +13,7 @@ fn create_test_state_file(temp_dir: &TempDir, content: &str) -> std::path::PathB
 fn test_update_state_file_load_empty() {
     let state = UpdateStateFile::load();
     assert!(state.last_check.is_none());
-    assert!(state.last_prompted_version.is_none());
+    assert!(state.version_prompt_dates.is_empty());
     assert_eq!(state.green_ticks_since_check, 0);
     assert!(state.geo_verdict.is_none());
 }
@@ -28,7 +28,7 @@ fn test_update_state_file_save_and_load() {
     
     let mut state = UpdateStateFile::default();
     state.last_check = Some(Utc::now());
-    state.last_prompted_version = Some("2.2.3".to_string());
+    state.mark_version_prompted("2.2.3".to_string());
     state.green_ticks_since_check = 5;
     state.geo_verdict = Some(true);
     state.geo_checked_at = Some(Utc::now());
@@ -38,7 +38,7 @@ fn test_update_state_file_save_and_load() {
     let loaded_state = UpdateStateFile::load();
     
     assert!(loaded_state.last_check.is_some());
-    assert_eq!(loaded_state.last_prompted_version, Some("2.2.3".to_string()));
+    assert!(loaded_state.version_prompt_dates.contains_key("2.2.3"));
     assert_eq!(loaded_state.green_ticks_since_check, 5);
     assert_eq!(loaded_state.geo_verdict, Some(true));
     
@@ -80,11 +80,18 @@ fn test_version_prompt_deduplication() {
     // Mark version as prompted
     state.mark_version_prompted("2.2.3".to_string());
     
-    // Should not prompt for same version again
+    // Should not prompt for same version again (same day)
     assert!(!state.should_prompt_for_version("2.2.3"));
     
     // Should prompt for different version
     assert!(state.should_prompt_for_version("2.2.4"));
+    
+    // Simulate next day by modifying the stored date
+    let yesterday = chrono::Utc::now() - chrono::Duration::days(1);
+    state.version_prompt_dates.insert("2.2.5".to_string(), yesterday);
+    
+    // Should prompt again for version from yesterday
+    assert!(state.should_prompt_for_version("2.2.5"));
 }
 
 #[test]
@@ -154,4 +161,43 @@ fn test_etag_and_last_modified_caching() {
     assert_eq!(state.get_last_modified("raw.githubusercontent.com"), Some(&"Wed, 21 Oct 2015 07:28:00 GMT".to_string()));
     assert_eq!(state.get_last_modified("hk.gh-proxy.com"), Some(&"Thu, 22 Oct 2015 08:30:00 GMT".to_string()));
     assert_eq!(state.get_last_modified("unknown.com"), None);
+}
+
+#[test]
+fn test_legacy_migration() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let original_home = std::env::var("HOME").ok();
+    std::env::set_var("HOME", temp_dir.path());
+    
+    // Create a legacy state file with last_prompted_version
+    let config_dir = temp_dir.path().join(".claude").join("ccstatus");
+    fs::create_dir_all(&config_dir).unwrap();
+    let state_file = config_dir.join("ccstatus-update.json");
+    
+    let legacy_content = r#"{
+      "last_check": "2024-01-01T12:00:00Z",
+      "last_prompted_version": "2.2.1",
+      "green_ticks_since_check": 3,
+      "etag_map": {},
+      "last_modified_map": {},
+      "geo_verdict": null,
+      "geo_checked_at": null
+    }"#;
+    
+    fs::write(&state_file, legacy_content).unwrap();
+    
+    // Load state - should migrate legacy field
+    let state = UpdateStateFile::load();
+    
+    // Verify migration occurred
+    assert!(state.last_prompted_version.is_none()); // Legacy field should be cleared
+    assert!(state.version_prompt_dates.contains_key("2.2.1")); // Should be migrated
+    assert_eq!(state.green_ticks_since_check, 3);
+    
+    // Restore original HOME
+    if let Some(home) = original_home {
+        std::env::set_var("HOME", home);
+    } else {
+        std::env::remove_var("HOME");
+    }
 }

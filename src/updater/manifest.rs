@@ -35,74 +35,75 @@ impl Manifest {
 /// Manifest client for fetching update information
 pub struct ManifestClient {
     client: ureq::Agent,
-    etag_cache: HashMap<String, String>,
-    last_modified_cache: HashMap<String, String>,
 }
 
 impl ManifestClient {
-    /// Create new manifest client with timeouts
+    /// Create new manifest client with strict timeouts for silent failure
     pub fn new() -> Self {
-        let client = ureq::Agent::new_with_defaults();
+        let client: ureq::Agent = ureq::Agent::config_builder()
+            .timeout_global(Some(std::time::Duration::from_secs(3)))
+            .build()
+            .into();
 
-        Self {
-            client,
-            etag_cache: HashMap::new(),
-            last_modified_cache: HashMap::new(),
-        }
+        Self { client }
     }
 
-    /// Fetch manifest from URL with ETag/Last-Modified caching
-    pub fn fetch_manifest(
-        &mut self,
-        url: &str,
-    ) -> Result<Option<Manifest>, Box<dyn std::error::Error>> {
-        let mut request = self.client.get(url).header(
-            "User-Agent",
-            &format!("CCstatus/{}", env!("CARGO_PKG_VERSION")),
-        );
-
-        // Add conditional headers if we have cached values
-        if let Some(etag) = self.etag_cache.get(url) {
-            request = request.header("If-None-Match", etag);
-        }
-        if let Some(last_modified) = self.last_modified_cache.get(url) {
-            request = request.header("If-Modified-Since", last_modified);
-        }
-
-        match request.call() {
-            Ok(mut response) => {
-                if response.status().as_u16() == 200 {
-                    // Update cache with new ETag/Last-Modified
-                    if let Some(etag) = response.headers().get("ETag") {
-                        self.etag_cache
-                            .insert(url.to_string(), etag.to_str().unwrap_or("").to_string());
-                    }
-                    if let Some(last_modified) = response.headers().get("Last-Modified") {
-                        self.last_modified_cache.insert(
-                            url.to_string(),
-                            last_modified.to_str().unwrap_or("").to_string(),
-                        );
-                    }
-
-                    let manifest_text = response.body_mut().read_to_string()?;
-                    let manifest = Manifest::from_json(&manifest_text)?;
-                    Ok(Some(manifest))
-                } else if response.status().as_u16() == 304 {
-                    // Not modified, no new version
-                    Ok(None)
-                } else {
-                    Err(format!("HTTP {}", response.status().as_u16()).into())
-                }
-            }
-            Err(e) => Err(e.into()),
-        }
-    }
 
     /// Compare version with current using semver
     pub fn is_newer_version(&self, manifest_version: &str) -> Result<bool, semver::Error> {
         let current = semver::Version::parse(env!("CARGO_PKG_VERSION"))?;
         let latest = semver::Version::parse(manifest_version)?;
         Ok(latest > current)
+    }
+
+    /// Uniform helper for extracting headers from HTTP responses
+    fn get_header(response: &ureq::Response, header_name: &str) -> Option<String> {
+        response.header(header_name).map(|v| v.to_string())
+    }
+
+    /// Fetch manifest with persistent host-based caching from UpdateStateFile
+    pub fn fetch_manifest_with_persistent_cache(
+        &mut self,
+        url: &str,
+        persistent_etag_map: &std::collections::HashMap<String, String>,
+        persistent_last_modified_map: &std::collections::HashMap<String, String>,
+    ) -> Result<(Option<Manifest>, Option<String>, Option<String>), Box<dyn std::error::Error>> {
+        use crate::updater::url_resolver;
+
+        let host = url_resolver::extract_host_from_url(url).unwrap_or_else(|| url.to_string());
+        
+        let mut request = self.client.get(url).header(
+            "User-Agent",
+            &format!("CCstatus/{}", env!("CARGO_PKG_VERSION")),
+        );
+
+        // Use persistent cache values for conditional requests
+        if let Some(etag) = persistent_etag_map.get(&host) {
+            request = request.header("If-None-Match", etag);
+        }
+        if let Some(last_modified) = persistent_last_modified_map.get(&host) {
+            request = request.header("If-Modified-Since", last_modified);
+        }
+
+        match request.call() {
+            Ok(response) => {
+                if response.status().as_u16() == 200 {
+                    // Extract new cache headers for persistence
+                    let new_etag = Self::get_header(&response, "ETag");
+                    let new_last_modified = Self::get_header(&response, "Last-Modified");
+
+                    let manifest_text = response.into_string()?;
+                    let manifest = Manifest::from_json(&manifest_text)?;
+                    Ok((Some(manifest), new_etag, new_last_modified))
+                } else if response.status().as_u16() == 304 {
+                    // Not modified, no new version
+                    Ok((None, None, None))
+                } else {
+                    Err(format!("HTTP {}", response.status().as_u16()).into())
+                }
+            }
+            Err(e) => Err(e.into()),
+        }
     }
 }
 

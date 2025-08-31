@@ -15,25 +15,28 @@ impl Segment for UpdateSegment {
     fn collect(&self, _input: &InputData) -> Option<SegmentData> {
         #[cfg(feature = "self-update")]
         {
+            use chrono::{Utc, Duration};
+            
             // Load V1 update state and check for notifications
             let state_file = crate::updater::UpdateStateFile::load();
 
-            // Check if we have a version to notify about
-            if let Some(ref last_prompted) = state_file.last_prompted_version {
-                // Check if this version was prompted recently (within last hour)
-                if let Some(last_check) = state_file.last_check {
-                    let now = chrono::Utc::now();
-                    let hours_since_check = now.signed_duration_since(last_check).num_hours();
-
-                    // Show notification for 1 hour after prompting
-                    if hours_since_check < 1 {
-                        return Some(SegmentData {
-                            primary: format!("\u{f06b0} Update v{}!", last_prompted),
-                            secondary: String::new(),
-                            metadata: std::collections::HashMap::new(),
-                        });
-                    }
-                }
+            // Check for recent version prompts (show notification for 1 hour after prompting)
+            let now = Utc::now();
+            let one_hour_ago = now - Duration::hours(1);
+            
+            // Find the most recently prompted version within the last hour
+            let recent_version = state_file.version_prompt_dates
+                .iter()
+                .filter(|(_, prompt_date)| **prompt_date > one_hour_ago)
+                .max_by_key(|(_, prompt_date)| *prompt_date)
+                .map(|(version, _)| version.clone());
+            
+            if let Some(version) = recent_version {
+                return Some(SegmentData {
+                    primary: format!("\u{f06b0} Update v{}!", version),
+                    secondary: String::new(),
+                    metadata: std::collections::HashMap::new(),
+                });
             }
 
             // No notification to show

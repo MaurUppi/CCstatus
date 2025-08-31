@@ -222,6 +222,8 @@ Token usage percentage based on transcript analysis with context limit tracking.
 - P95 latency tracking with rolling 12-sample window
 - Frequency-gated probing to minimize API usage
 - Debug logging with `CCSTATUS_DEBUG=true`
+- Built-in update system with `--check-update` flag and geographic routing
+  - **Flashing text** will be noticeable on statusline. 
 - State persistence across sessions
 
 ## Performance

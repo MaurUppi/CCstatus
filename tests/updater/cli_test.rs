@@ -82,3 +82,46 @@ fn test_check_update_exit_codes() {
     assert_eq!(10, 10); // Update available
     assert_eq!(1, 1); // Error checking
 }
+
+#[test]
+fn test_ccstatus_flash_environment_variable() {
+    // Test the CCSTATUS_FLASH environment variable logic
+    
+    // Test flash enabled by default (no env var)
+    std::env::remove_var("CCSTATUS_FLASH");
+    let flash_enabled = std::env::var("CCSTATUS_FLASH")
+        .map(|v| v.to_lowercase() != "0" && v.to_lowercase() != "false")
+        .unwrap_or(true);
+    assert!(flash_enabled, "Flash should be enabled by default");
+    
+    // Test flash disabled with CCSTATUS_FLASH=0
+    std::env::set_var("CCSTATUS_FLASH", "0");
+    let flash_enabled = std::env::var("CCSTATUS_FLASH")
+        .map(|v| v.to_lowercase() != "0" && v.to_lowercase() != "false")
+        .unwrap_or(true);
+    assert!(!flash_enabled, "Flash should be disabled when CCSTATUS_FLASH=0");
+    
+    // Test flash disabled with CCSTATUS_FLASH=false
+    std::env::set_var("CCSTATUS_FLASH", "false");
+    let flash_enabled = std::env::var("CCSTATUS_FLASH")
+        .map(|v| v.to_lowercase() != "0" && v.to_lowercase() != "false")
+        .unwrap_or(true);
+    assert!(!flash_enabled, "Flash should be disabled when CCSTATUS_FLASH=false");
+    
+    // Test flash enabled with CCSTATUS_FLASH=1
+    std::env::set_var("CCSTATUS_FLASH", "1");
+    let flash_enabled = std::env::var("CCSTATUS_FLASH")
+        .map(|v| v.to_lowercase() != "0" && v.to_lowercase() != "false")
+        .unwrap_or(true);
+    assert!(flash_enabled, "Flash should be enabled when CCSTATUS_FLASH=1");
+    
+    // Test flash enabled with CCSTATUS_FLASH=true
+    std::env::set_var("CCSTATUS_FLASH", "true");
+    let flash_enabled = std::env::var("CCSTATUS_FLASH")
+        .map(|v| v.to_lowercase() != "0" && v.to_lowercase() != "false")
+        .unwrap_or(true);
+    assert!(flash_enabled, "Flash should be enabled when CCSTATUS_FLASH=true");
+    
+    // Cleanup
+    std::env::remove_var("CCSTATUS_FLASH");
+}

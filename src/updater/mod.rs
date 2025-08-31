@@ -73,84 +73,99 @@ impl UpdateState {
         }
     }
 
-    /// Load update state from config directory and trigger auto-check if needed
+    /// Load update state from config directory (LEGACY - use UpdateStateFile instead)
+    /// 
+    /// This method is deprecated and guarded behind the "legacy-update" feature flag.
+    /// The new V1 update system uses UpdateStateFile with manifest-based checking.
+    #[cfg(all(feature = "self-update", feature = "legacy-update"))]
     pub fn load() -> Self {
-        #[cfg(feature = "self-update")]
-        {
-            let config_dir = dirs::home_dir()
-                .unwrap_or_default()
-                .join(".claude")
-                .join("ccstatus");
+        let config_dir = dirs::home_dir()
+            .unwrap_or_default()
+            .join(".claude")
+            .join("ccstatus");
 
-            let state_file = config_dir.join(".update_state.json");
+        let state_file = config_dir.join(".update_state.json");
 
-            let mut state = if let Ok(content) = std::fs::read_to_string(&state_file) {
-                if let Ok(state) = serde_json::from_str::<UpdateState>(&content) {
-                    state
-                } else {
-                    UpdateState {
-                        current_version: env!("CARGO_PKG_VERSION").to_string(),
-                        ..Default::default()
-                    }
-                }
+        let mut state = if let Ok(content) = std::fs::read_to_string(&state_file) {
+            if let Ok(state) = serde_json::from_str::<UpdateState>(&content) {
+                state
             } else {
                 UpdateState {
                     current_version: env!("CARGO_PKG_VERSION").to_string(),
                     ..Default::default()
                 }
+            }
+        } else {
+            UpdateState {
+                current_version: env!("CARGO_PKG_VERSION").to_string(),
+                ..Default::default()
+            }
+        };
+
+        // LEGACY: Trigger background update check if needed
+        // NOTE: This uses the old GitHub Releases API path - V1 uses manifest-based approach
+        if state.should_check_update() {
+            // Check if another update process is running
+            let should_start_check = if let Some(pid) = state.update_pid {
+                !Self::is_process_running(pid)
+            } else {
+                true
             };
 
-            // Trigger background update check if needed
-            if state.should_check_update() {
-                // Check if another update process is running
-                let should_start_check = if let Some(pid) = state.update_pid {
-                    !Self::is_process_running(pid)
-                } else {
-                    true
-                };
+            if should_start_check {
+                // Perform synchronous update check for simplicity and reliability
+                use crate::updater::github::check_for_updates;
 
-                if should_start_check {
-                    // Perform synchronous update check for simplicity and reliability
-                    use crate::updater::github::check_for_updates;
+                state.update_pid = Some(std::process::id());
+                state.last_check = Some(chrono::Utc::now());
+                let _ = state.save();
 
-                    state.update_pid = Some(std::process::id());
-                    state.last_check = Some(chrono::Utc::now());
-                    let _ = state.save();
-
-                    // Perform update check
-                    match check_for_updates() {
-                        Ok(Some(release)) => {
-                            if release.find_asset_for_platform().is_some() {
-                                // Set Ready status with timestamp, user must run --update manually
-                                state.status = UpdateStatus::Ready {
-                                    version: release.version(),
-                                    found_at: chrono::Utc::now(),
-                                };
-                            } else {
-                                state.status = UpdateStatus::Failed {
-                                    error: "No compatible asset found".to_string(),
-                                };
-                            }
-                            state.latest_version = Some(release.version());
+                // Perform update check
+                match check_for_updates() {
+                    Ok(Some(release)) => {
+                        if release.find_asset_for_platform().is_some() {
+                            // Set Ready status with timestamp, user must run --update manually
+                            state.status = UpdateStatus::Ready {
+                                version: release.version(),
+                                found_at: chrono::Utc::now(),
+                            };
+                        } else {
+                            state.status = UpdateStatus::Failed {
+                                error: "No compatible asset found".to_string(),
+                            };
                         }
-                        Ok(None) => {
-                            state.status = UpdateStatus::Idle;
-                        }
-                        Err(_) => {
-                            state.status = UpdateStatus::Idle;
-                        }
+                        state.latest_version = Some(release.version());
                     }
-
-                    // Clear PID and save final state
-                    state.update_pid = None;
-                    let _ = state.save();
+                    Ok(None) => {
+                        state.status = UpdateStatus::Idle;
+                    }
+                    Err(_) => {
+                        state.status = UpdateStatus::Idle;
+                    }
                 }
-            }
 
-            state
+                // Clear PID and save final state
+                state.update_pid = None;
+                let _ = state.save();
+            }
         }
 
-        #[cfg(not(feature = "self-update"))]
+        state
+    }
+    
+    /// Load update state without legacy GitHub API checking (V1 compatible)
+    #[cfg(all(feature = "self-update", not(feature = "legacy-update")))]
+    pub fn load() -> Self {
+        UpdateState {
+            current_version: env!("CARGO_PKG_VERSION").to_string(),
+            status: UpdateStatus::Idle,
+            ..Default::default()
+        }
+    }
+    
+    /// Load update state (feature disabled)
+    #[cfg(not(feature = "self-update"))]
+    pub fn load() -> Self {
         UpdateState {
             current_version: env!("CARGO_PKG_VERSION").to_string(),
             ..Default::default()
@@ -188,27 +203,31 @@ impl UpdateState {
         false
     }
 
-    /// Save update state to config directory
+    /// Save update state to config directory (LEGACY - requires legacy-update feature)
+    #[cfg(all(feature = "self-update", feature = "legacy-update"))]
     pub fn save(&self) -> Result<(), std::io::Error> {
-        #[cfg(feature = "self-update")]
-        {
-            let config_dir = dirs::home_dir()
-                .unwrap_or_default()
-                .join(".claude")
-                .join("ccstatus");
+        let config_dir = dirs::home_dir()
+            .unwrap_or_default()
+            .join(".claude")
+            .join("ccstatus");
 
-            std::fs::create_dir_all(&config_dir)?;
-            let state_file = config_dir.join(".update_state.json");
+        std::fs::create_dir_all(&config_dir)?;
+        let state_file = config_dir.join(".update_state.json");
 
-            let content = serde_json::to_string_pretty(self)?;
-            std::fs::write(&state_file, content)?;
-        }
-
+        let content = serde_json::to_string_pretty(self)?;
+        std::fs::write(&state_file, content)?;
+        Ok(())
+    }
+    
+    /// Save update state (no-op when legacy-update feature disabled)
+    #[cfg(any(not(feature = "self-update"), not(feature = "legacy-update")))]
+    pub fn save(&self) -> Result<(), std::io::Error> {
+        // No-op: V1 system uses UpdateStateFile instead
         Ok(())
     }
 
-    /// Check if update check should be triggered
-    #[cfg(feature = "self-update")]
+    /// Check if update check should be triggered (LEGACY)
+    #[cfg(all(feature = "self-update", feature = "legacy-update"))]
     pub fn should_check_update(&self) -> bool {
         // Don't check if already updating
         match &self.status {
@@ -228,7 +247,8 @@ impl UpdateState {
         }
     }
 
-    #[cfg(not(feature = "self-update"))]
+    /// Check if update check should be triggered (disabled when not using legacy-update)
+    #[cfg(any(not(feature = "self-update"), not(feature = "legacy-update")))]
     pub fn should_check_update(&self) -> bool {
         false
     }

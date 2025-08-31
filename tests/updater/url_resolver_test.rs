@@ -52,7 +52,7 @@ fn test_try_urls_in_sequence_first_succeeds() {
         if url.contains("success") {
             Ok("Found it!")
         } else {
-            Err("Failed")
+            Err("Failed".into())
         }
     });
     
@@ -71,7 +71,7 @@ fn test_try_urls_in_sequence_fallback() {
         if url.contains("backup") {
             Ok("Backup worked!")
         } else {
-            Err("Failed")
+            Err("Failed".into())
         }
     });
     
@@ -85,11 +85,12 @@ fn test_try_urls_in_sequence_all_fail() {
         "https://fail2.com".to_string(),
     ];
     
-    let result: Result<&str, &str> = try_urls_in_sequence(&urls, |_url| {
-        Err("Always fails")
+    let result: Result<&str, Box<dyn std::error::Error>> = try_urls_in_sequence(&urls, |_url| {
+        Err("Always fails".into())
     });
     
-    assert_eq!(result, Err("Always fails"));
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Always fails"));
 }
 
 #[test]

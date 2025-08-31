@@ -63,6 +63,8 @@ network-monitoring = ["isahc", "tokio"]
 timings-curl = ["curl", "network-monitoring"]
 # Static curl for maximum portability (primarily Windows)
 timings-curl-static = ["timings-curl", "curl/static-curl"]
+# Legacy update path (disabled by default, for V1 compatibility testing only)
+legacy-update = []
 
 [dev-dependencies]
 tempfile = "3.0"

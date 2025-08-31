@@ -2,6 +2,28 @@
 ///
 /// For China users: Try hk.gh-proxy.com first, fallback to original, then give up
 /// For non-China users: Use original URL directly
+
+use std::fmt;
+
+/// URL resolution error for silent failure semantics
+#[derive(Debug, Clone)]
+pub enum UrlResolverError {
+    /// No URLs provided to try
+    EmptyUrlList,
+    /// All URLs failed with the last error
+    AllUrlsFailed(String),
+}
+
+impl fmt::Display for UrlResolverError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UrlResolverError::EmptyUrlList => write!(f, "No URLs provided"),
+            UrlResolverError::AllUrlsFailed(err) => write!(f, "All URLs failed: {}", err),
+        }
+    }
+}
+
+impl std::error::Error for UrlResolverError {}
 pub fn resolve_manifest_url(is_china: bool) -> Vec<String> {
     let original_url = "https://raw.githubusercontent.com/MaurUppi/CCstatus/main/latest.json";
 
@@ -25,85 +47,24 @@ pub fn extract_host_from_url(url: &str) -> Option<String> {
 }
 
 /// Try multiple URLs in sequence until one succeeds
-pub fn try_urls_in_sequence<F, T, E>(urls: &[String], mut fetch_fn: F) -> Result<T, E>
+pub fn try_urls_in_sequence<F, T>(urls: &[String], mut fetch_fn: F) -> Result<T, Box<dyn std::error::Error>>
 where
-    F: FnMut(&str) -> Result<T, E>,
+    F: FnMut(&str) -> Result<T, Box<dyn std::error::Error>>,
 {
-    let mut last_error = None;
+    if urls.is_empty() {
+        return Err(Box::new(UrlResolverError::EmptyUrlList));
+    }
+
+    let mut last_error_msg = String::new();
 
     for url in urls {
         match fetch_fn(url) {
             Ok(result) => return Ok(result),
-            Err(e) => last_error = Some(e),
+            Err(e) => last_error_msg = e.to_string(),
         }
     }
 
-    // If we get here, all URLs failed
-    match last_error {
-        Some(e) => Err(e),
-        None => panic!("No URLs provided"), // This should never happen
-    }
+    // All URLs failed
+    Err(Box::new(UrlResolverError::AllUrlsFailed(last_error_msg)))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resolve_manifest_url_china() {
-        let urls = resolve_manifest_url(true);
-        assert_eq!(urls.len(), 2);
-        assert!(urls[0].contains("hk.gh-proxy.com"));
-        assert!(urls[1].contains("raw.githubusercontent.com"));
-    }
-
-    #[test]
-    fn test_resolve_manifest_url_non_china() {
-        let urls = resolve_manifest_url(false);
-        assert_eq!(urls.len(), 1);
-        assert!(urls[0].contains("raw.githubusercontent.com"));
-    }
-
-    #[test]
-    fn test_extract_host_from_url() {
-        let host = extract_host_from_url("https://hk.gh-proxy.com/path/to/file");
-        assert_eq!(host, Some("hk.gh-proxy.com".to_string()));
-
-        let host = extract_host_from_url("https://raw.githubusercontent.com/repo/file");
-        assert_eq!(host, Some("raw.githubusercontent.com".to_string()));
-
-        let host = extract_host_from_url("invalid-url");
-        assert_eq!(host, None);
-    }
-
-    #[test]
-    fn test_try_urls_in_sequence() {
-        let urls = vec![
-            "https://fail1.com".to_string(),
-            "https://success.com".to_string(),
-            "https://fail2.com".to_string(),
-        ];
-
-        let result = try_urls_in_sequence(&urls, |url| {
-            if url.contains("success") {
-                Ok("Success!")
-            } else {
-                Err("Failed")
-            }
-        });
-
-        assert_eq!(result, Ok("Success!"));
-    }
-
-    #[test]
-    fn test_try_urls_in_sequence_all_fail() {
-        let urls = vec![
-            "https://fail1.com".to_string(),
-            "https://fail2.com".to_string(),
-        ];
-
-        let result: Result<&str, &str> = try_urls_in_sequence(&urls, |_url| Err("Always fails"));
-
-        assert_eq!(result, Err("Always fails"));
-    }
-}
