@@ -360,6 +360,20 @@ impl NetworkSegment {
                                         &format!("Persisted GREEN window ID: {}", green_id),
                                     )
                                     .await;
+                                
+                                // Trigger update system for GREEN window
+                                #[cfg(feature = "self-update")]
+                                {
+                                    let mut update_state = crate::updater::UpdateStateFile::load();
+                                    if let Err(e) = update_state.tick_from_green(&green_id) {
+                                        debug_logger
+                                            .debug(
+                                                "NetworkSegment",
+                                                &format!("Update trigger failed in GREEN window: {}", e),
+                                            )
+                                            .await;
+                                    }
+                                }
                             }
                         }
                     }
@@ -390,6 +404,20 @@ impl NetworkSegment {
                         debug_logger.debug("NetworkSegment", 
                             "COLD probe completed - session deduplication handled by HttpMonitor"
                         ).await;
+                        
+                        // Trigger update system for COLD window
+                        #[cfg(feature = "self-update")]
+                        {
+                            let mut update_state = crate::updater::UpdateStateFile::load();
+                            if let Err(e) = update_state.tick_from_cold() {
+                                debug_logger
+                                    .debug(
+                                        "NetworkSegment",
+                                        &format!("Update trigger failed in COLD window: {}", e),
+                                    )
+                                    .await;
+                            }
+                        }
                     }
                 }
             }
