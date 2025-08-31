@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Manifest structure for update information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,10 +55,6 @@ impl ManifestClient {
         Ok(latest > current)
     }
 
-    /// Uniform helper for extracting headers from HTTP responses
-    fn get_header(response: &ureq::Response, header_name: &str) -> Option<String> {
-        response.header(header_name).map(|v| v.to_string())
-    }
 
     /// Fetch manifest with persistent host-based caching from UpdateStateFile
     pub fn fetch_manifest_with_persistent_cache(
@@ -86,13 +81,13 @@ impl ManifestClient {
         }
 
         match request.call() {
-            Ok(response) => {
+            Ok(mut response) => {
                 if response.status().as_u16() == 200 {
                     // Extract new cache headers for persistence
-                    let new_etag = Self::get_header(&response, "ETag");
-                    let new_last_modified = Self::get_header(&response, "Last-Modified");
+                    let new_etag = response.headers().get("ETag").map(|v| v.to_str().unwrap_or("").to_string());
+                    let new_last_modified = response.headers().get("Last-Modified").map(|v| v.to_str().unwrap_or("").to_string());
 
-                    let manifest_text = response.into_string()?;
+                    let manifest_text = response.body_mut().read_to_string()?;
                     let manifest = Manifest::from_json(&manifest_text)?;
                     Ok((Some(manifest), new_etag, new_last_modified))
                 } else if response.status().as_u16() == 304 {
