@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.4] - 2025-08-31
+
+### 📊 JSONL Monitor Phase 2 Enhancements
+
+#### ✨ Advanced Error Deduplication System
+- **SHA256-based Deduplication**: Intelligent deduplication using session_id, timestamp, and HTTP status code
+  - **60-second Sliding Window**: Prevents duplicate error entries within 60 seconds
+  - **Smart Key Generation**: `sha256(session_id|occurred_at|status_code)` for precise deduplication
+  - **Memory Efficient**: LRU-style cache with automatic cleanup of expired entries
+  - **High Performance**: Deduplication check averages <1ms per entry
+
+#### 🏗️ Enhanced Field Schema & Naming
+- **Improved Field Naming**: More descriptive field names for better log analysis
+  - `logged_at`: When the error was written to JSONL (RFC3339 format)
+  - `occurred_at`: When the error actually happened (from transcript)
+  - `type`: Error classification (`isApiErrorMessage` vs `fallback`)
+  - `code_source`: Detection method (`explicit`, `parsed`, or `none`)
+- **RFC3339 Timestamp Normalization**: Automatic timestamp validation and correction
+  - **Placeholder Detection**: Identifies test placeholders like `2024-01-01T12:*:00Z`
+  - **Fallback to Local Time**: Invalid timestamps replaced with current local time
+  - **Consistent Format**: All timestamps guaranteed to be valid RFC3339
+
+#### 🧪 Test Infrastructure Improvements  
+- **Serial Test Execution**: Added `serial_test` crate to prevent environment variable race conditions
+  - **Environment Isolation**: Tests no longer interfere with each other via CCSTATUS_DEBUG
+  - **Deterministic Results**: Eliminates flaky test failures from concurrent execution
+  - **Comprehensive Coverage**: All JSONL monitor tests now use `#[serial]` annotation
+
+#### ⚙️ Configuration-Based Dependency Injection
+- **JsonlLoggerConfig Structure**: Explicit configuration for improved testability
+  - **Configurable Paths**: Custom JSONL and debug log file locations
+  - **Debug Control**: Programmatic debug logging enable/disable
+  - **Test-Friendly**: Supports temporary directories and mock configurations
+- **Enhanced Logger Creation**: `from_config()` method for dependency injection pattern
+  - **Explicit Configuration**: No more reliance on implicit environment detection
+  - **Better Testing**: Allows precise control over logger behavior in tests
+  - **Maintainability**: Clear separation between configuration and implementation
+
+#### 🔧 Code Quality & Architecture
+- **SHA256 Dependency**: Added `sha2 = "0.10"` for cryptographic hashing
+- **Enhanced Error Parsing**: Improved `parse_jsonl_line_enhanced()` method
+  - **Better Detection**: More accurate API error message identification
+  - **Structured Output**: Returns tuple with error entry, dedup key, and detection type
+  - **Error Handling**: Comprehensive error propagation for parsing failures
+- **Memory Management**: Efficient deduplication cache with automatic cleanup
+  - **Time-based Expiry**: Removes cache entries older than 60 seconds
+  - **Bounded Memory**: Prevents unbounded cache growth over time
+
+### 🛡️ Quality Assurance
+- **Enhanced Test Suite**: Comprehensive testing of new deduplication logic
+- **Serialized Execution**: Eliminates race conditions in test environment
+- **Performance Validation**: Deduplication performance benchmarked and optimized
+- **Schema Compatibility**: New field schema maintains backward compatibility
+
 ## [2.2.3] - 2025-08-31
 
 ### 🔄 Self-Update System V1
