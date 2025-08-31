@@ -2,9 +2,12 @@
 use crate::core::network::debug_logger::{get_debug_logger, EnhancedDebugLogger};
 use crate::core::network::types::{JsonlError, NetworkError};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::io::SeekFrom;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 /// Monitor for scanning JSONL transcript files and detecting API errors
@@ -15,6 +18,7 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 /// - Returns boolean detection status + most recent error details
 /// - Optimized for large files via configurable tail reading
 /// - Memory-only operation with no persistence (complies with module boundaries)
+/// - **Deduplication:** 60s window to prevent duplicate JSONL logging (doesn't affect RED detection)
 ///
 /// **Detection Methods:**
 /// - Primary: `isApiErrorMessage: true` flag-based detection (100% reliable)
@@ -26,6 +30,8 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 /// **Security:** Input validation, structured logging, bounded memory usage
 pub struct JsonlMonitor {
     logger: Arc<EnhancedDebugLogger>, // Always present for operational JSONL logging
+    // 60s deduplication cache: hash(session_id + occurred_at + code) -> last_logged_instant
+    dedup_cache: Arc<Mutex<HashMap<String, Instant>>>,
 }
 
 impl JsonlMonitor {
@@ -44,7 +50,10 @@ impl JsonlMonitor {
             Arc::new(get_debug_logger())
         });
 
-        Self { logger }
+        Self { 
+            logger,
+            dedup_cache: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
 
@@ -188,19 +197,31 @@ impl JsonlMonitor {
                 let normalized_error_ts =
                     self.normalize_error_timestamp(&error_entry.timestamp);
 
-                // Create JSONL entry according to new schema
-                let jsonl_entry = serde_json::json!({
-                    "type": detection_type,
-                    "logged_at": chrono::Local::now().to_rfc3339(),
-                    "occurred_at": normalized_error_ts,
-                    "code": error_entry.http_code,
-                    "code_source": code_source,
-                    "message": extracted_message,
-                    "session_id": self.logger.get_session_id()
-                });
+                let session_id = self.logger.get_session_id();
 
-                // Write to always-on JSONL operational log
-                let _ = self.logger.jsonl_sync(jsonl_entry);
+                // Check deduplication before writing to JSONL (doesn't affect RED detection)
+                if self.should_log_entry(&session_id, &normalized_error_ts, error_entry.http_code) {
+                    // Create JSONL entry according to new schema
+                    let jsonl_entry = serde_json::json!({
+                        "type": detection_type,
+                        "logged_at": chrono::Local::now().to_rfc3339(),
+                        "occurred_at": normalized_error_ts,
+                        "code": error_entry.http_code,
+                        "code_source": code_source,
+                        "message": extracted_message,
+                        "session_id": session_id
+                    });
+
+                    // Write to always-on JSONL operational log
+                    let _ = self.logger.jsonl_sync(jsonl_entry);
+                } else {
+                    // Skip logging due to deduplication, but still process for RED detection
+                    self.logger.debug_sync(
+                        "JsonlMonitor",
+                        "dedup_skip",
+                        &format!("Skipped duplicate error: code={}, session={}", error_entry.http_code, session_id),
+                    );
+                }
 
                 // Keep track of most recent error for return value (always needed for RED gate)
                 last_error = Some(JsonlError {
@@ -579,6 +600,56 @@ impl JsonlMonitor {
             }
         }
         "Unknown error".to_string()
+    }
+
+    /// Compute deduplication key: SHA256(session_id + occurred_at + code)
+    fn compute_dedup_key(&self, session_id: &str, occurred_at: &str, code: u16) -> String {
+        let input = format!("{}{}{}", session_id, occurred_at, code);
+        let mut hasher = Sha256::new();
+        hasher.update(input.as_bytes());
+        format!("{:x}", hasher.finalize())
+    }
+
+    /// Check if entry should be logged (not a duplicate within 60s window)
+    /// Returns true if should log, false if duplicate
+    fn should_log_entry(&self, session_id: &str, occurred_at: &str, code: u16) -> bool {
+        let dedup_key = self.compute_dedup_key(session_id, occurred_at, code);
+        let now = Instant::now();
+        
+        // Try to lock the cache, handle potential mutex poisoning gracefully
+        match self.dedup_cache.lock() {
+            Ok(mut cache) => {
+                // Clean old entries (older than 60s)
+                self.clean_old_entries(&mut cache, now);
+                
+                // Check if key exists and is within 60s window
+                if let Some(&last_logged) = cache.get(&dedup_key) {
+                    if now.duration_since(last_logged) < Duration::from_secs(60) {
+                        return false; // Skip - duplicate within window
+                    }
+                }
+                
+                // Update cache with current time
+                cache.insert(dedup_key, now);
+                true // Log this entry
+            }
+            Err(_) => {
+                // Mutex poisoned - log entry to be safe (graceful degradation)
+                self.logger.debug_sync(
+                    "JsonlMonitor",
+                    "dedup_cache_poisoned",
+                    "Deduplication cache mutex poisoned, logging entry",
+                );
+                true
+            }
+        }
+    }
+
+    /// Clean old entries from deduplication cache (>60s)
+    fn clean_old_entries(&self, cache: &mut HashMap<String, Instant>, now: Instant) {
+        cache.retain(|_, &mut last_logged| {
+            now.duration_since(last_logged) < Duration::from_secs(60)
+        });
     }
 }
 
