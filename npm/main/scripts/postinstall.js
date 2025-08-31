@@ -4,7 +4,7 @@ const os = require('os');
 
 // Silent mode detection
 const silent = process.env.npm_config_loglevel === 'silent' || 
-               process.env.CCLINE_SKIP_POSTINSTALL === '1';
+               process.env.CCSTATUS_SKIP_POSTINSTALL === '1';
 
 if (!silent) {
   console.log('🚀 Setting up CCstatus for Claude Code...');
@@ -14,51 +14,20 @@ try {
   const platform = process.platform;
   const arch = process.arch;
   const homeDir = os.homedir();
-  const claudeDir = path.join(homeDir, '.claude', 'ccline');
+  const claudeDir = path.join(homeDir, '.claude', 'ccstatus');
 
   // Create directory
   fs.mkdirSync(claudeDir, { recursive: true });
 
   // Determine platform key
-  let platformKey = `${platform}-${arch}`;
-  if (platform === 'linux') {
-    // Detect if static linking is needed based on glibc version
-    function shouldUseStaticBinary() {
-      try {
-        const { execSync } = require('child_process');
-        const lddOutput = execSync('ldd --version 2>/dev/null || echo ""', { 
-          encoding: 'utf8',
-          timeout: 1000 
-        });
-        
-        // Parse "ldd (GNU libc) 2.35" format
-        const match = lddOutput.match(/(?:GNU libc|GLIBC).*?(\d+)\.(\d+)/);
-        if (match) {
-          const major = parseInt(match[1]);
-          const minor = parseInt(match[2]);
-          // Use static binary if glibc < 2.35
-          return major < 2 || (major === 2 && minor < 35);
-        }
-      } catch (e) {
-        // If detection fails, default to dynamic binary
-        return false;
-      }
-      
-      return false;
-    }
-    
-    if (shouldUseStaticBinary()) {
-      platformKey = 'linux-x64-musl';
-    }
-  }
+  const platformKey = `${platform}-${arch}`;
 
   const packageMap = {
-    'darwin-x64': '@cometix/ccline-darwin-x64',
-    'darwin-arm64': '@cometix/ccline-darwin-arm64',
-    'linux-x64': '@cometix/ccline-linux-x64',
-    'linux-x64-musl': '@cometix/ccline-linux-x64-musl',
-    'win32-x64': '@cometix/ccline-win32-x64',
-    'win32-ia32': '@cometix/ccline-win32-x64', // Use 64-bit for 32-bit
+    'darwin-x64': '@mauruppi/ccstatus-darwin-x64',
+    'darwin-arm64': '@mauruppi/ccstatus-darwin-arm64',
+    'linux-x64': '@mauruppi/ccstatus-linux-x64',
+    'win32-x64': '@mauruppi/ccstatus-win32-x64',
+    'win32-ia32': '@mauruppi/ccstatus-win32-x64', // Use 64-bit for 32-bit
   };
 
   const packageName = packageMap[platformKey];
@@ -69,7 +38,7 @@ try {
     process.exit(0);
   }
 
-  const binaryName = platform === 'win32' ? 'ccline.exe' : 'ccline';
+  const binaryName = platform === 'win32' ? 'ccstatus.exe' : 'ccstatus';
   const targetPath = path.join(claudeDir, binaryName);
 
   // Multiple path search strategies for different package managers
@@ -123,7 +92,7 @@ try {
   if (!sourcePath) {
     if (!silent) {
       console.log('Binary package not installed, skipping Claude Code setup');
-      console.log('The global ccline command will still work via npm');
+      console.log('The global ccstatus command will still work via npm');
     }
     process.exit(0);
   }
@@ -148,13 +117,13 @@ try {
   if (!silent) {
     console.log('✨ CCstatus is ready for Claude Code!');
     console.log(`📍 Location: ${targetPath}`);
-    console.log('🎉 You can now use: ccline --help');
+    console.log('🎉 You can now use: ccstatus --help');
   }
 } catch (error) {
   // Silent failure - don't break installation
   if (!silent) {
     console.log('Note: Could not auto-configure for Claude Code');
-    console.log('The global ccline command will still work.');
-    console.log('You can manually copy ccline to ~/.claude/ccline/ if needed');
+    console.log('The global ccstatus command will still work.');
+    console.log('You can manually copy ccstatus to ~/.claude/ccstatus/ if needed');
   }
 }

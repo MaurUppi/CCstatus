@@ -1,14 +1,14 @@
 {
-  "name": "@cometix/ccline-win32-x64",
+  "name": "@mauruppi/ccstatus-win32-x64",
   "version": "0.0.0",
-  "description": "Windows x64 binary for CCometixLine",
-  "files": ["ccline.exe"],
+  "description": "Windows x64 binary for CCstatus",
+  "files": ["ccstatus.exe"],
   "os": ["win32"],
   "cpu": ["x64"],
   "repository": {
     "type": "git",
-    "url": "https://github.com/Haleclipse/CCometixLine"
+    "url": "https://github.com/MaurUppi/CCstatus"
   },
-  "author": "Haleclipse",
+  "author": "MaurUppi",
   "license": "MIT"
 }

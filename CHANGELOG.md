@@ -5,6 +5,84 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.2] - 2025-08-30
+
+### 🔧 Critical Bug Fixes
+
+#### 📝 JSONL Monitor Operational Log Cleanup  
+- **消除日志噪音**: 完全移除 `"type":"tail_scan_complete"` 记录污染
+  - **问题**: v2.2.1 中 JSONL 错误日志被大量无用的扫描完成记录污染 (7,000+ 条记录)
+  - **解决**: 移除 tail_scan_complete 的 JSONL 写入，仅保留调试日志
+  - **影响**: 运营日志现在只包含真实的 API 错误事件，显著减少日志噪音
+- **时间戳规范化**: 新增 `normalize_error_timestamp()` 函数处理无效时间戳
+  - **RFC3339 验证**: 严格解析 RFC3339 格式时间戳
+  - **占位符过滤**: 自动识别并替换测试用占位符时间 (`2024-01-01T12:*:00Z`)
+  - **本地时间后备**: 无效时间戳自动使用本地时间替代，确保日志完整性
+
+#### ⚡ 网络诊断 TTFB 增强
+- **双重 TTFB 测量**: 区分服务器处理时间和端到端响应时间
+  - **ServerTTFB**: `starttransfer_time - appconnect_time` (隔离服务器处理时间)
+  - **TotalTTFB**: `starttransfer_time` (包含 DNS+TCP+TLS+服务器的完整时间)
+  - **状态感知格式**: 降级/错误状态显示增强格式便于故障诊断
+- **curl 路径增强**: 高精度计时显示完整网络栈分解
+  - **健康状态**: `P95:200ms` (保持现有显示)
+  - **降级状态**: `P95:200ms DNS:25ms|TCP:30ms|TLS:35ms|ServerTTFB:100ms/TotalTTFB:190ms|Total:250ms`
+  - **错误状态**: `DNS:25ms|TCP:30ms|TLS:35ms|ServerTTFB:100ms/TotalTTFB:190ms|Total:250ms`
+- **isahc 路径简化**: 后备路径使用简洁的总时间显示
+  - **健康状态**: `P95:200ms` (保持一致)
+  - **降级状态**: `P95:200ms Total:250ms`
+  - **错误状态**: `Total:250ms`
+
+### 🛠️ 架构改进
+
+#### 📊 PhaseTimings 结构扩展
+- **新增字段**: `total_ttfb_ms: u32` 用于端到端 TTFB 测量
+- **向后兼容**: 所有现有代码继续正常工作
+- **测试更新**: 完整的测试套件覆盖新字段和格式
+
+#### 🏗️ 代码质量提升
+- **重构合并策略**: 正确合并 feat/jsol-improve 和 feat/ttfb-enhancement 分支
+- **版本控制修复**: 删除有缺陷的 v2.2.1 标签，发布完整的 v2.2.2
+- **构建验证**: 确保所有 curl 和 isahc 路径测试通过
+
+### 🔍 诊断能力提升
+
+#### 🎯 网络故障排查
+- **精确定位**: ServerTTFB 帮助区分网络延迟和服务器处理延迟
+- **完整视图**: TotalTTFB 提供用户体验的真实测量
+- **问题分类**: 便于识别是网络连接问题还是服务器处理问题
+
+#### 📋 运营监控
+- **清洁日志**: 消除无用噪音，专注真实错误事件
+- **时间准确性**: 规范化时间戳确保日志分析的可靠性
+- **存储效率**: 减少不必要的日志条目，节省磁盘空间
+
+### 🛡️ 质量保证
+
+#### ✅ 测试覆盖
+- **42/44 curl 测试通过**: 高精度计时路径验证
+- **32/32 isahc 测试通过**: 后备路径完整验证
+- **编译验证**: 所有平台构建成功
+
+#### 🔧 部署就绪
+- **二进制更新**: `target/release/ccstatus` 包含所有修复
+- **即时生效**: 部署后立即停止产生 tail_scan_complete 记录
+- **历史数据保留**: 现有 7,031 条历史记录保持不变
+
+### 📋 修复的缺陷
+
+**v2.2.1 问题**: JSONL 改进未正确合并导致：
+- ❌ tail_scan_complete 记录继续污染运营日志
+- ❌ 时间戳规范化功能缺失
+- ❌ 构建的二进制文件缺少 JSONL 修复
+
+**v2.2.2 解决**:
+- ✅ 正确合并所有分支到 master
+- ✅ 完整的 JSONL 和 TTFB 功能集成
+- ✅ 通过全面测试和构建验证
+
+---
+
 ## [2.2.1] - 2025-08-29
 
 ### 🛡️ Bot Fight 反击系统

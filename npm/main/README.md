@@ -1,30 +1,35 @@
-# @cometix/ccline
+# @mauruppi/ccstatus
 
-CCstatus - High-performance Claude Code StatusLine tool
+CCstatus - Claude Code Network Monitor and StatusLine tool
 
 ## Installation
 
 ```bash
-npm install -g @cometix/ccline
+npm install -g @mauruppi/ccstatus
 ```
 
 ## Features
 
-- 🚀 **Fast**: Written in Rust for maximum performance
+- 🚀 **High Performance**: Written in Rust for maximum speed (<50ms startup, <10MB memory)
+- 🌐 **Network Probing**: Driven by Claude code statusline stdin to initial endpoint status awareness ⚡
+- 📊 **Git Integration**: Branch status, tracking info, and repository state display
+- 🤖 **Model Display**: Simplified Claude model names (e.g., Sonnet 3.5, Sonnet 4)
+- 📈 **Usage Tracking**: Context window analysis based on transcript files
+- 🛡️ **Bot Fight Mitigation**: JS Challenge/Bot Fight detection and handling
+- 📁 **Workspace Display**: Current working directory information
 - 🌍 **Cross-platform**: Works on Windows, macOS, and Linux
-- 📦 **Easy installation**: One command via npm
-- 🔄 **Auto-update**: Built-in update notifications
-- 🎨 **Beautiful**: Nerd Font icons and colors
+- 📦 **Easy Installation**: One command via npm with automatic Claude Code setup
+- ⚙️ **Smart Configuration**: Automatic credential detection and minimal setup
 
 ## Usage
 
-After installation, ccline is automatically configured for Claude Code at `~/.claude/ccline/ccline`.
+After installation, ccstatus is automatically configured for Claude Code at `~/.claude/ccstatus/ccstatus`.
 
 You can also use it directly:
 
 ```bash
-ccline --help
-ccline --version
+ccstatus --help
+ccstatus --version
 ```
 
 ## For Users in China
@@ -32,7 +37,7 @@ ccline --version
 Use npm mirror for faster installation:
 
 ```bash
-npm install -g @cometix/ccline --registry https://registry.npmmirror.com
+npm install -g @mauruppi/ccstatus --registry https://registry.npmmirror.com
 ```
 
 ## More Information

@@ -53,7 +53,7 @@ Model | Working Directory | Git Branch Status | Context Window | Network Status
 - **Git integration** with branch, status, and tracking info  
 - **Model display** with simplified Claude model names
 - **Usage tracking** based on transcript analysis
-- **Network probing** with real-time Claude API connectivity status ⚡
+- **Network Probing**: Driven by Claude code statusline stdin to initial endpoint status awareness ⚡
 - **Trying to resolve** JS Challenge/Bot Fight detection and countermeasures (LOW EXPECTATION) 🛡️
 - **Directory display** showing current workspace
 - **Minimal design** using Nerd Font icons

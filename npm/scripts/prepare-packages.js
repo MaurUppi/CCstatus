@@ -17,7 +17,6 @@ const platforms = [
   'darwin-x64',
   'darwin-arm64', 
   'linux-x64',
-  'linux-x64-musl',
   'win32-x64'
 ];
 
@@ -42,7 +41,7 @@ platforms.forEach(platform => {
     JSON.stringify(packageJson, null, 2) + '\n'
   );
   
-  console.log(`✓ Prepared @cometix/ccline-${platform} v${version}`);
+  console.log(`✓ Prepared @mauruppi/ccstatus-${platform} v${version}`);
 });
 
 // Prepare main package
@@ -61,7 +60,7 @@ mainPackageJson.version = version;
 // Update optionalDependencies versions
 if (mainPackageJson.optionalDependencies) {
   Object.keys(mainPackageJson.optionalDependencies).forEach(dep => {
-    if (dep.startsWith('@cometix/ccline-')) {
+    if (dep.startsWith('@mauruppi/ccstatus-')) {
       mainPackageJson.optionalDependencies[dep] = version;
     }
   });
@@ -72,7 +71,7 @@ fs.writeFileSync(
   JSON.stringify(mainPackageJson, null, 2) + '\n'
 );
 
-console.log(`✓ Prepared @cometix/ccline v${version}`);
+console.log(`✓ Prepared @mauruppi/ccstatus v${version}`);
 console.log(`\n🎉 All packages prepared for version ${version}`);
 console.log('\nNext steps:');
 console.log('1. Copy binaries to platform directories');

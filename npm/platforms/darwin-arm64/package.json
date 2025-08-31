@@ -1,14 +1,14 @@
 {
-  "name": "@cometix/ccline-darwin-arm64",
+  "name": "@mauruppi/ccstatus-darwin-arm64",
   "version": "0.0.0",
-  "description": "macOS ARM64 binary for CCometixLine",
-  "files": ["ccline"],
+  "description": "macOS ARM64 binary for CCstatus",
+  "files": ["ccstatus"],
   "os": ["darwin"],
   "cpu": ["arm64"],
   "repository": {
     "type": "git",
-    "url": "https://github.com/Haleclipse/CCometixLine"
+    "url": "https://github.com/MaurUppi/CCstatus"
   },
-  "author": "Haleclipse",
+  "author": "MaurUppi",
   "license": "MIT"
 }

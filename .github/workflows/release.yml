@@ -251,3 +251,86 @@ jobs:
 
           ---
 
+    # NPM Publishing Steps - Added after GitHub Release
+    - name: Setup Node.js for NPM
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        registry-url: 'https://registry.npmjs.org'
+
+    - name: Extract binaries from artifacts
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        mkdir -p extracted
+        
+        # macOS x64 (static only for npm)
+        tar -xzf artifacts/ccstatus-macos-x64-static.tar.gz/ccstatus-macos-x64-static.tar.gz -C extracted
+        mv extracted/ccstatus extracted/ccstatus-darwin-x64
+        
+        # macOS ARM64 (static only)
+        tar -xzf artifacts/ccstatus-macos-arm64-static.tar.gz/ccstatus-macos-arm64-static.tar.gz -C extracted
+        mv extracted/ccstatus extracted/ccstatus-darwin-arm64
+        
+        # Linux x64 (static)
+        tar -xzf artifacts/ccstatus-linux-x64-static.tar.gz/ccstatus-linux-x64-static.tar.gz -C extracted
+        mv extracted/ccstatus extracted/ccstatus-linux-x64
+        
+        # Windows
+        unzip artifacts/ccstatus-windows-x64-static.zip/ccstatus-windows-x64-static.zip -d extracted
+        mv extracted/ccstatus.exe extracted/ccstatus-win32-x64.exe
+        
+        ls -la extracted/
+
+    - name: Prepare NPM packages
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        node npm/scripts/prepare-packages.js
+        
+        # Copy binaries to platform directories
+        cp extracted/ccstatus-darwin-x64 npm-publish/darwin-x64/ccstatus
+        cp extracted/ccstatus-darwin-arm64 npm-publish/darwin-arm64/ccstatus
+        cp extracted/ccstatus-linux-x64 npm-publish/linux-x64/ccstatus
+        cp extracted/ccstatus-win32-x64.exe npm-publish/win32-x64/ccstatus.exe
+        
+        # Set executable permissions
+        chmod +x npm-publish/darwin-x64/ccstatus
+        chmod +x npm-publish/darwin-arm64/ccstatus
+        chmod +x npm-publish/linux-x64/ccstatus
+        
+        # Verify packages
+        echo "Package structure:"
+        find npm-publish -name "package.json" -exec echo "=== {} ===" \; -exec head -5 {} \;
+
+    - name: Publish platform packages to NPM
+      if: startsWith(github.ref, 'refs/tags/')
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      run: |
+        for platform in darwin-x64 darwin-arm64 linux-x64 win32-x64; do
+          echo "📦 Publishing @mauruppi/ccstatus-$platform"
+          cd npm-publish/$platform
+          npm publish --access public
+          cd ../..
+          echo "✅ Published @mauruppi/ccstatus-$platform"
+        done
+
+    - name: Wait for NPM registry
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        echo "⏳ Waiting for platform packages to be available..."
+        sleep 30
+
+    - name: Publish main package to NPM
+      if: startsWith(github.ref, 'refs/tags/')
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      run: |
+        cd npm-publish/main
+        echo "📦 Publishing @mauruppi/ccstatus"
+        npm publish --access public
+        echo "✅ Published @mauruppi/ccstatus"
+        echo ""
+        echo "🎉 NPM packages published successfully!"
+        echo "Install with: npm install -g @mauruppi/ccstatus"
+

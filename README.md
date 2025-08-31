@@ -56,7 +56,7 @@
 - **Git 集成** 显示分支、状态和跟踪信息
 - **模型显示** 简化的 Claude 模型名称
 - **使用量跟踪** 基于转录文件分析
-- **网络探测** 实时 Claude API 连接状态监控 ⚡
+- **网络探测** 由 Claude Code Statusline 驱动的 Proxy/API 端点状态感知 ⚡
 - **尝试减缓** JS Challenge/Bot Fight 挑战 (也不太指望。。。) 🛡️
 - **目录显示** 显示当前工作空间
 - **简洁设计** 使用 Nerd Font 图标
