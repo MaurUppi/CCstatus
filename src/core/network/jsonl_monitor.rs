@@ -177,7 +177,7 @@ impl JsonlMonitor {
                 continue;
             }
 
-            if let Ok(Some(error_entry)) = self.parse_jsonl_line(line) {
+            if let Ok(Some((error_entry, detection_type, code_source))) = self.parse_jsonl_line_enhanced(line) {
                 error_detected = true;
                 error_count += 1;
 
@@ -188,13 +188,14 @@ impl JsonlMonitor {
                 let normalized_error_ts =
                     self.normalize_error_timestamp(&error_entry.timestamp);
 
-                // Create JSONL entry according to proposal schema
+                // Create JSONL entry according to new schema
                 let jsonl_entry = serde_json::json!({
-                    "timestamp": chrono::Local::now().to_rfc3339(),
-                    "type": "jsonl_error",
+                    "type": detection_type,
+                    "logged_at": chrono::Local::now().to_rfc3339(),
+                    "occurred_at": normalized_error_ts,
                     "code": error_entry.http_code,
+                    "code_source": code_source,
                     "message": extracted_message,
-                    "error_timestamp": normalized_error_ts,
                     "session_id": self.logger.get_session_id()
                 });
 
@@ -229,6 +230,100 @@ impl JsonlMonitor {
         // Note: Do not write tail_scan_complete to JSONL; keep only debug logs above
 
         Ok((error_detected, last_error))
+    }
+
+    /// Enhanced parse method that returns detection type and code source
+    fn parse_jsonl_line_enhanced(&self, line: &str) -> Result<Option<(TranscriptErrorEntry, String, String)>, NetworkError> {
+        const MAX_LINE_LENGTH: usize = 1024 * 1024; // Phase 2: 1MB per line limit (matches read_tail_content)
+
+        // Skip oversized lines to prevent memory pressure
+        if line.len() > MAX_LINE_LENGTH {
+            // Phase 2: Use debug logger for oversized line warnings
+            self.logger.debug_sync(
+                "JsonlMonitor",
+                "oversized_line_skipped",
+                &format!("Skipped oversized line: {} bytes", line.len()),
+            );
+            return Ok(None);
+        }
+
+        // Skip malformed JSON lines instead of failing entire operation
+        let json: Value = match serde_json::from_str(line) {
+            Ok(json) => json,
+            Err(e) => {
+                // Phase 2: Use debug logger for malformed JSON warnings
+                let error_msg = e.to_string();
+                let truncated_msg = if error_msg.len() > 100 {
+                    // UTF-8 safe truncation: use char boundaries instead of byte boundaries
+                    let preview: String = error_msg.chars().take(100).collect();
+                    format!("{}...", preview)
+                } else {
+                    error_msg
+                };
+                self.logger.debug_sync(
+                    "JsonlMonitor",
+                    "malformed_json_skipped",
+                    &format!("Skipped malformed JSON: {}", truncated_msg),
+                );
+                return Ok(None);
+            }
+        };
+
+        // Check for isApiErrorMessage flag (primary detection path)
+        if let Some(is_error) = json.get("isApiErrorMessage").and_then(|v| v.as_bool()) {
+            if is_error {
+                let error_entry = self.extract_transcript_error(&json)?;
+                let code_source = self.determine_code_source(&error_entry);
+                return Ok(Some((error_entry, "isApiErrorMessage".to_string(), code_source)));
+            }
+        }
+
+        // Enhancement: Secondary detection path - scan message content for API error text
+        // when isApiErrorMessage is false or missing
+        if let Some(content_array) = json
+            .get("message")
+            .and_then(|m| m.get("content"))
+            .and_then(|c| c.as_array())
+        {
+            for item in content_array {
+                if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                    if self.parse_error_text(text).is_some() {
+                        // Debug logging for fallback detection
+                        self.logger.debug_sync(
+                            "JsonlMonitor",
+                            "fallback_error_detected",
+                            &format!("API error detected via fallback path: {}", {
+                                // UTF-8 safe truncation: use char boundaries instead of byte boundaries
+                                if text.len() > 50 {
+                                    text.chars().take(50).collect::<String>()
+                                } else {
+                                    text.to_string()
+                                }
+                            }),
+                        );
+                        let error_entry = self.extract_transcript_error(&json)?;
+                        let code_source = self.determine_code_source(&error_entry);
+                        return Ok(Some((error_entry, "fallback".to_string(), code_source)));
+                    }
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Determine code source classification based on error entry
+    fn determine_code_source(&self, error_entry: &TranscriptErrorEntry) -> String {
+        match error_entry.http_code {
+            0 => "none".to_string(), // No code could be extracted
+            code if code >= 100 && code < 600 => {
+                // Check if it looks like it came from structured/explicit source
+                // For now, treat any parseable HTTP code as "parsed" since we extract from text
+                // In the future, this could be enhanced to distinguish explicit vs parsed
+                "parsed".to_string()
+            }
+            _ => "none".to_string() // Invalid code range
+        }
     }
 
     /// Parse a single JSONL line for error information with robustness improvements
