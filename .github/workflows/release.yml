@@ -165,6 +165,8 @@ jobs:
     runs-on: ubuntu-22.04  # Use specific version instead of latest
     needs: [precheck, build]
     if: needs.precheck.outputs.should_build == 'true' && (startsWith(github.ref, 'refs/tags/') || needs.precheck.outputs.create_tag == 'true')
+    env:
+      VERSION: ${{ needs.precheck.outputs.version }}
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -378,8 +380,14 @@ jobs:
 
     - name: Prepare NPM packages
       if: steps.npm_check.outputs.should_publish == 'true'
+      env:
+        # Safety: Override GITHUB_REF for script compatibility
+        GITHUB_REF: "refs/tags/v${{ env.VERSION }}"
       run: |
-        node npm/scripts/prepare-packages.js
+        echo "📦 Preparing NPM packages for version: ${{ env.VERSION }}"
+        
+        # Pass resolved version directly to packaging script
+        node npm/scripts/prepare-packages.js "${{ env.VERSION }}"
         
         # Copy binaries to platform directories
         cp extracted/ccstatus-darwin-x64 npm-publish/darwin-x64/ccstatus
@@ -393,7 +401,7 @@ jobs:
         chmod +x npm-publish/linux-x64/ccstatus
         
         # Verify packages
-        echo "Package structure:"
+        echo "📋 Package structure for version ${{ env.VERSION }}:"
         find npm-publish -name "package.json" -exec echo "=== {} ===" \; -exec head -5 {} \;
 
     - name: Publish platform packages to NPM
@@ -401,7 +409,7 @@ jobs:
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       run: |
-        echo "📦 Publishing NPM packages for version: ${{ steps.npm_check.outputs.npm_version }}"
+        echo "📦 Publishing NPM packages for version: ${{ env.VERSION }}"
         
         for platform in darwin-x64 darwin-arm64 linux-x64 win32-x64; do
           echo "📦 Publishing @mauruppi/ccstatus-$platform"
@@ -437,5 +445,5 @@ jobs:
         echo "Install with: npm install -g @mauruppi/ccstatus"
         
         # Final validation
-        echo "🔍 Final NPM publishing validation completed for version: ${{ steps.npm_check.outputs.npm_version }}"
+        echo "🔍 Final NPM publishing validation completed for version: ${{ env.VERSION }}"
 
