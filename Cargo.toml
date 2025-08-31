@@ -27,7 +27,7 @@ ansi-to-tui = { version = "7.0", optional = true }
 
 # 核心日志依赖 (always required for debug logging)
 # chrono = { version = "0.4", features = ["serde"] }
-chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 dirs = { version = "6.0.0" }
 regex = { version = "1.10" }
 # uuid = { version = "1.0", features = ["v4"] }

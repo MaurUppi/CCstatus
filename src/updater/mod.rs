@@ -237,3 +237,19 @@ impl UpdateState {
 /// GitHub Release API response structures (moved to submodule)
 #[cfg(feature = "self-update")]
 pub mod github;
+
+/// New V1 update system modules
+#[cfg(feature = "self-update")]
+pub mod manifest;
+#[cfg(feature = "self-update")]
+pub mod state;
+#[cfg(feature = "self-update")]
+pub mod geo;
+#[cfg(feature = "self-update")]
+pub mod url_resolver;
+
+/// Re-export public types for compatibility
+#[cfg(feature = "self-update")]
+pub use manifest::{Manifest, ManifestClient};
+#[cfg(feature = "self-update")]
+pub use state::UpdateStateFile;
