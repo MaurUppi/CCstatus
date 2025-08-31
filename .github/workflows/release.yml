@@ -129,11 +129,11 @@ jobs:
       shell: bash
       run: |
         if [ "${{ matrix.variant }}" = "slim" ]; then
-          # Slim build: smaller but requires system OpenSSL
-          cargo build --release --target ${{ matrix.target }} --features network-monitoring
+          # Slim build: smaller but requires system OpenSSL, includes self-update
+          cargo build --release --target ${{ matrix.target }} --features "network-monitoring,self-update"
         else
-          # Static build: larger but no system dependencies  
-          cargo build --release --target ${{ matrix.target }} --features timings-curl-static
+          # Static build: larger but no system dependencies, includes self-update
+          cargo build --release --target ${{ matrix.target }} --features "timings-curl-static,self-update"
         fi
 
     - name: Package Linux/macOS
