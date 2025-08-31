@@ -283,23 +283,78 @@ jobs:
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         
+        # Handle detached HEAD state (tag-triggered workflows)
+        current_branch=$(git branch --show-current || echo "")
+        if [[ -z "$current_branch" ]]; then
+          echo "📝 In detached HEAD state, checking out master branch"
+          git fetch origin master
+          git checkout -b temp-master origin/master
+          echo "✅ Checked out master branch as temp-master"
+        else
+          echo "📝 On branch: $current_branch"
+        fi
+        
         # Add and commit latest.json
         git add latest.json
-        git commit -m "chore: update latest.json for v${version} release"
-        git push origin master
-        
-        echo "✅ Committed and pushed latest.json update"
+        if git diff --staged --quiet; then
+          echo "⚠️  No changes to latest.json, skipping commit"
+        else
+          git commit -m "chore: update latest.json for v${version} release"
+          
+          # Push using the appropriate branch
+          if [[ -z "$current_branch" ]]; then
+            git push origin temp-master:master
+            echo "✅ Pushed latest.json update to master from temp branch"
+          else
+            git push origin master
+            echo "✅ Pushed latest.json update to master"
+          fi
+        fi
 
     # NPM Publishing Steps - Added after GitHub Release
+    # Validate NPM publishing conditions
+    - name: Validate NPM publishing conditions
+      id: npm_check
+      shell: bash
+      run: |
+        echo "🔍 Validating NPM publishing conditions..."
+        
+        # Check conditions
+        is_tag_ref="${{ startsWith(github.ref, 'refs/tags/') }}"
+        create_tag="${{ needs.precheck.outputs.create_tag }}"
+        version="${{ needs.precheck.outputs.version }}"
+        
+        echo "GitHub ref: ${{ github.ref }}"
+        echo "Is tag ref: $is_tag_ref" 
+        echo "Create tag: $create_tag"
+        echo "Version: $version"
+        
+        # Determine if we should publish to NPM
+        if [[ "$is_tag_ref" == "true" ]] || [[ "$create_tag" == "true" ]]; then
+          echo "✅ NPM publishing conditions met"
+          echo "should_publish=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "⚠️  NPM publishing conditions not met"
+          echo "should_publish=false" >> "$GITHUB_OUTPUT"
+        fi
+        
+        # Additional validation - ensure we have a version
+        if [[ -z "$version" ]]; then
+          echo "❌ Error: No version detected"
+          exit 1
+        fi
+        
+        echo "npm_version=$version" >> "$GITHUB_OUTPUT"
+
     - name: Setup Node.js for NPM
-      if: startsWith(github.ref, 'refs/tags/') || needs.precheck.outputs.create_tag == 'true'
+      if: steps.npm_check.outputs.should_publish == 'true'
       uses: actions/setup-node@v4
       with:
         node-version: '18'
         registry-url: 'https://registry.npmjs.org'
 
     - name: Extract binaries from artifacts
-      if: startsWith(github.ref, 'refs/tags/') || needs.precheck.outputs.create_tag == 'true'
+      if: steps.npm_check.outputs.should_publish == 'true'
       run: |
         mkdir -p extracted
         
@@ -322,7 +377,7 @@ jobs:
         ls -la extracted/
 
     - name: Prepare NPM packages
-      if: startsWith(github.ref, 'refs/tags/') || needs.precheck.outputs.create_tag == 'true'
+      if: steps.npm_check.outputs.should_publish == 'true'
       run: |
         node npm/scripts/prepare-packages.js
         
@@ -342,34 +397,45 @@ jobs:
         find npm-publish -name "package.json" -exec echo "=== {} ===" \; -exec head -5 {} \;
 
     - name: Publish platform packages to NPM
-      if: startsWith(github.ref, 'refs/tags/') || needs.precheck.outputs.create_tag == 'true'
+      if: steps.npm_check.outputs.should_publish == 'true'
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       run: |
+        echo "📦 Publishing NPM packages for version: ${{ steps.npm_check.outputs.npm_version }}"
+        
         for platform in darwin-x64 darwin-arm64 linux-x64 win32-x64; do
           echo "📦 Publishing @mauruppi/ccstatus-$platform"
           cd npm-publish/$platform
-          npm publish --access public
+          npm publish --access public || {
+            echo "❌ Failed to publish @mauruppi/ccstatus-$platform"
+            exit 1
+          }
           cd ../..
           echo "✅ Published @mauruppi/ccstatus-$platform"
         done
 
     - name: Wait for NPM registry
-      if: startsWith(github.ref, 'refs/tags/') || needs.precheck.outputs.create_tag == 'true'
+      if: steps.npm_check.outputs.should_publish == 'true'
       run: |
         echo "⏳ Waiting for platform packages to be available..."
         sleep 30
 
     - name: Publish main package to NPM
-      if: startsWith(github.ref, 'refs/tags/') || needs.precheck.outputs.create_tag == 'true'
+      if: steps.npm_check.outputs.should_publish == 'true'
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       run: |
         cd npm-publish/main
         echo "📦 Publishing @mauruppi/ccstatus"
-        npm publish --access public
+        npm publish --access public || {
+          echo "❌ Failed to publish @mauruppi/ccstatus"
+          exit 1
+        }
         echo "✅ Published @mauruppi/ccstatus"
         echo ""
         echo "🎉 NPM packages published successfully!"
         echo "Install with: npm install -g @mauruppi/ccstatus"
+        
+        # Final validation
+        echo "🔍 Final NPM publishing validation completed for version: ${{ steps.npm_check.outputs.npm_version }}"
 
