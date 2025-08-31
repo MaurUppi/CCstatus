@@ -62,8 +62,25 @@ Model | Working Directory | Git Branch Status | Context Window | Network Status
 
 ## Installation & Setup
 
-### Manual Installation
-#### [Releases](https://github.com/MaurUppi/CCstatus/releases)
+### NPM Installation (Recommended)
+
+The easiest way to install CCstatus is via npm:
+
+```bash
+npm install -g @mauruppi/ccstatus
+```
+
+**Features:**
+- ✅ **One-command installation** across all platforms
+- ✅ **Automatic platform detection** (macOS Intel/ARM64, Linux x64, Windows x64)
+- ✅ **Auto-setup for Claude Code** (installs to `~/.claude/ccstatus/`)
+- ✅ **Static binaries** with zero dependencies
+- ✅ **Easy updates** via `npm update -g @mauruppi/ccstatus`
+
+After installation, the binary is automatically configured for Claude Code and ready to use.
+
+### Manual Installation (Alternative)
+#### [GitHub Releases](https://github.com/MaurUppi/CCstatus/releases)
 
 <details><summary>Platform Deployment</summary>
 <p>

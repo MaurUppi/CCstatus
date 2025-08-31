@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.2.2] - 2025-08-30
 
+### 📦 NPM Package Distribution
+
+#### 🚀 One-Command Installation
+- **NPM 包发布**: 发布到 `@mauruppi/ccstatus` 命名空间，支持一键全平台安装
+  - **简化安装**: `npm install -g @mauruppi/ccstatus` 即可完成安装配置
+  - **平台感知**: 自动检测并安装对应平台的静态二进制文件
+  - **自动配置**: 安装后自动部署到 `~/.claude/ccstatus/ccstatus` 供 Claude Code 使用
+  - **零依赖部署**: 所有平台包均为静态构建，无需系统依赖库
+- **多平台支持**: 涵盖主要开发平台
+  - **macOS Intel**: `@mauruppi/ccstatus-darwin-x64` (静态构建)
+  - **macOS Apple Silicon**: `@mauruppi/ccstatus-darwin-arm64` (静态构建) 
+  - **Linux x64**: `@mauruppi/ccstatus-linux-x64` (静态构建)
+  - **Windows x64**: `@mauruppi/ccstatus-win32-x64` (静态构建)
+- **CI/CD 自动化**: GitHub Actions 集成 NPM 发布流程
+  - **版本同步**: 基于 Git 标签自动发布到 NPM 仓库
+  - **发布顺序**: 先发布平台包，后发布主包，确保依赖完整性
+  - **质量保证**: 发布前自动验证包结构和二进制文件
+
+#### 🌍 开发者体验提升
+- **Node.js 生态集成**: 为前端开发者和 VS Code/Claude 插件生态提供便利
+- **包管理器兼容**: 支持 npm、yarn、pnpm 等主流 Node.js 包管理器
+- **中国大陆优化**: 支持 `--registry https://registry.npmmirror.com` 镜像加速
+- **版本管理**: 通过 `npm update -g @mauruppi/ccstatus` 轻松更新到最新版本
+
 ### 🔧 Critical Bug Fixes
 
 #### 📝 JSONL Monitor Operational Log Cleanup  

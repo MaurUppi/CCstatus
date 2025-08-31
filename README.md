@@ -65,8 +65,25 @@
 
 ## 安装与启用
 
-### 手动下载安装
-#### [Releases](https://github.com/MaurUppi/CCstatus/releases)
+### NPM 安装（推荐）
+
+最简单的安装方式是通过 npm：
+
+```bash
+npm install -g @mauruppi/ccstatus
+```
+
+**特性：**
+- ✅ **一键安装** 支持所有平台
+- ✅ **自动平台检测**（macOS Intel/ARM64、Linux x64、Windows x64）
+- ✅ **Claude Code 自动配置**（自动安装到 `~/.claude/ccstatus/`）
+- ✅ **静态二进制** 零依赖
+- ✅ **简易更新** 通过 `npm update -g @mauruppi/ccstatus`
+
+安装完成后，二进制文件自动配置到 Claude Code，即可使用。
+
+### 手动下载安装（备选）
+#### [GitHub Releases](https://github.com/MaurUppi/CCstatus/releases)
 
 <details><summary>各平台部署</summary>
 <p>
