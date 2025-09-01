@@ -3,6 +3,8 @@
 //! Tests for network monitoring components including HTTP probes,
 //! state persistence, and rolling statistics
 
+pub mod credential_env_test;
+pub mod credential_oauth_test;
 pub mod http_monitor_test;
 pub mod jsonl_monitor_tests;
 pub mod network_segment_tests;

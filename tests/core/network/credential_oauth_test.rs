@@ -1,4 +1,4 @@
-use ccstatus::core::segments::network::{
+use ccstatus::core::network::{
     credential::CredentialManager,
     types::{CredentialSource, ApiCredentials},
 };

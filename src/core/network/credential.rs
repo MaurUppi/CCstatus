@@ -291,16 +291,24 @@ impl CredentialManager {
 
     /// Try to get credentials from environment variables
     pub fn get_from_environment(&self) -> Result<Option<ApiCredentials>, NetworkError> {
+        // Helper function to get non-empty environment variable
+        let get_non_empty_var = |name: &str| -> Result<String, env::VarError> {
+            match env::var(name) {
+                Ok(value) if !value.trim().is_empty() => Ok(value),
+                _ => Err(env::VarError::NotPresent),
+            }
+        };
+
         // Base URL priority: ANTHROPIC_BASE_URL > ANTHROPIC_BEDROCK_BASE_URL > ANTHROPIC_VERTEX_BASE_URL
-        let base_url = env::var("ANTHROPIC_BASE_URL")
-            .or_else(|_| env::var("ANTHROPIC_BEDROCK_BASE_URL"))
-            .or_else(|_| env::var("ANTHROPIC_VERTEX_BASE_URL"));
+        let base_url = get_non_empty_var("ANTHROPIC_BASE_URL")
+            .or_else(|_| get_non_empty_var("ANTHROPIC_BEDROCK_BASE_URL"))
+            .or_else(|_| get_non_empty_var("ANTHROPIC_VERTEX_BASE_URL"));
 
         // Token priority: ANTHROPIC_AUTH_TOKEN > ANTHROPIC_API_KEY
-        let auth_token = env::var("ANTHROPIC_AUTH_TOKEN")
-            .or_else(|_| env::var("ANTHROPIC_API_KEY"));
+        let auth_token = get_non_empty_var("ANTHROPIC_AUTH_TOKEN")
+            .or_else(|_| get_non_empty_var("ANTHROPIC_API_KEY"));
 
-        // Return credentials when both base URL and token are present
+        // Return credentials when both base URL and token are present and non-empty
         if let (Ok(base_url), Ok(auth_token)) = (base_url, auth_token) {
             return Ok(Some(ApiCredentials {
                 base_url,
@@ -322,15 +330,16 @@ impl CredentialManager {
         
         // Check if Claude Code credentials exist in Keychain
         // Use security command to check for existence only (exit code 0 = present)
-        let output = tokio::process::Command::new("security")
-            .arg("find-generic-password")
-            .arg("-s")
-            .arg("Claude Code-credentials")
-            .output()
-            .await;
+        let output = tokio::task::spawn_blocking(|| {
+            std::process::Command::new("security")
+                .arg("find-generic-password")
+                .arg("-s")
+                .arg("Claude Code-credentials")
+                .output()
+        }).await;
             
         match output {
-            Ok(result) if result.status.success() => {
+            Ok(Ok(result)) if result.status.success() => {
                 logger.debug("CredentialManager", "Found OAuth credentials in macOS Keychain").await;
                 
                 // Return fixed OAuth credentials with dummy key
@@ -341,9 +350,13 @@ impl CredentialManager {
                     source: CredentialSource::OAuth,
                 }))
             }
-            Ok(_) => {
+            Ok(Ok(_)) => {
                 logger.debug("CredentialManager", "No OAuth credentials found in macOS Keychain").await;
                 Ok(None)
+            }
+            Ok(Err(e)) => {
+                logger.debug("CredentialManager", &format!("Security command execution error: {}", e)).await;
+                Ok(None) // Fail silently and continue to next source
             }
             Err(e) => {
                 logger.debug("CredentialManager", &format!("Keychain access error: {}", e)).await;
