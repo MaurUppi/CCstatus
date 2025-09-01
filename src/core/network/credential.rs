@@ -191,19 +191,28 @@ impl CredentialManager {
 
     /// Get credentials from environment, OAuth, shell config, or Claude config files
     ///
-    /// Error Handling Policy: Continue-on-error for all sources except Environment.
-    /// - Environment: Returns error (highest priority, should not fail)
-    /// - OAuth/Shell/Config: Log error and continue to next source (graceful fallback)
+    /// ## Error Handling Policy (IMPORTANT FOR MAINTAINERS)
+    /// 
+    /// **Continue-on-error for all sources except Environment**
+    /// - **Environment**: Returns error (highest priority, should not fail in normal operation)
+    /// - **OAuth/Shell/Config**: Log error and continue to next source (graceful fallback)
+    /// 
+    /// **When adding new credential sources:**
+    /// - Follow the same pattern: try source, log result, continue on error (except for Environment)
+    /// - Use the logging helpers: log_source_start(), log_credentials_found(), log_no_credentials(), log_source_error()
+    /// - Maintain graceful degradation: errors should not prevent trying lower-priority sources
+    /// - Document new sources in both this comment and the module-level documentation
     ///
-    /// Implements priority hierarchy:
+    /// ## Priority Hierarchy
     /// 1. Environment variables (ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN)  
     /// 2. OAuth (macOS only) - uses macOS Keychain with fixed endpoint and dummy key
     /// 3. Shell configuration files (.zshrc, .bashrc, PowerShell profiles)
     /// 4. Claude Code config files
-    /// 5. None (fail silent)
+    /// 5. None (warn level - expected in some environments)
     ///
-    /// Test-specific behavior:
+    /// ## Test-specific Behavior
     /// - Set CCSTATUS_NO_CREDENTIALS=1 to force return None (for testing unknown scenarios)
+    /// - Set CCSTATUS_TEST_OAUTH_PRESENT=1 to simulate OAuth presence on macOS (deterministic testing)
     pub async fn get_credentials(&self) -> Result<Option<ApiCredentials>, NetworkError> {
         use crate::core::network::debug_logger::get_debug_logger;
         let logger = get_debug_logger();
@@ -325,11 +334,11 @@ impl CredentialManager {
         }
         self.log_no_credentials(&logger, "Claude config").await;
 
-        // No credentials found in any source
+        // No credentials found in any source - warn level for expected states in some environments
         logger
-            .error(
+            .warn(
                 "CredentialManager",
-                "FINAL RESULT: No credentials found in any source (env, shell, or config files)",
+                "FINAL RESULT: No credentials found in any source (env, OAuth, shell, or config files)",
             )
             .await;
         Ok(None)

@@ -417,6 +417,11 @@ impl EnhancedDebugLogger {
         self.log_sync("ERROR", component, event, message, None, HashMap::new());
     }
 
+    /// Log a warning message synchronously
+    pub fn warn_sync(&self, component: &str, event: &str, message: &str) {
+        self.log_sync("WARN", component, event, message, None, HashMap::new());
+    }
+
     pub fn performance_sync(&self, component: &str, operation: &str, duration_ms: u64) {
         let mut fields = HashMap::new();
         fields.insert(
@@ -566,6 +571,11 @@ impl EnhancedDebugLogger {
 
     pub async fn error(&self, component: &str, message: &str) {
         self.error_sync(component, "legacy_error", message);
+    }
+
+    /// Log a warning message asynchronously
+    pub async fn warn(&self, component: &str, message: &str) {
+        self.warn_sync(component, "legacy_warn", message);
     }
 
     pub async fn performance(&self, component: &str, operation: &str, duration_ms: u64) {
