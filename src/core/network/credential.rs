@@ -1,26 +1,67 @@
 //! Unified credential management for network monitoring
 //!
 //! This module provides comprehensive credential resolution from multiple sources including
-//! environment variables, shell configuration files, and Claude Code configuration files.
-//! It implements a priority-based credential resolution system with cross-platform support
-//! for extracting API credentials from various shell types (Bash, Zsh, PowerShell).
+//! environment variables, OAuth keychain integration, shell configuration files, and 
+//! Claude Code configuration files. It implements a priority-based credential resolution 
+//! system with cross-platform support for extracting API credentials from various sources.
 //!
-//! ## Architecture
+//! ## Architecture & Priority Hierarchy
 //!
-//! The module combines functionality from CredentialManager and ShellConfigReader into a
-//! single cohesive unit. The main entry point is `CredentialManager` which orchestrates
-//! credential resolution using this priority hierarchy:
+//! The main entry point is `CredentialManager` which orchestrates credential resolution 
+//! using this strict priority hierarchy:
 //!
-//! 1. Environment variables (highest priority)
-//! 2. OAuth (macOS only) - uses macOS Keychain with fixed endpoint and dummy key  
-//! 3. Shell configuration files (.zshrc, .bashrc, PowerShell profiles)
-//! 4. Claude Code configuration files (lowest priority)
+//! 1. **Environment variables** (highest priority)
+//!    - Base URL priority: `ANTHROPIC_BASE_URL` > `ANTHROPIC_BEDROCK_BASE_URL` > `ANTHROPIC_VERTEX_BASE_URL`
+//!    - Token priority: `ANTHROPIC_AUTH_TOKEN` > `ANTHROPIC_API_KEY`
+//!    - Requires both a base URL and token to be present (any combination)
+//!    - Empty strings are treated as missing values
+//!
+//! 2. **OAuth (macOS only)** - macOS Keychain integration
+//!    - Uses `security find-generic-password -s "Claude Code-credentials"`
+//!    - Returns fixed credentials when keychain item exists:
+//!      - Base URL: `https://api.anthropic.com`
+//!      - Auth Token: `probe-invalid-key` (dummy key for testing)
+//!    - Fails silently on errors (returns None)
+//!    - Skipped entirely on non-macOS platforms
+//!
+//! 3. **Shell configuration files** (.zshrc, .bashrc, PowerShell profiles)
+//!    - Cross-platform shell parsing with auto-detection
+//!    - Supports export statements and function-based variable definitions
+//!
+//! 4. **Claude Code configuration files** (lowest priority)
+//!    - JSON-based configuration files in `.claude/` directories
+//!
+//! ## Environment Variable Combination Rules
+//!
+//! Environment variables are combined using priority chains to handle multiple API endpoints:
+//!
+//! - **Valid combinations**: Any base URL + any token (6 total combinations)
+//! - **Base URL candidates** (in priority order):
+//!   1. `ANTHROPIC_BASE_URL` (primary - official Anthropic API)
+//!   2. `ANTHROPIC_BEDROCK_BASE_URL` (secondary - AWS Bedrock)
+//!   3. `ANTHROPIC_VERTEX_BASE_URL` (tertiary - Google Vertex AI)
+//! - **Token candidates** (in priority order):
+//!   1. `ANTHROPIC_AUTH_TOKEN` (primary - session tokens)
+//!   2. `ANTHROPIC_API_KEY` (secondary - API keys)
+//!
+//! ## OAuth Integration Details
+//!
+//! The OAuth integration provides a bridge to macOS Keychain-stored credentials:
+//!
+//! - **Platform**: macOS only (compiled out on other platforms)
+//! - **Keychain Service**: `"Claude Code-credentials"`
+//! - **Command**: `security find-generic-password -s "Claude Code-credentials"`
+//! - **Fixed Response**: Always returns the same credentials when present
+//! - **Error Handling**: All OAuth errors fail silently, continuing to next source
+//! - **Test Override**: Set `CCSTATUS_TEST_OAUTH_PRESENT=1` for test simulation
 //!
 //! ## Shell Parsing Support
 //!
+//! Multi-platform shell configuration parsing with automatic detection:
+//!
 //! - **Bash/Zsh**: Export statements and function-based variable definitions
 //! - **PowerShell**: $env: syntax and [Environment]::SetEnvironmentVariable calls
-//! - **Cross-platform**: Auto-detection with OS-specific defaults
+//! - **Cross-platform**: OS-specific defaults with manual override support
 //!
 
 use regex::Regex;
