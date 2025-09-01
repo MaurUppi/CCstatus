@@ -12,8 +12,9 @@
 //! credential resolution using this priority hierarchy:
 //!
 //! 1. Environment variables (highest priority)
-//! 2. Shell configuration files (.zshrc, .bashrc, PowerShell profiles)
-//! 3. Claude Code configuration files (lowest priority)
+//! 2. OAuth (macOS only) - uses macOS Keychain with fixed endpoint and dummy key  
+//! 3. Shell configuration files (.zshrc, .bashrc, PowerShell profiles)
+//! 4. Claude Code configuration files (lowest priority)
 //!
 //! ## Shell Parsing Support
 //!
@@ -68,13 +69,14 @@ impl CredentialManager {
         })
     }
 
-    /// Get credentials from environment, shell config, or Claude config files
+    /// Get credentials from environment, OAuth, shell config, or Claude config files
     ///
     /// Implements priority hierarchy:
-    /// 1. Environment variables (ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN)
-    /// 2. Shell configuration files (.zshrc, .bashrc, PowerShell profiles)
-    /// 3. Claude Code config files
-    /// 4. None (fail silent)
+    /// 1. Environment variables (ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN)  
+    /// 2. OAuth (macOS only) - uses macOS Keychain with fixed endpoint and dummy key
+    /// 3. Shell configuration files (.zshrc, .bashrc, PowerShell profiles)
+    /// 4. Claude Code config files
+    /// 5. None (fail silent)
     ///
     /// Test-specific behavior:
     /// - Set CCSTATUS_NO_CREDENTIALS=1 to force return None (for testing unknown scenarios)
@@ -140,7 +142,37 @@ impl CredentialManager {
             }
         }
 
-        // Priority 2: Shell configuration files
+        // Priority 2: OAuth (macOS only)
+        match self.get_from_oauth_keychain().await {
+            Ok(Some(creds)) => {
+                logger
+                    .debug(
+                        "CredentialManager",
+                        &format!(
+                            "Found OAuth credentials: endpoint={}, token_len={}, source={}",
+                            creds.base_url,
+                            creds.auth_token.len(),
+                            creds.source
+                        ),
+                    )
+                    .await;
+                return Ok(Some(creds));
+            }
+            Ok(None) => {
+                logger.debug("CredentialManager", "No OAuth credentials found").await;
+            }
+            Err(e) => {
+                logger
+                    .debug(
+                        "CredentialManager",
+                        &format!("OAuth credential error: {}", e),
+                    )
+                    .await;
+                // Continue to next source on OAuth error
+            }
+        }
+
+        // Priority 3: Shell configuration files
         logger
             .debug("CredentialManager", "About to check shell config files...")
             .await;
@@ -181,7 +213,7 @@ impl CredentialManager {
             )
             .await;
 
-        // Priority 3: Claude Code config files
+        // Priority 4: Claude Code config files
         logger
             .debug("CredentialManager", "About to check Claude config files...")
             .await;
@@ -277,6 +309,53 @@ impl CredentialManager {
             }));
         }
 
+        Ok(None)
+    }
+
+    /// Try to get credentials from macOS OAuth Keychain (macOS only)
+    #[cfg(target_os = "macos")]
+    async fn get_from_oauth_keychain(&self) -> Result<Option<ApiCredentials>, NetworkError> {
+        use crate::core::network::debug_logger::get_debug_logger;
+        let logger = get_debug_logger();
+        
+        logger.debug("CredentialManager", "Checking macOS Keychain for OAuth credentials...").await;
+        
+        // Check if Claude Code credentials exist in Keychain
+        // Use security command to check for existence only (exit code 0 = present)
+        let output = tokio::process::Command::new("security")
+            .arg("find-generic-password")
+            .arg("-s")
+            .arg("Claude Code-credentials")
+            .output()
+            .await;
+            
+        match output {
+            Ok(result) if result.status.success() => {
+                logger.debug("CredentialManager", "Found OAuth credentials in macOS Keychain").await;
+                
+                // Return fixed OAuth credentials with dummy key
+                // Do NOT forward actual secrets from Keychain
+                Ok(Some(ApiCredentials {
+                    base_url: "https://api.anthropic.com".to_string(),
+                    auth_token: "probe-invalid-key".to_string(),
+                    source: CredentialSource::OAuth,
+                }))
+            }
+            Ok(_) => {
+                logger.debug("CredentialManager", "No OAuth credentials found in macOS Keychain").await;
+                Ok(None)
+            }
+            Err(e) => {
+                logger.debug("CredentialManager", &format!("Keychain access error: {}", e)).await;
+                Ok(None) // Fail silently and continue to next source
+            }
+        }
+    }
+
+    /// Try to get credentials from macOS OAuth Keychain (non-macOS stub)
+    #[cfg(not(target_os = "macos"))]
+    async fn get_from_oauth_keychain(&self) -> Result<Option<ApiCredentials>, NetworkError> {
+        // Non-macOS builds: OAuth step is skipped
         Ok(None)
     }
 
