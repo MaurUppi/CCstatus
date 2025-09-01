@@ -73,8 +73,8 @@ fn test_manifest_client_invalid_version() {
 #[test]
 fn test_persistent_cache_return_values_new_manifest() {
     // Test the expected behavior when fetch_manifest_with_persistent_cache returns new manifest
-    let empty_etag_map = HashMap::new();
-    let empty_last_modified_map = HashMap::new();
+    let empty_etag_map: HashMap<String, String> = HashMap::new();
+    let empty_last_modified_map: HashMap<String, String> = HashMap::new();
     
     // This simulates what the persistent cache logic should handle:
     // Ok((Some(manifest), Some(etag), Some(last_modified))) - new manifest with cache headers

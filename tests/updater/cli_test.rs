@@ -16,7 +16,8 @@ fn test_check_update_command_exists() {
         .output();
     
     assert!(output.is_ok());
-    let stdout = String::from_utf8_lossy(&output.unwrap().stdout);
+    let output_result = output.unwrap();
+    let stdout = String::from_utf8_lossy(&output_result.stdout);
     assert!(stdout.contains("check-update") || stdout.contains("Check for updates and exit"));
 }
 
