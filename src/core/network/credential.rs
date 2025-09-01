@@ -549,16 +549,36 @@ impl CredentialManager {
         let export_regex = Regex::new(r#"^\s*export\s+([A-Z_]+)=(.*)"#)
             .map_err(|e| NetworkError::RegexError(e.to_string()))?;
 
+        // Use the common helper method (skip_export = false for export statements)
+        self.process_shell_variables_with_regex(content, &export_regex, false)
+    }
+
+    /// Process shell variables using a regex pattern with common logic
+    /// Returns (base_url, auth_token) if both are found, None otherwise
+    fn process_shell_variables_with_regex(
+        &self,
+        content: &str,
+        regex: &Regex,
+        skip_export: bool,
+    ) -> Result<Option<(String, String)>, NetworkError> {
         let mut base_url: Option<String> = None;
         let mut auth_token: Option<String> = None;
 
         for line in content.lines() {
+            let trimmed_line = line.trim_start();
+
             // Skip comments
-            if line.trim_start().starts_with('#') {
+            if trimmed_line.starts_with('#') {
                 continue;
             }
 
-            if let Some(captures) = export_regex.captures(line) {
+            // Skip export statements if requested (for assignment parsing)
+            if skip_export && trimmed_line.starts_with("export ") {
+                continue;
+            }
+
+            // Process regex matches
+            if let Some(captures) = regex.captures(line) {
                 let var_name = captures.get(1).map(|m| m.as_str());
                 let raw_value = captures.get(2).map(|m| m.as_str()).unwrap_or("");
 
@@ -751,42 +771,8 @@ impl CredentialManager {
         let assignment_regex = Regex::new(r#"^\s*([A-Z_]+)=(.*)"#)
             .map_err(|e| NetworkError::RegexError(e.to_string()))?;
 
-        let mut base_url: Option<String> = None;
-        let mut auth_token: Option<String> = None;
-
-        for line in content.lines() {
-            let trimmed_line = line.trim_start();
-
-            // Skip comments
-            if trimmed_line.starts_with('#') {
-                continue;
-            }
-
-            // Skip export statements (already handled by parse_export_statements)
-            if trimmed_line.starts_with("export ") {
-                continue;
-            }
-
-            // Check for variable assignment
-            if let Some(captures) = assignment_regex.captures(line) {
-                let var_name = captures.get(1).map(|m| m.as_str());
-                let raw_value = captures.get(2).map(|m| m.as_str()).unwrap_or("");
-
-                // Extract the actual value, handling quotes and comments
-                let var_value = self.extract_shell_value(raw_value);
-
-                if !var_value.is_empty() {
-                    process_anthropic_variable(var_name, var_value, &mut base_url, &mut auth_token);
-                }
-            }
-        }
-
-        // Check if we have complete credentials
-        if let (Some(url), Some(token)) = (base_url, auth_token) {
-            return Ok(Some((url, token)));
-        }
-
-        Ok(None)
+        // Use the common helper method (skip_export = true to avoid processing export statements)
+        self.process_shell_variables_with_regex(content, &assignment_regex, true)
     }
 
     /// Parse PowerShell config file for environment variables

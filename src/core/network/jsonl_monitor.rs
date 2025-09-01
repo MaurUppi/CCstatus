@@ -287,26 +287,10 @@ impl JsonlMonitor {
             return Ok(None);
         }
 
-        // Skip malformed JSON lines instead of failing entire operation
-        let json: Value = match serde_json::from_str(line) {
-            Ok(json) => json,
-            Err(e) => {
-                // Phase 2: Use debug logger for malformed JSON warnings
-                let error_msg = e.to_string();
-                let truncated_msg = if error_msg.len() > 100 {
-                    // UTF-8 safe truncation: use char boundaries instead of byte boundaries
-                    let preview: String = error_msg.chars().take(100).collect();
-                    format!("{}...", preview)
-                } else {
-                    error_msg
-                };
-                self.logger.debug_sync(
-                    "JsonlMonitor",
-                    "malformed_json_skipped",
-                    &format!("Skipped malformed JSON: {}", truncated_msg),
-                );
-                return Ok(None);
-            }
+        // Skip malformed JSON lines using helper method
+        let json = match self.safe_parse_json(line)? {
+            Some(json) => json,
+            None => return Ok(None),
         };
 
         // Check for isApiErrorMessage flag (primary detection path)
@@ -332,18 +316,12 @@ impl JsonlMonitor {
             for item in content_array {
                 if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
                     if self.parse_error_text(text).is_some() {
-                        // Debug logging for fallback detection
+                        // Debug logging for fallback detection using helper method
+                        let truncated_text = self.truncate_text_safe(text, 50);
                         self.logger.debug_sync(
                             "JsonlMonitor",
                             "fallback_error_detected",
-                            &format!("API error detected via fallback path: {}", {
-                                // UTF-8 safe truncation: use char boundaries instead of byte boundaries
-                                if text.len() > 50 {
-                                    text.chars().take(50).collect::<String>()
-                                } else {
-                                    text.to_string()
-                                }
-                            }),
+                            &format!("API error detected via fallback path: {}", truncated_text),
                         );
                         let error_entry = self.extract_transcript_error(&json)?;
                         let code_source = self.determine_code_source(&error_entry);
@@ -370,81 +348,37 @@ impl JsonlMonitor {
         }
     }
 
-    /// Parse a single JSONL line for error information with robustness improvements
-    fn parse_jsonl_line(&self, line: &str) -> Result<Option<TranscriptErrorEntry>, NetworkError> {
-        const MAX_LINE_LENGTH: usize = 1024 * 1024; // Phase 2: 1MB per line limit (matches read_tail_content)
-
-        // Skip oversized lines to prevent memory pressure
-        if line.len() > MAX_LINE_LENGTH {
-            // Phase 2: Use debug logger for oversized line warnings
-            self.logger.debug_sync(
-                "JsonlMonitor",
-                "oversized_line_skipped",
-                &format!("Skipped oversized line: {} bytes", line.len()),
-            );
-            return Ok(None);
-        }
-
-        // Skip malformed JSON lines instead of failing entire operation
-        let json: Value = match serde_json::from_str(line) {
-            Ok(json) => json,
+    /// Helper method for safe JSON parsing with consistent error handling
+    /// Returns Ok(Some(json)) on success, Ok(None) on parsing failure
+    fn safe_parse_json(&self, line: &str) -> Result<Option<Value>, NetworkError> {
+        match serde_json::from_str(line) {
+            Ok(json) => Ok(Some(json)),
             Err(e) => {
-                // Phase 2: Use debug logger for malformed JSON warnings
+                // Use debug logger for malformed JSON warnings with UTF-8 safe truncation
                 let error_msg = e.to_string();
-                let truncated_msg = if error_msg.len() > 100 {
-                    // UTF-8 safe truncation: use char boundaries instead of byte boundaries
-                    let preview: String = error_msg.chars().take(100).collect();
-                    format!("{}...", preview)
-                } else {
-                    error_msg
-                };
+                let truncated_msg = self.truncate_text_safe(&error_msg, 100);
                 self.logger.debug_sync(
                     "JsonlMonitor",
                     "malformed_json_skipped",
                     &format!("Skipped malformed JSON: {}", truncated_msg),
                 );
-                return Ok(None);
-            }
-        };
-
-        // Check for isApiErrorMessage flag (primary detection path)
-        if let Some(is_error) = json.get("isApiErrorMessage").and_then(|v| v.as_bool()) {
-            if is_error {
-                return Ok(Some(self.extract_transcript_error(&json)?));
+                Ok(None)
             }
         }
-
-        // Enhancement: Secondary detection path - scan message content for API error text
-        // when isApiErrorMessage is false or missing
-        if let Some(content_array) = json
-            .get("message")
-            .and_then(|m| m.get("content"))
-            .and_then(|c| c.as_array())
-        {
-            for item in content_array {
-                if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-                    if self.parse_error_text(text).is_some() {
-                        // Debug logging for fallback detection
-                        self.logger.debug_sync(
-                            "JsonlMonitor",
-                            "fallback_error_detected",
-                            &format!("API error detected via fallback path: {}", {
-                                // UTF-8 safe truncation: use char boundaries instead of byte boundaries
-                                if text.len() > 50 {
-                                    text.chars().take(50).collect::<String>()
-                                } else {
-                                    text.to_string()
-                                }
-                            }),
-                        );
-                        return Ok(Some(self.extract_transcript_error(&json)?));
-                    }
-                }
-            }
-        }
-
-        Ok(None)
     }
+
+    /// Helper method for UTF-8 safe text truncation
+    /// Truncates text to specified character limit using char boundaries (not byte boundaries)
+    fn truncate_text_safe(&self, text: &str, limit: usize) -> String {
+        if text.len() > limit {
+            // UTF-8 safe truncation: use char boundaries instead of byte boundaries
+            let preview: String = text.chars().take(limit).collect();
+            format!("{}...", preview)
+        } else {
+            text.to_string()
+        }
+    }
+
 
     /// Extract error details from transcript JSON
     fn extract_transcript_error(&self, json: &Value) -> Result<TranscriptErrorEntry, NetworkError> {
