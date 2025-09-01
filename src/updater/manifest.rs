@@ -47,7 +47,6 @@ impl ManifestClient {
         Self { client }
     }
 
-
     /// Compare version with current using semver
     pub fn is_newer_version(&self, manifest_version: &str) -> Result<bool, semver::Error> {
         let current = semver::Version::parse(env!("CARGO_PKG_VERSION"))?;
@@ -55,18 +54,18 @@ impl ManifestClient {
         Ok(latest > current)
     }
 
-
     /// Fetch manifest with persistent host-based caching from UpdateStateFile
     pub fn fetch_manifest_with_persistent_cache(
         &mut self,
         url: &str,
         persistent_etag_map: &std::collections::HashMap<String, String>,
         persistent_last_modified_map: &std::collections::HashMap<String, String>,
-    ) -> Result<(Option<Manifest>, Option<String>, Option<String>), Box<dyn std::error::Error>> {
+    ) -> Result<(Option<Manifest>, Option<String>, Option<String>), Box<dyn std::error::Error>>
+    {
         use crate::updater::url_resolver;
 
         let host = url_resolver::extract_host_from_url(url).unwrap_or_else(|| url.to_string());
-        
+
         let mut request = self.client.get(url).header(
             "User-Agent",
             &format!("CCstatus/{}", env!("CARGO_PKG_VERSION")),
@@ -84,8 +83,14 @@ impl ManifestClient {
             Ok(mut response) => {
                 if response.status().as_u16() == 200 {
                     // Extract new cache headers for persistence
-                    let new_etag = response.headers().get("ETag").map(|v| v.to_str().unwrap_or("").to_string());
-                    let new_last_modified = response.headers().get("Last-Modified").map(|v| v.to_str().unwrap_or("").to_string());
+                    let new_etag = response
+                        .headers()
+                        .get("ETag")
+                        .map(|v| v.to_str().unwrap_or("").to_string());
+                    let new_last_modified = response
+                        .headers()
+                        .get("Last-Modified")
+                        .map(|v| v.to_str().unwrap_or("").to_string());
 
                     let manifest_text = response.body_mut().read_to_string()?;
                     let manifest = Manifest::from_json(&manifest_text)?;

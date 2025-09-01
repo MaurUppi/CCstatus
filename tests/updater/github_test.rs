@@ -74,7 +74,7 @@ fn test_find_asset_for_platform_found() {
 
     // This test will find different assets depending on the platform it's run on
     let found_asset = release.find_asset_for_platform();
-    
+
     // Asset should be found for supported platforms
     #[cfg(any(
         all(target_os = "windows", target_arch = "x86_64"),
@@ -104,15 +104,13 @@ fn test_find_asset_for_platform_found() {
 
 #[test]
 fn test_find_asset_for_platform_not_found() {
-    let assets = vec![
-        ReleaseAsset {
-            name: "ccstatus-unsupported-platform.zip".to_string(),
-            size: 1024,
-            download_count: 10,
-            browser_download_url: "https://example.com/unsupported.zip".to_string(),
-            content_type: "application/zip".to_string(),
-        },
-    ];
+    let assets = vec![ReleaseAsset {
+        name: "ccstatus-unsupported-platform.zip".to_string(),
+        size: 1024,
+        download_count: 10,
+        browser_download_url: "https://example.com/unsupported.zip".to_string(),
+        content_type: "application/zip".to_string(),
+    }];
 
     let release = GitHubRelease {
         tag_name: "v1.2.3".to_string(),
@@ -143,7 +141,7 @@ fn test_release_asset_serde_compatibility() {
 
     let json = serde_json::to_string(&asset).expect("Should serialize");
     let parsed: ReleaseAsset = serde_json::from_str(&json).expect("Should deserialize");
-    
+
     assert_eq!(parsed.name, "test.zip");
     assert_eq!(parsed.size, 1024);
     assert_eq!(parsed.download_count, 5);
@@ -165,7 +163,7 @@ fn test_github_release_serde_compatibility() {
 
     let json = serde_json::to_string(&release).expect("Should serialize");
     let parsed: GitHubRelease = serde_json::from_str(&json).expect("Should deserialize");
-    
+
     assert_eq!(parsed.tag_name, "v1.0.0");
     assert_eq!(parsed.name, "Test Release");
     assert_eq!(parsed.prerelease, true);

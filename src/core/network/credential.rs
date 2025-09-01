@@ -1,13 +1,13 @@
 //! Unified credential management for network monitoring
 //!
 //! This module provides comprehensive credential resolution from multiple sources including
-//! environment variables, OAuth keychain integration, shell configuration files, and 
-//! Claude Code configuration files. It implements a priority-based credential resolution 
+//! environment variables, OAuth keychain integration, shell configuration files, and
+//! Claude Code configuration files. It implements a priority-based credential resolution
 //! system with cross-platform support for extracting API credentials from various sources.
 //!
 //! ## Architecture & Priority Hierarchy
 //!
-//! The main entry point is `CredentialManager` which orchestrates credential resolution 
+//! The main entry point is `CredentialManager` which orchestrates credential resolution
 //! using this strict priority hierarchy:
 //!
 //! 1. **Environment variables** (highest priority)
@@ -26,7 +26,7 @@
 //!
 //! 3. **Shell configuration files** (.zshrc, .bashrc, PowerShell profiles)
 //!    - Cross-platform shell parsing with auto-detection
-//!    - Supports export statements and function-based variable definitions
+//!    - Supports export statements, function-based variable definitions, and non-exported assignments
 //!
 //! 4. **Claude Code configuration files** (lowest priority)
 //!    - JSON-based configuration files in `.claude/` directories
@@ -59,7 +59,7 @@
 //!
 //! Multi-platform shell configuration parsing with automatic detection:
 //!
-//! - **Bash/Zsh**: Export statements and function-based variable definitions
+//! - **Bash/Zsh**: Export statements, function-based variable definitions, and non-exported assignments
 //! - **PowerShell**: $env: syntax and [Environment]::SetEnvironmentVariable calls
 //! - **Cross-platform**: OS-specific defaults with manual override support
 //!
@@ -93,16 +93,16 @@ pub struct CredentialManager {
 impl CredentialManager {
     // Environment variable constants
     const ENV_BASE_URL: &'static str = "ANTHROPIC_BASE_URL";
-    const ENV_BEDROCK_BASE_URL: &'static str = "ANTHROPIC_BEDROCK_BASE_URL"; 
+    const ENV_BEDROCK_BASE_URL: &'static str = "ANTHROPIC_BEDROCK_BASE_URL";
     const ENV_VERTEX_BASE_URL: &'static str = "ANTHROPIC_VERTEX_BASE_URL";
     const ENV_AUTH_TOKEN: &'static str = "ANTHROPIC_AUTH_TOKEN";
     const ENV_API_KEY: &'static str = "ANTHROPIC_API_KEY";
-    
+
     // Test control constants
     const TEST_NO_CREDENTIALS: &'static str = "CCSTATUS_NO_CREDENTIALS";
     const TEST_OAUTH_PRESENT: &'static str = "CCSTATUS_TEST_OAUTH_PRESENT";
-    
-    // OAuth constants  
+
+    // OAuth constants
     const OAUTH_KEYCHAIN_SERVICE: &'static str = "Claude Code-credentials";
     const OAUTH_FIXED_BASE_URL: &'static str = "https://api.anthropic.com";
     const OAUTH_FIXED_TOKEN: &'static str = "probe-invalid-key";
@@ -126,7 +126,74 @@ impl CredentialManager {
         })
     }
 
+    /// Logging helper for credential source start
+    async fn log_source_start(
+        &self,
+        logger: &crate::core::network::debug_logger::EnhancedDebugLogger,
+        source: &str,
+    ) {
+        logger
+            .debug(
+                "CredentialManager",
+                &format!("Checking {} credentials", source),
+            )
+            .await;
+    }
+
+    /// Logging helper for found credentials
+    async fn log_credentials_found(
+        &self,
+        logger: &crate::core::network::debug_logger::EnhancedDebugLogger,
+        source: &str,
+        creds: &ApiCredentials,
+    ) {
+        logger
+            .debug(
+                "CredentialManager",
+                &format!(
+                    "Found {} credentials: endpoint={}, token_len={}",
+                    source,
+                    creds.base_url,
+                    creds.auth_token.len()
+                ),
+            )
+            .await;
+    }
+
+    /// Logging helper for no credentials found
+    async fn log_no_credentials(
+        &self,
+        logger: &crate::core::network::debug_logger::EnhancedDebugLogger,
+        source: &str,
+    ) {
+        logger
+            .debug(
+                "CredentialManager",
+                &format!("No {} credentials found", source),
+            )
+            .await;
+    }
+
+    /// Logging helper for credential source errors
+    async fn log_source_error(
+        &self,
+        logger: &crate::core::network::debug_logger::EnhancedDebugLogger,
+        source: &str,
+        error: &NetworkError,
+    ) {
+        logger
+            .debug(
+                "CredentialManager",
+                &format!("{} credential error: {}", source, error),
+            )
+            .await;
+    }
+
     /// Get credentials from environment, OAuth, shell config, or Claude config files
+    ///
+    /// Error Handling Policy: Continue-on-error for all sources except Environment.
+    /// - Environment: Returns error (highest priority, should not fail)
+    /// - OAuth/Shell/Config: Log error and continue to next source (graceful fallback)
     ///
     /// Implements priority hierarchy:
     /// 1. Environment variables (ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN)  
@@ -159,121 +226,58 @@ impl CredentialManager {
             )
             .await;
 
-        // Priority 1: Environment variables
-        logger
-            .debug("CredentialManager", "Checking environment variables...")
-            .await;
-        let env_result = self.get_from_environment();
-        logger
-            .debug(
-                "CredentialManager",
-                &format!("Environment check completed: {}", env_result.is_ok()),
-            )
-            .await;
-
-        match env_result {
+        // Priority 1: Environment variables (returns error on failure)
+        self.log_source_start(&logger, "environment").await;
+        match self.get_from_environment() {
             Ok(Some(creds)) => {
-                logger
-                    .debug(
-                        "CredentialManager",
-                        &format!(
-                            "Found env credentials: endpoint={}, token_len={}",
-                            creds.base_url,
-                            creds.auth_token.len()
-                        ),
-                    )
+                self.log_credentials_found(&logger, "environment", &creds)
                     .await;
                 return Ok(Some(creds));
             }
             Ok(None) => {
-                logger.debug("CredentialManager", "Environment variables not set (ANTHROPIC_BASE_URL or ANTHROPIC_AUTH_TOKEN missing)").await;
+                self.log_no_credentials(&logger, "environment").await;
             }
             Err(e) => {
-                logger
-                    .debug(
-                        "CredentialManager",
-                        &format!("Environment variable error: {}", e),
-                    )
-                    .await;
-                return Err(e);
+                self.log_source_error(&logger, "environment", &e).await;
+                return Err(e); // Environment errors are not silently ignored
             }
         }
 
-        // Priority 2: OAuth (macOS only)
+        // Priority 2: OAuth (macOS only) - continue on error
+        self.log_source_start(&logger, "OAuth").await;
         match self.get_from_oauth_keychain().await {
             Ok(Some(creds)) => {
-                logger
-                    .debug(
-                        "CredentialManager",
-                        &format!(
-                            "Found OAuth credentials: endpoint={}, token_len={}, source={}",
-                            creds.base_url,
-                            creds.auth_token.len(),
-                            creds.source
-                        ),
-                    )
-                    .await;
+                self.log_credentials_found(&logger, "OAuth", &creds).await;
                 return Ok(Some(creds));
             }
             Ok(None) => {
-                logger.debug("CredentialManager", "No OAuth credentials found").await;
+                self.log_no_credentials(&logger, "OAuth").await;
             }
             Err(e) => {
-                logger
-                    .debug(
-                        "CredentialManager",
-                        &format!("OAuth credential error: {}", e),
-                    )
-                    .await;
-                // Continue to next source on OAuth error
+                self.log_source_error(&logger, "OAuth", &e).await;
+                // Continue to next source (graceful fallback)
             }
         }
 
-        // Priority 3: Shell configuration files
-        logger
-            .debug("CredentialManager", "About to check shell config files...")
-            .await;
-
+        // Priority 3: Shell configuration files - continue on error
+        self.log_source_start(&logger, "shell config").await;
         match self.get_from_shell_config().await {
             Ok(Some(creds)) => {
-                logger
-                    .debug(
-                        "CredentialManager",
-                        &format!(
-                            "Found shell credentials: endpoint={}, token_len={}",
-                            creds.base_url,
-                            creds.auth_token.len()
-                        ),
-                    )
+                self.log_credentials_found(&logger, "shell config", &creds)
                     .await;
                 return Ok(Some(creds));
             }
             Ok(None) => {
-                logger
-                    .debug("CredentialManager", "No credentials found in shell configs")
-                    .await;
+                self.log_no_credentials(&logger, "shell config").await;
             }
             Err(e) => {
-                logger
-                    .debug(
-                        "CredentialManager",
-                        &format!("Shell config credential error: {}", e),
-                    )
-                    .await;
+                self.log_source_error(&logger, "shell config", &e).await;
+                // Continue to next source (graceful fallback)
             }
         }
 
-        logger
-            .debug(
-                "CredentialManager",
-                "Shell config check completed, no credentials found",
-            )
-            .await;
-
-        // Priority 4: Claude Code config files
-        logger
-            .debug("CredentialManager", "About to check Claude config files...")
-            .await;
+        // Priority 4: Claude Code config files - continue on error
+        self.log_source_start(&logger, "Claude config").await;
 
         for (index, config_path) in self.claude_config_paths.iter().enumerate() {
             logger
@@ -289,17 +293,12 @@ impl CredentialManager {
 
             match self.get_from_claude_config(config_path).await {
                 Ok(Some(creds)) => {
-                    logger
-                        .debug(
-                            "CredentialManager",
-                            &format!(
-                                "Found config credentials in file #{}: endpoint={}, token_len={}",
-                                index + 1,
-                                creds.base_url,
-                                creds.auth_token.len()
-                            ),
-                        )
-                        .await;
+                    self.log_credentials_found(
+                        &logger,
+                        &format!("Claude config file #{}", index + 1),
+                        &creds,
+                    )
+                    .await;
                     return Ok(Some(creds));
                 }
                 Ok(None) => {
@@ -315,28 +314,18 @@ impl CredentialManager {
                         .await;
                 }
                 Err(e) => {
-                    logger
-                        .debug(
-                            "CredentialManager",
-                            &format!(
-                                "Config file #{} error: {} (file: {})",
-                                index + 1,
-                                e,
-                                config_path.display()
-                            ),
-                        )
-                        .await;
+                    self.log_source_error(
+                        &logger,
+                        &format!("Claude config file #{}", index + 1),
+                        &e,
+                    )
+                    .await;
                 }
             }
         }
-        logger
-            .debug(
-                "CredentialManager",
-                "All Claude config files checked, no credentials found",
-            )
-            .await;
+        self.log_no_credentials(&logger, "Claude config").await;
 
-        // No credentials found
+        // No credentials found in any source
         logger
             .error(
                 "CredentialManager",
@@ -382,19 +371,29 @@ impl CredentialManager {
     async fn get_from_oauth_keychain(&self) -> Result<Option<ApiCredentials>, NetworkError> {
         use crate::core::network::debug_logger::get_debug_logger;
         let logger = get_debug_logger();
-        
-        logger.debug("CredentialManager", "Checking macOS Keychain for OAuth credentials").await;
-        
+
+        logger
+            .debug(
+                "CredentialManager",
+                "Checking macOS Keychain for OAuth credentials",
+            )
+            .await;
+
         // Test override: simulate OAuth credentials present for deterministic testing
         if env::var(Self::TEST_OAUTH_PRESENT).unwrap_or_default() == "1" {
-            logger.debug("CredentialManager", "Test override: simulating OAuth credentials present").await;
+            logger
+                .debug(
+                    "CredentialManager",
+                    "Test override: simulating OAuth credentials present",
+                )
+                .await;
             return Ok(Some(ApiCredentials {
                 base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
                 auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
                 source: CredentialSource::OAuth,
             }));
         }
-        
+
         // Check if Claude Code credentials exist in Keychain
         let output = tokio::task::spawn_blocking(|| {
             std::process::Command::new("security")
@@ -402,12 +401,18 @@ impl CredentialManager {
                 .arg("-s")
                 .arg(Self::OAUTH_KEYCHAIN_SERVICE)
                 .output()
-        }).await;
-            
+        })
+        .await;
+
         match output {
             Ok(Ok(result)) if result.status.success() => {
-                logger.debug("CredentialManager", "Found OAuth credentials in macOS Keychain").await;
-                
+                logger
+                    .debug(
+                        "CredentialManager",
+                        "Found OAuth credentials in macOS Keychain",
+                    )
+                    .await;
+
                 // Return fixed OAuth credentials with dummy key
                 // Do NOT forward actual secrets from Keychain
                 Ok(Some(ApiCredentials {
@@ -417,15 +422,30 @@ impl CredentialManager {
                 }))
             }
             Ok(Ok(_)) => {
-                logger.debug("CredentialManager", "No OAuth credentials found in macOS Keychain").await;
+                logger
+                    .debug(
+                        "CredentialManager",
+                        "No OAuth credentials found in macOS Keychain",
+                    )
+                    .await;
                 Ok(None)
             }
             Ok(Err(e)) => {
-                logger.debug("CredentialManager", &format!("Security command execution error: {}", e)).await;
+                logger
+                    .debug(
+                        "CredentialManager",
+                        &format!("Security command execution error: {}", e),
+                    )
+                    .await;
                 Ok(None) // Fail silently and continue to next source
             }
             Err(e) => {
-                logger.debug("CredentialManager", &format!("Keychain access error: {}", e)).await;
+                logger
+                    .debug(
+                        "CredentialManager",
+                        &format!("Keychain access error: {}", e),
+                    )
+                    .await;
                 Ok(None) // Fail silently and continue to next source
             }
         }
@@ -498,6 +518,15 @@ impl CredentialManager {
             }));
         }
 
+        // Phase 3: Look for non-exported assignments as fallback (VAR=value without export)
+        if let Some(creds) = self.parse_variable_assignments(content)? {
+            return Ok(Some(ApiCredentials {
+                base_url: creds.0,
+                auth_token: creds.1,
+                source: CredentialSource::ShellConfig(source_path.to_path_buf()),
+            }));
+        }
+
         Ok(None)
     }
 
@@ -526,7 +555,7 @@ impl CredentialManager {
 
                 // Extract the actual value, handling quotes and comments
                 let var_value = self.extract_shell_value(raw_value);
-                
+
                 if !var_value.is_empty() {
                     process_anthropic_variable(var_name, var_value, &mut base_url, &mut auth_token);
                 }
@@ -544,7 +573,7 @@ impl CredentialManager {
     /// Extract shell variable value handling quotes and trailing comments
     fn extract_shell_value(&self, raw_value: &str) -> String {
         let value = raw_value.trim();
-        
+
         // Handle quoted values
         if value.starts_with('"') {
             // Double quoted - find the closing quote, handling escaped quotes
@@ -572,7 +601,7 @@ impl CredentialManager {
             }
             return value.to_string();
         }
-        
+
         // Fallback: return the whole value trimmed
         value.to_string()
     }
@@ -581,7 +610,7 @@ impl CredentialManager {
     fn find_closing_quote(&self, value: &str, quote_char: char, start: usize) -> Option<usize> {
         let chars: Vec<char> = value.chars().collect();
         let mut i = start;
-        
+
         while i < chars.len() {
             if chars[i] == quote_char {
                 // Check if this quote is escaped
@@ -598,7 +627,7 @@ impl CredentialManager {
             }
             i += 1;
         }
-        
+
         None
     }
 
@@ -698,6 +727,54 @@ impl CredentialManager {
             } else {
                 i += 1;
             }
+        }
+
+        Ok(None)
+    }
+
+    /// Parse non-exported variable assignments (VAR=value without export) as fallback
+    pub fn parse_variable_assignments(
+        &self,
+        content: &str,
+    ) -> Result<Option<(String, String)>, NetworkError> {
+        // Regex to match variable assignments without export
+        // Matches: VAR="value" or VAR='value' or VAR=value (at start of line, not within export)
+        let assignment_regex = Regex::new(r#"^\s*([A-Z_]+)=(.*)"#)
+            .map_err(|e| NetworkError::RegexError(e.to_string()))?;
+
+        let mut base_url: Option<String> = None;
+        let mut auth_token: Option<String> = None;
+
+        for line in content.lines() {
+            let trimmed_line = line.trim_start();
+
+            // Skip comments
+            if trimmed_line.starts_with('#') {
+                continue;
+            }
+
+            // Skip export statements (already handled by parse_export_statements)
+            if trimmed_line.starts_with("export ") {
+                continue;
+            }
+
+            // Check for variable assignment
+            if let Some(captures) = assignment_regex.captures(line) {
+                let var_name = captures.get(1).map(|m| m.as_str());
+                let raw_value = captures.get(2).map(|m| m.as_str()).unwrap_or("");
+
+                // Extract the actual value, handling quotes and comments
+                let var_value = self.extract_shell_value(raw_value);
+
+                if !var_value.is_empty() {
+                    process_anthropic_variable(var_name, var_value, &mut base_url, &mut auth_token);
+                }
+            }
+        }
+
+        // Check if we have complete credentials
+        if let (Some(url), Some(token)) = (base_url, auth_token) {
+            return Ok(Some((url, token)));
         }
 
         Ok(None)
@@ -875,12 +952,14 @@ pub fn process_anthropic_variable(
             *base_url = Some(var_value); // Highest priority, always set
         }
         Some("ANTHROPIC_BEDROCK_BASE_URL") => {
-            if base_url.is_none() { // Only set if higher priority not already set
+            if base_url.is_none() {
+                // Only set if higher priority not already set
                 *base_url = Some(var_value);
             }
         }
         Some("ANTHROPIC_VERTEX_BASE_URL") => {
-            if base_url.is_none() { // Only set if higher priority not already set
+            if base_url.is_none() {
+                // Only set if higher priority not already set
                 *base_url = Some(var_value);
             }
         }
@@ -889,7 +968,8 @@ pub fn process_anthropic_variable(
             *auth_token = Some(var_value); // Highest priority, always set
         }
         Some("ANTHROPIC_API_KEY") => {
-            if auth_token.is_none() { // Only set if higher priority not already set
+            if auth_token.is_none() {
+                // Only set if higher priority not already set
                 *auth_token = Some(var_value);
             }
         }

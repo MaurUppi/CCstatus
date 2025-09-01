@@ -57,13 +57,16 @@ async fn main_impl() -> Result<(), Box<dyn std::error::Error>> {
             let urls = url_resolver::resolve_manifest_url(is_china);
             let mut client = ManifestClient::new();
             let mut update_found = false;
-            
+
             // Check for verbose debug output
             let debug_enabled = std::env::var("CCSTATUS_DEBUG").is_ok();
-            
+
             if debug_enabled {
-                eprintln!("Update check: trying {} URLs for {} region", 
-                    urls.len(), if is_china { "China" } else { "global" });
+                eprintln!(
+                    "Update check: trying {} URLs for {} region",
+                    urls.len(),
+                    if is_china { "China" } else { "global" }
+                );
             }
 
             // Use improved sequential URL trying with better error reporting
@@ -71,20 +74,20 @@ async fn main_impl() -> Result<(), Box<dyn std::error::Error>> {
                 if debug_enabled {
                     eprintln!("Trying: {}", url);
                 }
-                
+
                 let result = client.fetch_manifest_with_persistent_cache(
                     url,
                     &state.etag_map,
                     &state.last_modified_map,
                 )?;
-                
+
                 Ok((url.to_string(), result))
             }) {
                 Ok((successful_url, (manifest_opt, new_etag, new_last_modified))) => {
                     if debug_enabled {
                         eprintln!("Success: {}", successful_url);
                     }
-                    
+
                     if manifest_opt.is_none() {
                         // 304 Not Modified - no update available, short-circuit
                         eprintln!("You have the latest version");
@@ -93,14 +96,14 @@ async fn main_impl() -> Result<(), Box<dyn std::error::Error>> {
                         }
                         std::process::exit(0);
                     }
-                    
+
                     let manifest = manifest_opt.unwrap();
-                    
+
                     // Update persistent cache if we have new headers
                     let host = url_resolver::extract_host_from_url(&successful_url)
                         .unwrap_or_else(|| successful_url);
                     let mut cache_updated = false;
-                    
+
                     if let Some(etag) = new_etag {
                         state.etag_map.insert(host.clone(), etag);
                         cache_updated = true;
@@ -109,7 +112,7 @@ async fn main_impl() -> Result<(), Box<dyn std::error::Error>> {
                         state.last_modified_map.insert(host, last_modified);
                         cache_updated = true;
                     }
-                    
+
                     if cache_updated {
                         state.save().ok();
                     }
@@ -120,18 +123,19 @@ async fn main_impl() -> Result<(), Box<dyn std::error::Error>> {
                         let flash_enabled = std::env::var("CCSTATUS_FLASH")
                             .map(|v| v.to_lowercase() != "0" && v.to_lowercase() != "false")
                             .unwrap_or(true);
-                        
+
                         let output = if flash_enabled {
-                            format!("\x1b[5m v{} released \x1b[0m ({})", 
-                                manifest.version, manifest.notes_url)
+                            format!(
+                                "\x1b[5m v{} released \x1b[0m ({})",
+                                manifest.version, manifest.notes_url
+                            )
                         } else {
-                            format!("v{} released ({})", 
-                                manifest.version, manifest.notes_url)
+                            format!("v{} released ({})", manifest.version, manifest.notes_url)
                         };
                         eprintln!("{}", output);
                         update_found = true;
                     }
-                    
+
                     if update_found {
                         std::process::exit(10);
                     } else {

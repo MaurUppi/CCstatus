@@ -8,12 +8,12 @@
 /// Strategy:
 /// - China users: hk.gh-proxy.com → jsDelivr CDN → GitHub Raw
 /// - Non-China users: GitHub Raw → jsDelivr CDN
-
 use std::fmt;
 use url::Url;
 
 // Constants for better maintainability
-const GITHUB_RAW_BASE: &str = "https://raw.githubusercontent.com/MaurUppi/CCstatus/master/latest.json";
+const GITHUB_RAW_BASE: &str =
+    "https://raw.githubusercontent.com/MaurUppi/CCstatus/master/latest.json";
 const JSDELIVR_CDN_BASE: &str = "https://cdn.jsdelivr.net/gh/MaurUppi/CCstatus@master/latest.json";
 const CHINA_PROXY_PREFIX: &str = "https://hk.gh-proxy.com/";
 
@@ -70,10 +70,7 @@ pub fn resolve_manifest_url(is_china: bool) -> Vec<String> {
         ]
     } else {
         // Non-China: prefer GitHub Raw, fallback to jsDelivr (efficiency first)
-        vec![
-            GITHUB_RAW_BASE.to_string(), 
-            JSDELIVR_CDN_BASE.to_string()
-        ]
+        vec![GITHUB_RAW_BASE.to_string(), JSDELIVR_CDN_BASE.to_string()]
     }
 }
 
@@ -130,7 +127,10 @@ pub fn extract_host_from_url(url: &str) -> Option<String> {
 ///     Ok("success")
 /// })?;
 /// ```
-pub fn try_urls_in_sequence<F, T>(urls: &[String], mut fetch_fn: F) -> Result<T, Box<dyn std::error::Error>>
+pub fn try_urls_in_sequence<F, T>(
+    urls: &[String],
+    mut fetch_fn: F,
+) -> Result<T, Box<dyn std::error::Error>>
 where
     F: FnMut(&str) -> Result<T, Box<dyn std::error::Error>>,
 {

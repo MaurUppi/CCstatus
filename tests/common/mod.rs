@@ -37,7 +37,7 @@ impl IsolatedEnv {
         env::remove_var("ANTHROPIC_VERTEX_BASE_URL");
         env::remove_var("ANTHROPIC_AUTH_TOKEN");
         env::remove_var("ANTHROPIC_API_KEY");
-        
+
         // Clear test override flags
         env::remove_var("CCSTATUS_NO_CREDENTIALS");
         env::remove_var("CCSTATUS_TEST_OAUTH_PRESENT");

@@ -16,7 +16,7 @@ pub fn detect_china_ttl24h() -> bool {
             .unwrap_or(false);
         return mock_value;
     }
-    
+
     // Try to detect China location by checking myip.ipip.net
     detect_china_online().unwrap_or_default()
 }

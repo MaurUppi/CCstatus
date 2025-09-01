@@ -187,7 +187,7 @@ impl JsonlLoggerConfig {
         if let Ok(jsonl_path) = std::env::var("CCSTATUS_JSONL_FILE") {
             return PathBuf::from(jsonl_path);
         }
-        
+
         // Default path
         let mut log_path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
         log_path.push(".claude");
@@ -258,7 +258,9 @@ impl EnhancedDebugLogger {
 
         // Debug logger - only created when debug is enabled
         let debug_logger = if config.debug_enabled {
-            Some(Arc::new(Mutex::new(RotatingLogger::new(config.debug_log_path))))
+            Some(Arc::new(Mutex::new(RotatingLogger::new(
+                config.debug_log_path,
+            ))))
         } else {
             None
         };
@@ -297,7 +299,7 @@ impl EnhancedDebugLogger {
         if let Ok(jsonl_path) = std::env::var("CCSTATUS_JSONL_FILE") {
             return PathBuf::from(jsonl_path);
         }
-        
+
         // Default path
         let mut log_path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
         log_path.push(".claude");

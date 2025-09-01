@@ -74,7 +74,7 @@ impl UpdateState {
     }
 
     /// Load update state from config directory (LEGACY - use UpdateStateFile instead)
-    /// 
+    ///
     /// This method is deprecated and guarded behind the "legacy-update" feature flag.
     /// The new V1 update system uses UpdateStateFile with manifest-based checking.
     #[cfg(all(feature = "self-update", feature = "legacy-update"))]
@@ -152,7 +152,7 @@ impl UpdateState {
 
         state
     }
-    
+
     /// Load update state without legacy GitHub API checking (V1 compatible)
     #[cfg(all(feature = "self-update", not(feature = "legacy-update")))]
     pub fn load() -> Self {
@@ -162,7 +162,7 @@ impl UpdateState {
             ..Default::default()
         }
     }
-    
+
     /// Load update state (feature disabled)
     #[cfg(not(feature = "self-update"))]
     pub fn load() -> Self {
@@ -218,7 +218,7 @@ impl UpdateState {
         std::fs::write(&state_file, content)?;
         Ok(())
     }
-    
+
     /// Save update state (no-op when legacy-update feature disabled)
     #[cfg(any(not(feature = "self-update"), not(feature = "legacy-update")))]
     pub fn save(&self) -> Result<(), std::io::Error> {

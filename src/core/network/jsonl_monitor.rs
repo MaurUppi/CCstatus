@@ -1,5 +1,7 @@
 // JSONL transcript monitoring for RED gate control (stateless)
-use crate::core::network::debug_logger::{get_debug_logger, EnhancedDebugLogger, JsonlLoggerConfig};
+use crate::core::network::debug_logger::{
+    get_debug_logger, EnhancedDebugLogger, JsonlLoggerConfig,
+};
 use crate::core::network::types::{JsonlError, NetworkError};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -50,7 +52,7 @@ impl JsonlMonitor {
             Arc::new(get_debug_logger())
         });
 
-        Self { 
+        Self {
             logger,
             dedup_cache: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -196,7 +198,9 @@ impl JsonlMonitor {
                 continue;
             }
 
-            if let Ok(Some((error_entry, detection_type, code_source))) = self.parse_jsonl_line_enhanced(line) {
+            if let Ok(Some((error_entry, detection_type, code_source))) =
+                self.parse_jsonl_line_enhanced(line)
+            {
                 error_detected = true;
                 error_count += 1;
 
@@ -228,7 +232,10 @@ impl JsonlMonitor {
                     self.logger.debug_sync(
                         "JsonlMonitor",
                         "dedup_skip",
-                        &format!("Skipped duplicate error: code={}, session={}", error_entry.http_code, session_id),
+                        &format!(
+                            "Skipped duplicate error: code={}, session={}",
+                            error_entry.http_code, session_id
+                        ),
                     );
                 }
 
@@ -263,7 +270,10 @@ impl JsonlMonitor {
     }
 
     /// Enhanced parse method that returns detection type and code source
-    fn parse_jsonl_line_enhanced(&self, line: &str) -> Result<Option<(TranscriptErrorEntry, String, String)>, NetworkError> {
+    fn parse_jsonl_line_enhanced(
+        &self,
+        line: &str,
+    ) -> Result<Option<(TranscriptErrorEntry, String, String)>, NetworkError> {
         const MAX_LINE_LENGTH: usize = 1024 * 1024; // Phase 2: 1MB per line limit (matches read_tail_content)
 
         // Skip oversized lines to prevent memory pressure
@@ -304,7 +314,11 @@ impl JsonlMonitor {
             if is_error {
                 let error_entry = self.extract_transcript_error(&json)?;
                 let code_source = self.determine_code_source(&error_entry);
-                return Ok(Some((error_entry, "isApiErrorMessage".to_string(), code_source)));
+                return Ok(Some((
+                    error_entry,
+                    "isApiErrorMessage".to_string(),
+                    code_source,
+                )));
             }
         }
 
@@ -352,7 +366,7 @@ impl JsonlMonitor {
                 // In the future, this could be enhanced to distinguish explicit vs parsed
                 "parsed".to_string()
             }
-            _ => "none".to_string() // Invalid code range
+            _ => "none".to_string(), // Invalid code range
         }
     }
 
@@ -624,20 +638,20 @@ impl JsonlMonitor {
     fn should_log_entry(&self, session_id: &str, occurred_at: &str, code: u16) -> bool {
         let dedup_key = self.compute_dedup_key(session_id, occurred_at, code);
         let now = Instant::now();
-        
+
         // Try to lock the cache, handle potential mutex poisoning gracefully
         match self.dedup_cache.lock() {
             Ok(mut cache) => {
                 // Clean old entries (older than 60s)
                 self.clean_old_entries(&mut cache, now);
-                
+
                 // Check if key exists and is within 60s window
                 if let Some(&last_logged) = cache.get(&dedup_key) {
                     if now.duration_since(last_logged) < Duration::from_secs(60) {
                         return false; // Skip - duplicate within window
                     }
                 }
-                
+
                 // Update cache with current time
                 cache.insert(dedup_key, now);
                 true // Log this entry

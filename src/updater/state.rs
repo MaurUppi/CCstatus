@@ -19,7 +19,7 @@ pub struct UpdateStateFile {
     pub geo_checked_at: Option<DateTime<Utc>>,
     /// Count of GREEN ticks since last update check
     pub green_ticks_since_check: u32,
-    
+
     /// Legacy field for backward compatibility (migrate to version_prompt_dates)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_prompted_version: Option<String>,
@@ -53,12 +53,16 @@ impl UpdateStateFile {
     pub fn tick_from_cold(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         // Debug logging when CCSTATUS_DEBUG=true
         if crate::core::network::types::parse_env_bool("CCSTATUS_DEBUG") {
-            eprintln!("[DEBUG] UpdateStateFile::tick_from_cold() - COLD window update trigger activated");
+            eprintln!(
+                "[DEBUG] UpdateStateFile::tick_from_cold() - COLD window update trigger activated"
+            );
         }
 
         if !self.should_check_for_updates() {
             if crate::core::network::types::parse_env_bool("CCSTATUS_DEBUG") {
-                eprintln!("[DEBUG] UpdateStateFile::tick_from_cold() - throttled, skipping update check");
+                eprintln!(
+                    "[DEBUG] UpdateStateFile::tick_from_cold() - throttled, skipping update check"
+                );
             }
             return Ok(()); // Throttled
         }
@@ -78,7 +82,10 @@ impl UpdateStateFile {
             }
             Err(e) => {
                 if crate::core::network::types::parse_env_bool("CCSTATUS_DEBUG") {
-                    eprintln!("[DEBUG] UpdateStateFile::tick_from_cold() - update check failed: {}", e);
+                    eprintln!(
+                        "[DEBUG] UpdateStateFile::tick_from_cold() - update check failed: {}",
+                        e
+                    );
                 }
                 // Silent failure as specified in plan
             }
@@ -99,7 +106,10 @@ impl UpdateStateFile {
         self.increment_green_ticks();
 
         if crate::core::network::types::parse_env_bool("CCSTATUS_DEBUG") {
-            eprintln!("[DEBUG] UpdateStateFile::tick_from_green() - green_ticks_since_check: {}", self.green_ticks_since_check);
+            eprintln!(
+                "[DEBUG] UpdateStateFile::tick_from_green() - green_ticks_since_check: {}",
+                self.green_ticks_since_check
+            );
         }
 
         // Time-based fallback: if last_check is older than 30 minutes, force a check
@@ -133,7 +143,10 @@ impl UpdateStateFile {
                 }
                 Err(e) => {
                     if crate::core::network::types::parse_env_bool("CCSTATUS_DEBUG") {
-                        eprintln!("[DEBUG] UpdateStateFile::tick_from_green() - update check failed: {}", e);
+                        eprintln!(
+                            "[DEBUG] UpdateStateFile::tick_from_green() - update check failed: {}",
+                            e
+                        );
                     }
                 }
             }
@@ -152,7 +165,9 @@ impl UpdateStateFile {
         use crate::updater::{geo, manifest::ManifestClient, url_resolver};
 
         if crate::core::network::types::parse_env_bool("CCSTATUS_DEBUG") {
-            eprintln!("[DEBUG] UpdateStateFile::check_for_updates_internal() - starting update check");
+            eprintln!(
+                "[DEBUG] UpdateStateFile::check_for_updates_internal() - starting update check"
+            );
         }
 
         // Get or update geographic detection
@@ -182,14 +197,23 @@ impl UpdateStateFile {
 
         // Try each URL in sequence with persistent caching
         let mut client = ManifestClient::new();
-        
+
         // Try URLs manually to track which one succeeds for proper host caching
         for (index, url) in urls.iter().enumerate() {
             if crate::core::network::types::parse_env_bool("CCSTATUS_DEBUG") {
-                eprintln!("[DEBUG] UpdateStateFile::check_for_updates_internal() - trying URL {}/{}: {}", index + 1, urls.len(), url);
+                eprintln!(
+                    "[DEBUG] UpdateStateFile::check_for_updates_internal() - trying URL {}/{}: {}",
+                    index + 1,
+                    urls.len(),
+                    url
+                );
             }
 
-            match client.fetch_manifest_with_persistent_cache(url, &self.etag_map, &self.last_modified_map) {
+            match client.fetch_manifest_with_persistent_cache(
+                url,
+                &self.etag_map,
+                &self.last_modified_map,
+            ) {
                 Ok((Some(manifest), new_etag, new_last_modified)) => {
                     if crate::core::network::types::parse_env_bool("CCSTATUS_DEBUG") {
                         eprintln!("[DEBUG] UpdateStateFile::check_for_updates_internal() - manifest fetched successfully from URL {}, version: {}", index + 1, manifest.version);
@@ -204,7 +228,7 @@ impl UpdateStateFile {
                             self.set_last_modified(host, last_modified);
                         }
                     }
-                
+
                     // Check if version is newer
                     if client.is_newer_version(&manifest.version)?
                         && self.should_prompt_for_version(&manifest.version)
@@ -216,7 +240,7 @@ impl UpdateStateFile {
                         // In V1, we only check and save state, no actual update
                         return Ok(true);
                     }
-                    
+
                     if crate::core::network::types::parse_env_bool("CCSTATUS_DEBUG") {
                         eprintln!("[DEBUG] UpdateStateFile::check_for_updates_internal() - version {} is not newer or already prompted today", manifest.version);
                     }
@@ -238,11 +262,11 @@ impl UpdateStateFile {
                 }
             }
         }
-        
+
         if crate::core::network::types::parse_env_bool("CCSTATUS_DEBUG") {
             eprintln!("[DEBUG] UpdateStateFile::check_for_updates_internal() - all URLs failed, update check unsuccessful");
         }
-        
+
         // All URLs failed
         Ok(false)
     }
