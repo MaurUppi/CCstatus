@@ -6,3 +6,4 @@
 
 mod common;
 mod core;
+mod updater;
