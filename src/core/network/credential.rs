@@ -259,11 +259,17 @@ impl CredentialManager {
 
     /// Try to get credentials from environment variables
     pub fn get_from_environment(&self) -> Result<Option<ApiCredentials>, NetworkError> {
-        // Check for base URL + token combination
-        if let (Ok(base_url), Ok(auth_token)) = (
-            env::var("ANTHROPIC_BASE_URL"),
-            env::var("ANTHROPIC_AUTH_TOKEN"),
-        ) {
+        // Base URL priority: ANTHROPIC_BASE_URL > ANTHROPIC_BEDROCK_BASE_URL > ANTHROPIC_VERTEX_BASE_URL
+        let base_url = env::var("ANTHROPIC_BASE_URL")
+            .or_else(|_| env::var("ANTHROPIC_BEDROCK_BASE_URL"))
+            .or_else(|_| env::var("ANTHROPIC_VERTEX_BASE_URL"));
+
+        // Token priority: ANTHROPIC_AUTH_TOKEN > ANTHROPIC_API_KEY
+        let auth_token = env::var("ANTHROPIC_AUTH_TOKEN")
+            .or_else(|_| env::var("ANTHROPIC_API_KEY"));
+
+        // Return credentials when both base URL and token are present
+        if let (Ok(base_url), Ok(auth_token)) = (base_url, auth_token) {
             return Ok(Some(ApiCredentials {
                 base_url,
                 auth_token,
@@ -396,7 +402,7 @@ impl CredentialManager {
 
         // Regex to extract ANTHROPIC variables from array elements
         // Matches: "ANTHROPIC_BASE_URL=value" or 'ANTHROPIC_BASE_URL=value' or ANTHROPIC_BASE_URL=value
-        let var_regex = Regex::new(r#"^\s*(["']?)(ANTHROPIC_(?:BASE_URL|AUTH_TOKEN))=([^\n\r]+)"#)
+        let var_regex = Regex::new(r#"^\s*(["']?)(ANTHROPIC_(?:BASE_URL|BEDROCK_BASE_URL|VERTEX_BASE_URL|AUTH_TOKEN|API_KEY))=([^\n\r]+)"#)
             .map_err(|e| NetworkError::RegexError(e.to_string()))?;
 
         let lines: Vec<&str> = content.lines().collect();
@@ -640,7 +646,7 @@ pub fn get_shell_config_paths(shell_type: &ShellType) -> Result<Vec<PathBuf>, Ne
     Ok(paths)
 }
 
-/// Helper function to process ANTHROPIC environment variables
+/// Helper function to process ANTHROPIC environment variables with priority handling
 pub fn process_anthropic_variable(
     var_name: Option<&str>,
     var_value: String,
@@ -648,11 +654,28 @@ pub fn process_anthropic_variable(
     auth_token: &mut Option<String>,
 ) {
     match var_name {
+        // Base URL priority: ANTHROPIC_BASE_URL > ANTHROPIC_BEDROCK_BASE_URL > ANTHROPIC_VERTEX_BASE_URL
         Some("ANTHROPIC_BASE_URL") => {
-            *base_url = Some(var_value);
+            *base_url = Some(var_value); // Highest priority, always set
         }
+        Some("ANTHROPIC_BEDROCK_BASE_URL") => {
+            if base_url.is_none() { // Only set if higher priority not already set
+                *base_url = Some(var_value);
+            }
+        }
+        Some("ANTHROPIC_VERTEX_BASE_URL") => {
+            if base_url.is_none() { // Only set if higher priority not already set
+                *base_url = Some(var_value);
+            }
+        }
+        // Token priority: ANTHROPIC_AUTH_TOKEN > ANTHROPIC_API_KEY
         Some("ANTHROPIC_AUTH_TOKEN") => {
-            *auth_token = Some(var_value);
+            *auth_token = Some(var_value); // Highest priority, always set
+        }
+        Some("ANTHROPIC_API_KEY") => {
+            if auth_token.is_none() { // Only set if higher priority not already set
+                *auth_token = Some(var_value);
+            }
         }
         _ => {}
     }
