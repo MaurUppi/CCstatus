@@ -88,6 +88,7 @@ pub struct NetworkMetrics {
 #[derive(Debug, Clone)]
 pub enum CredentialSource {
     Environment,
+    OAuth,
     ShellConfig(PathBuf),
     ClaudeConfig(PathBuf),
 }
@@ -96,6 +97,7 @@ impl std::fmt::Display for CredentialSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CredentialSource::Environment => write!(f, "environment"),
+            CredentialSource::OAuth => write!(f, "oauth"),
             CredentialSource::ShellConfig(_) => write!(f, "shell"),
             CredentialSource::ClaudeConfig(_) => write!(f, "claude_config"),
         }
