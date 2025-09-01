@@ -566,7 +566,8 @@ impl NetworkSegment {
         }
 
         // GREEN window check (lowest priority)
-        let is_green_window = (total_duration_ms % 300_000) < 3_000;
+        // Width widened from 3_000ms to 10_000ms for better capture
+        let is_green_window = (total_duration_ms % 300_000) < 10_000;
         let green_window_id = total_duration_ms / 300_000;
 
         if is_green_window {
@@ -658,6 +659,8 @@ impl NetworkSegment {
             .map(|s| s.parse::<u64>().unwrap_or(5000))
             .unwrap_or(5000)
     }
+
+    // No GREEN width env override by design.
 }
 
 impl Default for NetworkSegment {

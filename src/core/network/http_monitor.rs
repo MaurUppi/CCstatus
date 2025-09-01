@@ -907,9 +907,15 @@ impl HttpMonitor {
                 Ok(phase_timings) => {
                     let duration = Duration::from_millis(phase_timings.ttfb_ms as u64);
 
-                    // Pre-determine if likely degraded/error for breakdown format
+                    // Load current state to get P80 threshold for network performance check
+                    let temp_state = self.load_state_internal().await.unwrap_or_default();
+                    let p80 = self.calculate_p80(&temp_state.network.rolling_totals);
+
+                    // Check both HTTP errors AND network performance degradation
                     let is_degraded_or_error =
-                        phase_timings.status >= 400 || phase_timings.status == 0;
+                        phase_timings.status >= 400 || 
+                        phase_timings.status == 0 || 
+                        phase_timings.ttfb_ms > p80;
 
                     let breakdown = if is_degraded_or_error {
                         format!(
