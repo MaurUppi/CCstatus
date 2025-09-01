@@ -275,43 +275,39 @@ jobs:
         
         echo "✅ Updated latest.json content:"
         cat latest.json
-    
+
+    - name: Checkout master for pushing latest.json
+      uses: actions/checkout@v4
+      with:
+        ref: master
+        fetch-depth: 0
+        path: repo-master
+
     - name: Commit and push latest.json
       shell: bash
+      working-directory: repo-master
+      env:
+        VERSION: ${{ needs.precheck.outputs.version }}
       run: |
-        version="${{ needs.precheck.outputs.version }}"
+        set -euo pipefail
+        
+        # Copy generated latest.json from main workspace
+        cp ../latest.json latest.json || true
+        
+        # Skip if no change
+        if git diff --quiet -- latest.json; then
+          echo "⚠️  No changes to latest.json, skipping commit"
+          exit 0
+        fi
         
         # Configure git
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         
-        # Handle detached HEAD state (tag-triggered workflows)
-        current_branch=$(git branch --show-current || echo "")
-        if [[ -z "$current_branch" ]]; then
-          echo "📝 In detached HEAD state, checking out master branch"
-          git fetch origin master
-          git checkout -b temp-master origin/master
-          echo "✅ Checked out master branch as temp-master"
-        else
-          echo "📝 On branch: $current_branch"
-        fi
-        
-        # Add and commit latest.json
         git add latest.json
-        if git diff --staged --quiet; then
-          echo "⚠️  No changes to latest.json, skipping commit"
-        else
-          git commit -m "chore: update latest.json for v${version} release"
-          
-          # Push using the appropriate branch
-          if [[ -z "$current_branch" ]]; then
-            git push origin temp-master:master
-            echo "✅ Pushed latest.json update to master from temp branch"
-          else
-            git push origin master
-            echo "✅ Pushed latest.json update to master"
-          fi
-        fi
+        git commit -m "chore: update latest.json for v${VERSION} release"
+        git push origin master
+        echo "✅ Pushed latest.json update to master"
 
     # NPM Publishing Steps - Added after GitHub Release
     # Validate NPM publishing conditions
@@ -446,4 +442,3 @@ jobs:
         
         # Final validation
         echo "🔍 Final NPM publishing validation completed for version: ${{ env.VERSION }}"
-
