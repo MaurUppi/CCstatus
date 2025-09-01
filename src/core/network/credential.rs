@@ -91,6 +91,22 @@ pub struct CredentialManager {
 }
 
 impl CredentialManager {
+    // Environment variable constants
+    const ENV_BASE_URL: &'static str = "ANTHROPIC_BASE_URL";
+    const ENV_BEDROCK_BASE_URL: &'static str = "ANTHROPIC_BEDROCK_BASE_URL"; 
+    const ENV_VERTEX_BASE_URL: &'static str = "ANTHROPIC_VERTEX_BASE_URL";
+    const ENV_AUTH_TOKEN: &'static str = "ANTHROPIC_AUTH_TOKEN";
+    const ENV_API_KEY: &'static str = "ANTHROPIC_API_KEY";
+    
+    // Test control constants
+    const TEST_NO_CREDENTIALS: &'static str = "CCSTATUS_NO_CREDENTIALS";
+    const TEST_OAUTH_PRESENT: &'static str = "CCSTATUS_TEST_OAUTH_PRESENT";
+    
+    // OAuth constants  
+    const OAUTH_KEYCHAIN_SERVICE: &'static str = "Claude Code-credentials";
+    const OAUTH_FIXED_BASE_URL: &'static str = "https://api.anthropic.com";
+    const OAUTH_FIXED_TOKEN: &'static str = "probe-invalid-key";
+
     /// Create new credential manager with auto-configured paths
     pub fn new() -> Result<Self, NetworkError> {
         let home = env::var("HOME")
@@ -126,11 +142,11 @@ impl CredentialManager {
         let logger = get_debug_logger();
 
         // Test override: force no credentials
-        if env::var("CCSTATUS_NO_CREDENTIALS").unwrap_or_default() == "1" {
+        if env::var(Self::TEST_NO_CREDENTIALS).unwrap_or_default() == "1" {
             logger
                 .debug(
                     "CredentialManager",
-                    "CCSTATUS_NO_CREDENTIALS=1: forcing no credentials for testing",
+                    "Test override: forcing no credentials for testing",
                 )
                 .await;
             return Ok(None);
@@ -340,14 +356,14 @@ impl CredentialManager {
             }
         };
 
-        // Base URL priority: ANTHROPIC_BASE_URL > ANTHROPIC_BEDROCK_BASE_URL > ANTHROPIC_VERTEX_BASE_URL
-        let base_url = get_non_empty_var("ANTHROPIC_BASE_URL")
-            .or_else(|_| get_non_empty_var("ANTHROPIC_BEDROCK_BASE_URL"))
-            .or_else(|_| get_non_empty_var("ANTHROPIC_VERTEX_BASE_URL"));
+        // Base URL priority chain using constants
+        let base_url = get_non_empty_var(Self::ENV_BASE_URL)
+            .or_else(|_| get_non_empty_var(Self::ENV_BEDROCK_BASE_URL))
+            .or_else(|_| get_non_empty_var(Self::ENV_VERTEX_BASE_URL));
 
-        // Token priority: ANTHROPIC_AUTH_TOKEN > ANTHROPIC_API_KEY
-        let auth_token = get_non_empty_var("ANTHROPIC_AUTH_TOKEN")
-            .or_else(|_| get_non_empty_var("ANTHROPIC_API_KEY"));
+        // Token priority chain using constants
+        let auth_token = get_non_empty_var(Self::ENV_AUTH_TOKEN)
+            .or_else(|_| get_non_empty_var(Self::ENV_API_KEY));
 
         // Return credentials when both base URL and token are present and non-empty
         if let (Ok(base_url), Ok(auth_token)) = (base_url, auth_token) {
@@ -367,15 +383,24 @@ impl CredentialManager {
         use crate::core::network::debug_logger::get_debug_logger;
         let logger = get_debug_logger();
         
-        logger.debug("CredentialManager", "Checking macOS Keychain for OAuth credentials...").await;
+        logger.debug("CredentialManager", "Checking macOS Keychain for OAuth credentials").await;
+        
+        // Test override: simulate OAuth credentials present for deterministic testing
+        if env::var(Self::TEST_OAUTH_PRESENT).unwrap_or_default() == "1" {
+            logger.debug("CredentialManager", "Test override: simulating OAuth credentials present").await;
+            return Ok(Some(ApiCredentials {
+                base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
+                auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
+                source: CredentialSource::OAuth,
+            }));
+        }
         
         // Check if Claude Code credentials exist in Keychain
-        // Use security command to check for existence only (exit code 0 = present)
         let output = tokio::task::spawn_blocking(|| {
             std::process::Command::new("security")
                 .arg("find-generic-password")
                 .arg("-s")
-                .arg("Claude Code-credentials")
+                .arg(Self::OAUTH_KEYCHAIN_SERVICE)
                 .output()
         }).await;
             
@@ -386,8 +411,8 @@ impl CredentialManager {
                 // Return fixed OAuth credentials with dummy key
                 // Do NOT forward actual secrets from Keychain
                 Ok(Some(ApiCredentials {
-                    base_url: "https://api.anthropic.com".to_string(),
-                    auth_token: "probe-invalid-key".to_string(),
+                    base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
+                    auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
                     source: CredentialSource::OAuth,
                 }))
             }
@@ -476,14 +501,14 @@ impl CredentialManager {
         Ok(None)
     }
 
-    /// Parse traditional export statements
+    /// Parse traditional export statements with improved comment handling
     pub fn parse_export_statements(
         &self,
         content: &str,
     ) -> Result<Option<(String, String)>, NetworkError> {
-        // Enhanced regex to match export statements
+        // Enhanced regex to match export statements with better value extraction
         // Matches: export VAR="value" or export VAR='value' or export VAR=value
-        let export_regex = Regex::new(r#"^\s*export\s+([A-Z_]+)=(["']?)([^\n\r]+)"#)
+        let export_regex = Regex::new(r#"^\s*export\s+([A-Z_]+)=(.*)"#)
             .map_err(|e| NetworkError::RegexError(e.to_string()))?;
 
         let mut base_url: Option<String> = None;
@@ -497,17 +522,14 @@ impl CredentialManager {
 
             if let Some(captures) = export_regex.captures(line) {
                 let var_name = captures.get(1).map(|m| m.as_str());
-                let quote_char = captures.get(2).map(|m| m.as_str()).unwrap_or("");
-                let raw_value = captures.get(3).map(|m| m.as_str()).unwrap_or("");
+                let raw_value = captures.get(2).map(|m| m.as_str()).unwrap_or("");
 
-                // Remove matching quotes if present
-                let var_value = if !quote_char.is_empty() && raw_value.ends_with(quote_char) {
-                    raw_value.trim_end_matches(quote_char).to_string()
-                } else {
-                    raw_value.to_string()
-                };
-
-                process_anthropic_variable(var_name, var_value, &mut base_url, &mut auth_token);
+                // Extract the actual value, handling quotes and comments
+                let var_value = self.extract_shell_value(raw_value);
+                
+                if !var_value.is_empty() {
+                    process_anthropic_variable(var_name, var_value, &mut base_url, &mut auth_token);
+                }
             }
         }
 
@@ -517,6 +539,67 @@ impl CredentialManager {
         }
 
         Ok(None)
+    }
+
+    /// Extract shell variable value handling quotes and trailing comments
+    fn extract_shell_value(&self, raw_value: &str) -> String {
+        let value = raw_value.trim();
+        
+        // Handle quoted values
+        if value.starts_with('"') {
+            // Double quoted - find the closing quote, handling escaped quotes
+            if let Some(end_pos) = self.find_closing_quote(value, '"', 1) {
+                return value[1..end_pos].to_string();
+            }
+        } else if let Some(stripped) = value.strip_prefix('\'') {
+            // Single quoted - find the closing quote (no escaping in single quotes)
+            if let Some(end_pos) = stripped.find('\'') {
+                return stripped[..end_pos].to_string();
+            }
+        } else {
+            // Unquoted value - take everything up to first unescaped whitespace or comment
+            for (i, ch) in value.char_indices() {
+                match ch {
+                    ' ' | '\t' | '#' => {
+                        // Check if this character is escaped
+                        if i > 0 && value.chars().nth(i - 1) == Some('\\') {
+                            continue;
+                        }
+                        return value[..i].trim().to_string();
+                    }
+                    _ => continue,
+                }
+            }
+            return value.to_string();
+        }
+        
+        // Fallback: return the whole value trimmed
+        value.to_string()
+    }
+
+    /// Find the closing quote position, handling escaped quotes  
+    fn find_closing_quote(&self, value: &str, quote_char: char, start: usize) -> Option<usize> {
+        let chars: Vec<char> = value.chars().collect();
+        let mut i = start;
+        
+        while i < chars.len() {
+            if chars[i] == quote_char {
+                // Check if this quote is escaped
+                let mut escape_count = 0;
+                let mut j = i;
+                while j > 0 && chars[j - 1] == '\\' {
+                    escape_count += 1;
+                    j -= 1;
+                }
+                // If even number of escapes (including 0), the quote is not escaped
+                if escape_count % 2 == 0 {
+                    return Some(i);
+                }
+            }
+            i += 1;
+        }
+        
+        None
     }
 
     /// Parse function-based variable definitions (like cc-env pattern)

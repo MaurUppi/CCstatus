@@ -5,6 +5,7 @@
 
 pub mod credential_env_test;
 pub mod credential_oauth_test;
+pub mod credential_tests;
 pub mod http_monitor_test;
 pub mod jsonl_monitor_tests;
 pub mod network_segment_tests;

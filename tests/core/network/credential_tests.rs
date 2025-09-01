@@ -1,4 +1,4 @@
-use ccstatus::core::segments::network::{
+use ccstatus::core::network::{
     credential::{CredentialManager, ShellType},
     types::CredentialSource,
 };
@@ -264,7 +264,7 @@ $env:ANTHROPIC_AUTH_TOKEN = "sk-ps-token-222"
 
 #[test]
 fn test_shell_detection() {
-    use ccstatus::core::segments::network::credential::detect_shell;
+    use ccstatus::core::network::credential::detect_shell;
 
     // Test shell detection - result depends on environment
     let detected = detect_shell();
@@ -285,7 +285,7 @@ fn test_shell_detection() {
 
 #[test]
 fn test_shell_config_paths() {
-    use ccstatus::core::segments::network::credential::get_shell_config_paths;
+    use ccstatus::core::network::credential::get_shell_config_paths;
 
     // Test path generation for different shell types
     let bash_paths = get_shell_config_paths(&ShellType::Bash);
@@ -429,6 +429,7 @@ async fn test_full_integration() {
                     // Validate source is one of expected types
                     match creds.source {
                         CredentialSource::Environment => println!("Found environment credentials"),
+                        CredentialSource::OAuth => println!("Found OAuth credentials"),
                         CredentialSource::ShellConfig(ref path) => {
                             println!("Found shell credentials at: {:?}", path)
                         }
@@ -455,7 +456,7 @@ async fn test_full_integration() {
 
 #[test]
 fn test_helper_functions() {
-    use ccstatus::core::segments::network::credential::{
+    use ccstatus::core::network::credential::{
         process_anthropic_variable, process_powershell_regex_captures,
     };
     use regex::Regex;
