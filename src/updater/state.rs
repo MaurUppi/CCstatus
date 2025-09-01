@@ -102,9 +102,26 @@ impl UpdateStateFile {
             eprintln!("[DEBUG] UpdateStateFile::tick_from_green() - green_ticks_since_check: {}", self.green_ticks_since_check);
         }
 
-        if self.should_trigger_green_check() {
+        // Time-based fallback: if last_check is older than 30 minutes, force a check
+        let max_age_minutes: i64 = 30;
+        let is_overdue = match self.last_check {
+            Some(last) => {
+                let now = Utc::now();
+                now.signed_duration_since(last).num_minutes() >= max_age_minutes
+            }
+            None => true,
+        };
+
+        if is_overdue || self.should_trigger_green_check() {
             if crate::core::network::types::parse_env_bool("CCSTATUS_DEBUG") {
-                eprintln!("[DEBUG] UpdateStateFile::tick_from_green() - threshold reached (12 ticks), performing update check");
+                if is_overdue {
+                    eprintln!(
+                        "[DEBUG] UpdateStateFile::tick_from_green() - last_check overdue (>= {} min), performing update check",
+                        max_age_minutes
+                    );
+                } else {
+                    eprintln!("[DEBUG] UpdateStateFile::tick_from_green() - threshold reached (12 ticks), performing update check");
+                }
             }
             // Perform update check when threshold reached
             match self.check_for_updates_internal() {
@@ -323,7 +340,8 @@ impl UpdateStateFile {
 
     /// Check if GREEN ticks threshold reached (12 ticks)
     pub fn should_trigger_green_check(&self) -> bool {
-        self.green_ticks_since_check >= 12
+        // Reduce from 12 (~60min) to 6 (~30min) given 5min GREEN cadence
+        self.green_ticks_since_check >= 6
     }
 
     /// Reset GREEN tick counter
