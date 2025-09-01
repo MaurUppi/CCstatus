@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.5] - 2025-09-01
+
+### 🔧 Network Monitoring Breakdown Format Enhancement
+
+#### ✨ Degraded Performance Detection
+- **P80 Latency Check**: Enhanced breakdown format condition to include network performance degradation
+  - **Smart Format Switching**: Shows `ServerTTFB/TotalTTFB` when network latency exceeds P80 threshold
+  - **Timings-Curl Compliance**: Fixed `timings-curl` feature to comply with degraded status logic  
+  - **Better Diagnostics**: Detailed timing breakdowns now appear for degraded network performance (🟡), not just HTTP errors
+  - **Performance Aware**: Breakdown format now responds to both HTTP status codes AND network performance metrics
+
+#### ⚙️ Monitoring System Improvements  
+- **GREEN Window Optimization**: Widened capture window from 3s to 10s for better monitoring coverage
+- **Update Check Enhancement**: Reduced threshold from 12 to 6 GREEN ticks (~30min cycle)
+- **Time-Based Fallback**: Added 30-minute maximum age for update checks to ensure timely notifications
+
+#### 🛡️ Quality Assurance
+- **Enhanced Testing**: Verified breakdown format shows detailed timings when network degrades
+- **Fix Validation**: Confirmed P80 latency condition properly triggers enhanced breakdown display
+- **Performance Monitoring**: Ensured timings-curl feature works correctly with degraded status detection
+
 ## [2.2.4] - 2025-08-31
 
 ### 📊 JSONL Monitor Phase 2 Enhancements
