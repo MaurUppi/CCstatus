@@ -379,7 +379,6 @@ impl JsonlMonitor {
         }
     }
 
-
     /// Extract error details from transcript JSON
     fn extract_transcript_error(&self, json: &Value) -> Result<TranscriptErrorEntry, NetworkError> {
         let parent_uuid = json

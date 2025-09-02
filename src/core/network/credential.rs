@@ -46,12 +46,13 @@
 //!
 //! ## OAuth Integration Details
 //!
-//! The OAuth integration provides a bridge to macOS Keychain-stored credentials:
+//! The OAuth integration provides cross-platform OAuth detection with fixed credentials:
 //!
-//! - **Platform**: macOS only (compiled out on other platforms)
-//! - **Keychain Service**: `"Claude Code-credentials"`
-//! - **Command**: `security find-generic-password -s "Claude Code-credentials"`
-//! - **Fixed Response**: Always returns the same credentials when present
+//! - **Detection Signals**: Test flag `CCSTATUS_TEST_OAUTH_PRESENT`, `CLAUDE_CODE_OAUTH_TOKEN`, and (macOS) Keychain presence
+//! - **Behavior on Selection**: Fixed `base_url=https://api.anthropic.com`, `auth_token=probe-invalid-key`, source=`oauth`
+//! - **Never Forward OAuth Tokens**: OAuth tokens are never sent to REST API
+//! - **Cross-platform**: `CLAUDE_CODE_OAUTH_TOKEN` env var works on all platforms
+//! - **macOS Keychain**: `security find-generic-password -s "Claude Code-credentials"`
 //! - **Error Handling**: All OAuth errors fail silently, continuing to next source
 //! - **Test Override**: Set `CCSTATUS_TEST_OAUTH_PRESENT=1` for test simulation
 //!
@@ -106,6 +107,7 @@ impl CredentialManager {
     const OAUTH_KEYCHAIN_SERVICE: &'static str = "Claude Code-credentials";
     const OAUTH_FIXED_BASE_URL: &'static str = "https://api.anthropic.com";
     const OAUTH_FIXED_TOKEN: &'static str = "probe-invalid-key";
+    const OAUTH_ENV_TOKEN: &'static str = "CLAUDE_CODE_OAUTH_TOKEN";
 
     /// Create new credential manager with auto-configured paths
     pub fn new() -> Result<Self, NetworkError> {
@@ -192,11 +194,11 @@ impl CredentialManager {
     /// Get credentials from environment, OAuth, shell config, or Claude config files
     ///
     /// ## Error Handling Policy (IMPORTANT FOR MAINTAINERS)
-    /// 
+    ///
     /// **Continue-on-error for all sources except Environment**
     /// - **Environment**: Returns error (highest priority, should not fail in normal operation)
     /// - **OAuth/Shell/Config**: Log error and continue to next source (graceful fallback)
-    /// 
+    ///
     /// **When adding new credential sources:**
     /// - Follow the same pattern: try source, log result, continue on error (except for Environment)
     /// - Use the logging helpers: log_source_start(), log_credentials_found(), log_no_credentials(), log_source_error()
@@ -403,6 +405,23 @@ impl CredentialManager {
             }));
         }
 
+        // Check for OAuth env token (cross-platform signal)
+        if let Ok(oauth_token) = env::var(Self::OAUTH_ENV_TOKEN) {
+            if !oauth_token.is_empty() {
+                logger
+                    .debug(
+                        "CredentialManager",
+                        "OAuth env token present; selecting OAuth",
+                    )
+                    .await;
+                return Ok(Some(ApiCredentials {
+                    base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
+                    auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
+                    source: CredentialSource::OAuth,
+                }));
+            }
+        }
+
         // Check if Claude Code credentials exist in Keychain
         let output = tokio::task::spawn_blocking(|| {
             std::process::Command::new("security")
@@ -460,10 +479,45 @@ impl CredentialManager {
         }
     }
 
-    /// Try to get credentials from macOS OAuth Keychain (non-macOS stub)
+    /// Try to get credentials from OAuth (non-macOS: env token only)
     #[cfg(not(target_os = "macos"))]
     async fn get_from_oauth_keychain(&self) -> Result<Option<ApiCredentials>, NetworkError> {
-        // Non-macOS builds: OAuth step is skipped
+        use crate::core::network::debug_logger::get_debug_logger;
+        let logger = get_debug_logger();
+
+        // Test override: simulate OAuth credentials present for deterministic testing
+        if env::var(Self::TEST_OAUTH_PRESENT).unwrap_or_default() == "1" {
+            logger
+                .debug(
+                    "CredentialManager",
+                    "Test override: simulating OAuth credentials present",
+                )
+                .await;
+            return Ok(Some(ApiCredentials {
+                base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
+                auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
+                source: CredentialSource::OAuth,
+            }));
+        }
+
+        // Check for OAuth env token (cross-platform signal)
+        if let Ok(oauth_token) = env::var(Self::OAUTH_ENV_TOKEN) {
+            if !oauth_token.is_empty() {
+                logger
+                    .debug(
+                        "CredentialManager",
+                        "OAuth env token present; selecting OAuth",
+                    )
+                    .await;
+                return Ok(Some(ApiCredentials {
+                    base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
+                    auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
+                    source: CredentialSource::OAuth,
+                }));
+            }
+        }
+
+        // Non-macOS builds: no Keychain support
         Ok(None)
     }
 

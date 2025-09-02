@@ -18,6 +18,7 @@ pub struct IsolatedEnv {
     original_home: Option<String>,
     original_no_credentials: Option<String>,
     original_oauth_test: Option<String>,
+    original_oauth_env_token: Option<String>,
 }
 
 impl IsolatedEnv {
@@ -30,6 +31,7 @@ impl IsolatedEnv {
         let original_home = env::var("HOME").ok();
         let original_no_credentials = env::var("CCSTATUS_NO_CREDENTIALS").ok();
         let original_oauth_test = env::var("CCSTATUS_TEST_OAUTH_PRESENT").ok();
+        let original_oauth_env_token = env::var("CLAUDE_CODE_OAUTH_TOKEN").ok();
 
         // Clear all credential-related environment variables
         env::remove_var("ANTHROPIC_BASE_URL");
@@ -41,6 +43,7 @@ impl IsolatedEnv {
         // Clear test override flags
         env::remove_var("CCSTATUS_NO_CREDENTIALS");
         env::remove_var("CCSTATUS_TEST_OAUTH_PRESENT");
+        env::remove_var("CLAUDE_CODE_OAUTH_TOKEN");
 
         Self {
             original_base_url,
@@ -51,6 +54,7 @@ impl IsolatedEnv {
             original_home,
             original_no_credentials,
             original_oauth_test,
+            original_oauth_env_token,
         }
     }
 
@@ -72,6 +76,18 @@ impl IsolatedEnv {
     pub fn enable_oauth_test(&self) {
         env::set_var("CCSTATUS_TEST_OAUTH_PRESENT", "1");
         env::remove_var("CCSTATUS_NO_CREDENTIALS");
+    }
+
+    /// Force clear all environment variables for OAuth testing
+    pub fn force_clear_env_vars(&self) {
+        env::remove_var("ANTHROPIC_BASE_URL");
+        env::remove_var("ANTHROPIC_BEDROCK_BASE_URL");
+        env::remove_var("ANTHROPIC_VERTEX_BASE_URL");
+        env::remove_var("ANTHROPIC_AUTH_TOKEN");
+        env::remove_var("ANTHROPIC_API_KEY");
+        env::remove_var("CCSTATUS_NO_CREDENTIALS");
+        env::remove_var("CCSTATUS_TEST_OAUTH_PRESENT");
+        env::remove_var("CLAUDE_CODE_OAUTH_TOKEN");
     }
 }
 
@@ -125,6 +141,12 @@ impl Drop for IsolatedEnv {
             env::set_var("CCSTATUS_TEST_OAUTH_PRESENT", oauth_test);
         } else {
             env::remove_var("CCSTATUS_TEST_OAUTH_PRESENT");
+        }
+
+        if let Some(oauth_env_token) = &self.original_oauth_env_token {
+            env::set_var("CLAUDE_CODE_OAUTH_TOKEN", oauth_env_token);
+        } else {
+            env::remove_var("CLAUDE_CODE_OAUTH_TOKEN");
         }
     }
 }

@@ -12,14 +12,10 @@ use crate::common::IsolatedEnv;
 #[cfg(target_os = "macos")]
 #[tokio::test]
 async fn test_oauth_credentials_when_present() {
-    let _isolated = IsolatedEnv::new();
+    let isolated = IsolatedEnv::new();
 
-    // Clear environment variables to ensure we test OAuth path
-    env::remove_var("ANTHROPIC_BASE_URL");
-    env::remove_var("ANTHROPIC_BEDROCK_BASE_URL");
-    env::remove_var("ANTHROPIC_VERTEX_BASE_URL");
-    env::remove_var("ANTHROPIC_AUTH_TOKEN");
-    env::remove_var("ANTHROPIC_API_KEY");
+    // Force clear all environment variables (including system vars)
+    isolated.force_clear_env_vars();
 
     // Set test override to simulate OAuth credentials present in Keychain
     env::set_var("CCSTATUS_TEST_OAUTH_PRESENT", "1");
@@ -57,14 +53,10 @@ async fn test_oauth_credentials_when_present() {
 #[cfg(target_os = "macos")]
 #[tokio::test]
 async fn test_oauth_priority_over_shell_and_config() {
-    let _isolated = IsolatedEnv::new();
+    let isolated = IsolatedEnv::new();
 
-    // Clear environment variables to ensure we bypass env priority
-    env::remove_var("ANTHROPIC_BASE_URL");
-    env::remove_var("ANTHROPIC_BEDROCK_BASE_URL");
-    env::remove_var("ANTHROPIC_VERTEX_BASE_URL");
-    env::remove_var("ANTHROPIC_AUTH_TOKEN");
-    env::remove_var("ANTHROPIC_API_KEY");
+    // Force clear all environment variables (including system vars)
+    isolated.force_clear_env_vars();
 
     // Set test override to simulate OAuth credentials present
     env::set_var("CCSTATUS_TEST_OAUTH_PRESENT", "1");
@@ -131,7 +123,10 @@ async fn test_oauth_fallback_when_not_present() {
 #[cfg(target_os = "macos")]
 #[tokio::test]
 async fn test_env_overrides_oauth() {
-    let _isolated = IsolatedEnv::new();
+    let isolated = IsolatedEnv::new();
+
+    // Force clear all environment variables first
+    isolated.force_clear_env_vars();
 
     // Set environment variables (highest priority)
     env::set_var("ANTHROPIC_BASE_URL", "https://env-override.com");
@@ -261,4 +256,152 @@ async fn test_oauth_keychain_helper_simulation() {
 
     // This test mainly serves as documentation of the OAuth behavior
     // The actual testing happens in the integration tests above
+}
+
+/// Test OAuth env token detection (cross-platform)
+#[tokio::test]
+async fn test_oauth_env_token_only() {
+    let isolated = IsolatedEnv::new();
+
+    // Force clear all environment variables (including system vars)
+    isolated.force_clear_env_vars();
+
+    // Set only the OAuth env token
+    env::set_var("CLAUDE_CODE_OAUTH_TOKEN", "oauth-access-token-123");
+
+    let cm = CredentialManager::new().expect("Failed to create CredentialManager");
+    let result = cm
+        .get_credentials()
+        .await
+        .expect("Credential lookup should not fail");
+
+    assert!(result.is_some(), "Should find OAuth credentials");
+    let creds = result.unwrap();
+
+    assert_eq!(
+        creds.base_url, "https://api.anthropic.com",
+        "OAuth should use fixed Anthropic API endpoint"
+    );
+    assert_eq!(
+        creds.auth_token, "probe-invalid-key",
+        "OAuth should use dummy probe key, not the actual token"
+    );
+    assert!(
+        matches!(creds.source, CredentialSource::OAuth),
+        "Source should be OAuth"
+    );
+
+    env::remove_var("CLAUDE_CODE_OAUTH_TOKEN");
+}
+
+/// Test that environment variables override OAuth env token
+#[tokio::test]
+async fn test_env_overrides_oauth_env_token() {
+    let isolated = IsolatedEnv::new();
+
+    // Force clear all environment variables first
+    isolated.force_clear_env_vars();
+
+    // Set both ANTHROPIC_* credentials and OAuth env token
+    env::set_var("ANTHROPIC_BASE_URL", "https://env-priority.com");
+    env::set_var("ANTHROPIC_AUTH_TOKEN", "env-priority-token");
+    env::set_var("CLAUDE_CODE_OAUTH_TOKEN", "oauth-should-be-ignored");
+
+    let cm = CredentialManager::new().expect("Failed to create CredentialManager");
+    let result = cm
+        .get_credentials()
+        .await
+        .expect("Credential lookup should not fail");
+
+    assert!(result.is_some(), "Should find credentials");
+    let creds = result.unwrap();
+
+    // Environment should override OAuth env token
+    assert_eq!(
+        creds.base_url, "https://env-priority.com",
+        "Environment should override OAuth env token"
+    );
+    assert_eq!(
+        creds.auth_token, "env-priority-token",
+        "Environment should override OAuth env token"
+    );
+    assert!(
+        matches!(creds.source, CredentialSource::Environment),
+        "Source should be Environment, not OAuth"
+    );
+
+    env::remove_var("CLAUDE_CODE_OAUTH_TOKEN");
+}
+
+/// Test empty OAuth env token is ignored
+#[tokio::test]
+async fn test_empty_oauth_env_token_ignored() {
+    let isolated = IsolatedEnv::new();
+
+    // Force clear all environment variables (including system vars)
+    isolated.force_clear_env_vars();
+
+    // Set empty OAuth env token (should be ignored)
+    env::set_var("CLAUDE_CODE_OAUTH_TOKEN", "");
+
+    let cm = CredentialManager::new().expect("Failed to create CredentialManager");
+    let result = cm
+        .get_credentials()
+        .await
+        .expect("Credential lookup should not fail");
+
+    // Should either be None or from other sources, but NOT OAuth
+    match result {
+        None => {
+            println!("No credentials found - empty OAuth env token correctly ignored");
+        }
+        Some(creds) => {
+            assert!(
+                !matches!(creds.source, CredentialSource::OAuth),
+                "Empty OAuth env token should be ignored"
+            );
+        }
+    }
+
+    env::remove_var("CLAUDE_CODE_OAUTH_TOKEN");
+}
+
+/// Test OAuth env token works on non-macOS platforms
+#[cfg(not(target_os = "macos"))]
+#[tokio::test]
+async fn test_oauth_env_token_non_macos() {
+    let isolated = IsolatedEnv::new();
+
+    // Force clear all environment variables (including system vars)
+    isolated.force_clear_env_vars();
+
+    // Set OAuth env token
+    env::set_var("CLAUDE_CODE_OAUTH_TOKEN", "cross-platform-oauth-token");
+
+    let cm = CredentialManager::new().expect("Failed to create CredentialManager");
+    let result = cm
+        .get_credentials()
+        .await
+        .expect("Credential lookup should not fail");
+
+    assert!(
+        result.is_some(),
+        "Should find OAuth credentials on non-macOS"
+    );
+    let creds = result.unwrap();
+
+    assert_eq!(
+        creds.base_url, "https://api.anthropic.com",
+        "OAuth should use fixed Anthropic API endpoint"
+    );
+    assert_eq!(
+        creds.auth_token, "probe-invalid-key",
+        "OAuth should use dummy probe key"
+    );
+    assert!(
+        matches!(creds.source, CredentialSource::OAuth),
+        "Source should be OAuth"
+    );
+
+    env::remove_var("CLAUDE_CODE_OAUTH_TOKEN");
 }
