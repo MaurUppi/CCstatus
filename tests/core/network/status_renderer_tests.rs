@@ -26,7 +26,7 @@ fn test_healthy_status_rendering() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Healthy, &metrics, None);
 
     // Should show green circle and P95 latency
     assert!(result.starts_with("🟢"));
@@ -52,7 +52,7 @@ fn test_degraded_status_rendering() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics, None);
 
     // Should show yellow circle, P95, and breakdown (no error_type)
     assert!(result.starts_with("🟡"));
@@ -81,7 +81,7 @@ fn test_degraded_rate_limit_rendering() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics, None);
 
     // Should show yellow circle, P95, and breakdown (no error_type)
     assert!(result.starts_with("🟡"));
@@ -110,7 +110,7 @@ fn test_error_status_rendering() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Error, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics, None);
 
     // Should show red circle and breakdown (no P95, no error_type)
     assert!(result.starts_with("🔴"));
@@ -139,7 +139,7 @@ fn test_error_timeout_rendering() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Error, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics, None);
 
     // Should show red circle and breakdown (no timeout indication)
     assert!(result.starts_with("🔴"));
@@ -167,7 +167,7 @@ fn test_error_http_status_rendering() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Error, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics, None);
 
     // Should show red circle and breakdown (no error_type)
     assert!(result.starts_with("🔴"));
@@ -195,7 +195,7 @@ fn test_unknown_status_rendering() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Unknown, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Unknown, &metrics, None);
 
     // Should show white circle and "Env vars NOT Found"
     assert_eq!(result, "⚪ Env vars NOT Found");
@@ -220,7 +220,7 @@ fn test_empty_breakdown_handling() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics, None);
 
     // Should handle empty breakdown gracefully (no error_type display)
     assert!(result.starts_with("🟡"));
@@ -249,7 +249,7 @@ fn test_no_error_type_handling() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics, None);
 
     // Should handle missing error type gracefully
     assert!(result.starts_with("🟡"));
@@ -278,7 +278,7 @@ fn test_edge_case_zero_p95() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Healthy, &metrics, None);
 
     // Should show P95:N/A for zero P95 (insufficient samples)
     assert!(result.starts_with("🟢"));
@@ -304,7 +304,7 @@ fn test_very_high_latencies() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Healthy, &metrics, None);
 
     // Should handle high latencies correctly
     assert!(result.starts_with("🟢"));
@@ -330,7 +330,7 @@ fn test_special_characters_in_error_type() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Error, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics, None);
 
     // Should handle special characters gracefully (no error_type display)
     assert!(result.starts_with("🔴"));
@@ -360,7 +360,7 @@ fn test_long_breakdown_strings() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics, None);
 
     // Should handle long breakdown strings (may wrap to next line)
     assert!(result.starts_with("🟡"));
@@ -376,7 +376,7 @@ fn test_status_renderer_default() {
     let renderer = StatusRenderer::default();
 
     let metrics = NetworkMetrics::default();
-    let result = renderer.render_status(&NetworkStatus::Unknown, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Unknown, &metrics, None);
 
     assert_eq!(result, "⚪ Env vars NOT Found");
 }
@@ -387,10 +387,10 @@ fn test_all_emoji_combinations() {
     let metrics = NetworkMetrics::default();
 
     // Test all status emoji outputs
-    let healthy = renderer.render_status(&NetworkStatus::Healthy, &metrics);
-    let degraded = renderer.render_status(&NetworkStatus::Degraded, &metrics);
-    let error = renderer.render_status(&NetworkStatus::Error, &metrics);
-    let unknown = renderer.render_status(&NetworkStatus::Unknown, &metrics);
+    let healthy = renderer.render_status(&NetworkStatus::Healthy, &metrics, None);
+    let degraded = renderer.render_status(&NetworkStatus::Degraded, &metrics, None);
+    let error = renderer.render_status(&NetworkStatus::Error, &metrics, None);
+    let unknown = renderer.render_status(&NetworkStatus::Unknown, &metrics, None);
 
     assert!(healthy.starts_with("🟢"));
     assert!(degraded.starts_with("🟡"));
@@ -426,7 +426,7 @@ fn test_line_wrapping_behavior() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics, None);
 
     // Should wrap to next line due to length (80+ chars)
     assert!(result.starts_with("🟡"));
@@ -436,7 +436,7 @@ fn test_line_wrapping_behavior() {
     assert!(result.contains("\n"));
 
     // Test error status line wrapping too
-    let error_result = renderer.render_status(&NetworkStatus::Error, &metrics);
+    let error_result = renderer.render_status(&NetworkStatus::Error, &metrics, None);
     assert!(error_result.starts_with("🔴"));
     assert!(error_result.contains(long_breakdown));
     assert!(error_result.contains("\n"));
@@ -463,7 +463,7 @@ fn test_no_line_wrapping_for_short_content() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics, None);
 
     // Should NOT wrap - content should fit on one line
     assert!(result.starts_with("🟡"));
@@ -494,7 +494,7 @@ fn test_zero_p95_in_degraded_status() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics, None);
 
     // Should show P95:N/A for degraded status with zero P95
     assert!(result.starts_with("🟡"));
@@ -522,7 +522,7 @@ fn test_empty_breakdown_in_error_status() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Error, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics, None);
 
     // Should handle empty breakdown in error status
     assert!(result.starts_with("🔴"));
@@ -551,7 +551,7 @@ fn test_proxy_healthy_prefix_none() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Healthy, &metrics, None);
 
     // Should show normal status without proxy prefix
     assert_eq!(result, "🟢 P95:145ms");
@@ -577,7 +577,7 @@ fn test_proxy_healthy_prefix_true() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Healthy, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Healthy, &metrics, None);
 
     // Should show green proxy prefix + normal status
     assert_eq!(result, "🟢 | 🟢 P95:145ms");
@@ -603,7 +603,7 @@ fn test_proxy_unhealthy_prefix_false() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics, None);
 
     // Should show red proxy prefix + degraded status
     assert!(result.starts_with("🔴 | 🟡"));
@@ -630,7 +630,7 @@ fn test_proxy_healthy_with_error_status() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Error, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics, None);
 
     // Should show green proxy prefix + red error status
     assert_eq!(result, "🟢 | 🔴 Total:1500ms|Error:Timeout");
@@ -655,7 +655,7 @@ fn test_proxy_unhealthy_with_unknown_status() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Unknown, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Unknown, &metrics, None);
 
     // Should show red proxy prefix + unknown status
     assert_eq!(result, "🔴 | ⚪ Env vars NOT Found");
@@ -682,7 +682,7 @@ fn test_proxy_health_with_line_wrapping() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Degraded, &metrics, None);
 
     // Should show red proxy prefix and wrap due to length
     assert!(result.starts_with("🔴 | 🟡"));
@@ -715,7 +715,7 @@ fn test_bot_challenge_both_blocked() {
     // Test the render_bot_challenge method directly through reflection or by triggering the right conditions
     // Since render_bot_challenge is private, we need to test it through the main render_status method
     // This would require error_type = "bot_challenge" and specific conditions to trigger shield rendering
-    let result = renderer.render_status(&NetworkStatus::Error, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics, None);
 
     // Should contain bot challenge indicator (🛡️) and timing info
     assert!(result.contains("🛡️"));
@@ -740,7 +740,7 @@ fn test_bot_challenge_get_only_with_zero_p95() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Error, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics, None);
 
     // Should show bot challenge with P95:N/A when P95 is zero
     assert!(result.contains("🛡️"));
@@ -767,7 +767,7 @@ fn test_bot_challenge_post_only_high_latency() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Error, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics, None);
 
     // Should handle very high latencies in bot challenge scenarios
     assert!(result.contains("🛡️"));
@@ -793,7 +793,7 @@ fn test_bot_challenge_edge_case_empty_breakdown() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Error, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics, None);
 
     // Should handle empty breakdown gracefully in bot challenge
     assert!(result.contains("🛡️"));
@@ -818,7 +818,7 @@ fn test_bot_challenge_neither_blocked_fallback() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Error, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics, None);
 
     // Should show fallback bot challenge message
     assert!(result.contains("🛡️"));
@@ -843,7 +843,7 @@ fn test_shield_rendering_with_proxy_health_combination() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Error, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics, None);
 
     // Should show bot challenge shield with POST-only pattern (Total: XXms)
     assert!(result.contains("🛡️")); // Bot challenge shield
@@ -870,7 +870,7 @@ fn test_shield_minimal_latency_values() {
         http_version: None,
     };
 
-    let result = renderer.render_status(&NetworkStatus::Error, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics, None);
 
     // Should handle minimal timing values
     assert!(result.contains("🛡️"));
@@ -898,7 +898,7 @@ fn test_post_bot_challenge_breakdown_suppression_with_timings_curl() {
         http_version: Some("HTTP/2.0".to_string()),
     };
 
-    let result = renderer.render_status(&NetworkStatus::Error, &metrics);
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics, None);
 
     // Verify breakdown suppression: should show shield with total time only
     assert!(result.contains("🛡️"));
@@ -933,5 +933,152 @@ fn test_post_bot_challenge_breakdown_suppression_with_timings_curl() {
         result, "🛡️ Total: 2500ms",
         "POST bot challenge should show exactly '🛡️ Total: 2500ms', got: '{}'",
         result
+    );
+}
+
+#[test]
+fn test_oauth_mode_hides_status_lights_and_proxy_health() {
+    use ccstatus::core::network::types::ApiConfig;
+    let renderer = StatusRenderer::new();
+
+    // Create OAuth API config
+    let oauth_config = ApiConfig {
+        endpoint: "https://api.anthropic.com/v1/messages".to_string(),
+        source: "oauth".to_string(),
+    };
+
+    let metrics = NetworkMetrics {
+        latency_ms: 150,
+        breakdown: "DNS:5ms|TCP:10ms|TLS:15ms|TTFB:120ms|Total:150ms".to_string(),
+        last_http_status: 401, // Expected for OAuth dummy key
+        error_type: Some("authentication_error".to_string()),
+        rolling_totals: vec![100, 120, 150],
+        p95_latency_ms: 145,
+        breakdown_source: Some("measured".to_string()),
+        connection_reused: Some(false),
+        proxy_healthy: None, // OAuth mode should have no proxy health
+        proxy_health_level: None,
+        proxy_health_detail: None,
+        http_version: Some("HTTP/2.0".to_string()),
+    };
+
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics, Some(&oauth_config));
+
+    // OAuth mode should not show status lights (🟢/🟡/🔴) or proxy health prefix
+    assert!(
+        !result.contains("🟢"),
+        "OAuth mode should not show green status light"
+    );
+    assert!(
+        !result.contains("🟡"),
+        "OAuth mode should not show yellow status light"
+    );
+    assert!(
+        !result.contains("🔴"),
+        "OAuth mode should not show red status light"
+    );
+    assert!(
+        !result.contains("⚪"),
+        "OAuth mode should not show unknown status light"
+    );
+    assert!(
+        !result.contains(" | "),
+        "OAuth mode should not show proxy health prefix"
+    );
+
+    // Should show timing metrics instead
+    assert!(
+        result.contains("P95:145ms"),
+        "OAuth mode should show P95 metrics"
+    );
+    assert!(
+        result.contains("DNS:5ms|TCP:10ms|TLS:15ms|TTFB:120ms|Total:150ms"),
+        "OAuth mode should show timing breakdown"
+    );
+    assert!(
+        result.contains("HTTP/2.0"),
+        "OAuth mode should show HTTP version"
+    );
+}
+
+#[test]
+fn test_oauth_mode_with_minimal_metrics() {
+    use ccstatus::core::network::types::ApiConfig;
+    let renderer = StatusRenderer::new();
+
+    // Create OAuth API config
+    let oauth_config = ApiConfig {
+        endpoint: "https://api.anthropic.com/v1/messages".to_string(),
+        source: "oauth".to_string(),
+    };
+
+    // Minimal metrics (no P95, no breakdown, no HTTP version)
+    let metrics = NetworkMetrics {
+        latency_ms: 100,
+        breakdown: "".to_string(),
+        last_http_status: 401,
+        error_type: Some("authentication_error".to_string()),
+        rolling_totals: vec![],
+        p95_latency_ms: 0,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
+        http_version: None,
+    };
+
+    let result = renderer.render_status(&NetworkStatus::Error, &metrics, Some(&oauth_config));
+
+    // Should fallback to "OAuth mode" when no metrics available
+    assert_eq!(
+        result, "OAuth mode",
+        "Should show minimal OAuth mode text when no metrics available"
+    );
+}
+
+#[test]
+fn test_non_oauth_mode_unchanged() {
+    use ccstatus::core::network::types::ApiConfig;
+    let renderer = StatusRenderer::new();
+
+    // Create non-OAuth API config
+    let env_config = ApiConfig {
+        endpoint: "https://api.anthropic.com/v1/messages".to_string(),
+        source: "environment".to_string(),
+    };
+
+    let metrics = NetworkMetrics {
+        latency_ms: 150,
+        breakdown: "DNS:5ms|TCP:10ms|TLS:15ms|TTFB:120ms|Total:150ms".to_string(),
+        last_http_status: 200,
+        error_type: None,
+        rolling_totals: vec![100, 120, 150],
+        p95_latency_ms: 145,
+        breakdown_source: None,
+        connection_reused: None,
+        proxy_healthy: None,
+        proxy_health_level: None,
+        proxy_health_detail: None,
+        http_version: None,
+    };
+
+    let result = renderer.render_status(&NetworkStatus::Healthy, &metrics, Some(&env_config));
+
+    // Non-OAuth mode should show normal status lights and behavior
+    assert!(
+        result.contains("🟢"),
+        "Non-OAuth mode should show green status light"
+    );
+    assert!(
+        result.contains("P95:145ms"),
+        "Non-OAuth mode should show P95 metrics"
+    );
+
+    // Compare with None config to ensure same behavior
+    let result_none = renderer.render_status(&NetworkStatus::Healthy, &metrics, None);
+    assert_eq!(
+        result, result_none,
+        "Non-OAuth config should behave same as None config"
     );
 }

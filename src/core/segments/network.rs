@@ -113,7 +113,8 @@ impl NetworkSegmentWrapper {
         let status_renderer = StatusRenderer::new();
 
         let state = http_monitor.load_state().await.unwrap_or_default();
-        let status_text = status_renderer.render_status(&state.status, &state.network);
+        let status_text =
+            status_renderer.render_status(&state.status, &state.network, state.api_config.as_ref());
         Ok(status_text)
     }
 }

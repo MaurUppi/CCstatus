@@ -15,7 +15,20 @@ impl StatusRenderer {
     /// Text: 🟢 shows P95; 🟡 shows P95+breakdown; 🔴 shows breakdown; wraps long content to next line
     /// Proxy prefix: 🟢 |/🟡 |/🔴 |/⚪ | prepended when proxy health check is available (tri-state support + Unknown)
     /// Shield: 🛡️ indicators for bot challenges (GET and/or POST)
-    pub fn render_status(&self, status: &NetworkStatus, metrics: &NetworkMetrics) -> String {
+    /// OAuth mode: Hides status lights and proxy health, shows only timing metrics
+    pub fn render_status(
+        &self,
+        status: &NetworkStatus,
+        metrics: &NetworkMetrics,
+        api_config: Option<&crate::core::network::types::ApiConfig>,
+    ) -> String {
+        // OAuth mode: render only timing metrics without status lights and proxy health
+        if let Some(config) = api_config {
+            if config.source == "oauth" {
+                return self.render_oauth_metrics(metrics);
+            }
+        }
+
         // Check for bot challenges first - they take precedence over normal rendering
         let proxy_has_bot_challenge = metrics
             .proxy_health_detail
@@ -130,6 +143,34 @@ impl StatusRenderer {
                 // Neither blocked (shouldn't reach here)
                 "🛡️ Bot challenge detected".to_string()
             }
+        }
+    }
+
+    /// Render OAuth mode metrics without status lights or proxy health
+    /// Shows only timing breakdown, HTTP version, and P95 metrics
+    fn render_oauth_metrics(&self, metrics: &NetworkMetrics) -> String {
+        let mut parts = Vec::new();
+
+        // Add P95 if available
+        if metrics.p95_latency_ms > 0 {
+            parts.push(format!("P95:{}ms", metrics.p95_latency_ms));
+        }
+
+        // Add timing breakdown if available
+        if !metrics.breakdown.is_empty() {
+            parts.push(metrics.breakdown.clone());
+        }
+
+        // Add HTTP version if available
+        if let Some(ref version) = metrics.http_version {
+            parts.push(version.clone());
+        }
+
+        // Join parts with space separator, or return minimal info if nothing available
+        if parts.is_empty() {
+            "OAuth mode".to_string()
+        } else {
+            parts.join(" ")
         }
     }
 }

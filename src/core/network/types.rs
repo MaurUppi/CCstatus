@@ -85,7 +85,7 @@ pub struct NetworkMetrics {
 }
 
 /// Credential source types (aligned with credential.md)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum CredentialSource {
     Environment,
     OAuth,

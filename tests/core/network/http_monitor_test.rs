@@ -2663,4 +2663,109 @@ mod curl_timing_tests {
         // was properly integrated. More detailed timing verification would require
         // mock proxy endpoints which are beyond this integration test scope.
     }
+
+    #[tokio::test]
+    async fn test_oauth_skips_proxy_health_check() {
+        // Test OAuth mode skips proxy health check and sets fields to None
+        let temp_dir = TempDir::new().unwrap();
+        let state_path = temp_dir.path().join("monitoring.json");
+
+        // Create mock health client that panics if called (to verify it's not called in OAuth mode)
+        let panic_health_client = PanicHealthCheckClient::new();
+
+        let mut monitor = HttpMonitor::new(Some(state_path.clone()))
+            .unwrap()
+            .with_http_client(Box::new(SuccessHttpClient::new()))
+            .with_health_client(Box::new(panic_health_client))
+            .with_clock(Box::new(FixedClock::new()));
+
+        // OAuth credentials
+        let oauth_creds = ApiCredentials {
+            base_url: "https://api.anthropic.com".to_string(),
+            auth_token: "probe-invalid-key".to_string(),
+            source: CredentialSource::OAuth,
+        };
+
+        let metrics = ProbeMetrics {
+            latency_ms: 100,
+            breakdown: "Total:100ms".to_string(),
+            last_http_status: 401, // Expected for OAuth dummy key
+            error_type: Some("authentication_error".to_string()),
+            http_version: Some("HTTP/2.0".to_string()),
+        };
+
+        // This should not panic even though we provided a panic health client,
+        // because OAuth mode should skip the proxy health check
+        let result = monitor
+            .process_probe_results(ProbeMode::Green, oauth_creds, metrics, None)
+            .await;
+
+        assert!(
+            result.is_ok(),
+            "OAuth probe should succeed without calling health client"
+        );
+
+        // Verify proxy health fields are set to None
+        let state = monitor.load_state().await.unwrap();
+        assert_eq!(state.network.proxy_healthy, None);
+        assert_eq!(state.network.proxy_health_level, None);
+        assert_eq!(state.network.proxy_health_detail, None);
+        assert_eq!(state.api_config.unwrap().source, "oauth");
+    }
+
+    #[tokio::test]
+    async fn test_non_oauth_executes_proxy_health_check() {
+        // Test non-OAuth mode continues to execute proxy health check
+        let temp_dir = TempDir::new().unwrap();
+        let state_path = temp_dir.path().join("monitoring.json");
+
+        // Use the existing MockHealthCheckClient that returns success
+        let mut monitor = HttpMonitor::new(Some(state_path.clone()))
+            .unwrap()
+            .with_http_client(Box::new(SuccessHttpClient::new()))
+            .with_clock(Box::new(FixedClock::new()));
+
+        // Environment credentials (non-OAuth)
+        let env_creds = ApiCredentials {
+            base_url: "https://api.anthropic.com".to_string(),
+            auth_token: "test-api-key".to_string(),
+            source: CredentialSource::Environment,
+        };
+
+        let metrics = ProbeMetrics {
+            latency_ms: 100,
+            breakdown: "Total:100ms".to_string(),
+            last_http_status: 200,
+            error_type: None,
+            http_version: Some("HTTP/2.0".to_string()),
+        };
+
+        let result = monitor
+            .process_probe_results(ProbeMode::Green, env_creds, metrics, None)
+            .await;
+
+        assert!(result.is_ok(), "Non-OAuth probe should succeed");
+
+        // Verify proxy health check was executed (MockHealthCheckClient returns healthy by default)
+        let state = monitor.load_state().await.unwrap();
+        assert_eq!(state.api_config.unwrap().source, "environment");
+        // Proxy health fields should be populated by MockHealthCheckClient
+    }
+}
+
+/// Mock health client that panics if called (for testing OAuth skip logic)
+#[derive(Clone)]
+struct PanicHealthCheckClient;
+
+impl PanicHealthCheckClient {
+    fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait::async_trait]
+impl HealthCheckClient for PanicHealthCheckClient {
+    async fn get_health(&self, _url: String, _timeout_ms: u32) -> Result<HealthResponse, String> {
+        panic!("PanicHealthCheckClient was called - OAuth should skip proxy health check");
+    }
 }

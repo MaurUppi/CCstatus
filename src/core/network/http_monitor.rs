@@ -1135,26 +1135,34 @@ impl HttpMonitor {
         state.monitoring_enabled = true;
 
         // Proxy health check using new proxy_health module
-        let proxy_health_options = ProxyHealthOptions {
-            use_root_urls: true, // Enhanced mode: try root-based URLs first
-            try_fallback: true,
-            follow_redirect_once: true, // Enable safe same-host redirect following
-            timeout_ms: 1500,
-        };
+        // Skip proxy health check in OAuth mode per development plan
+        if creds.source == CredentialSource::OAuth {
+            // OAuth mode: skip proxy health check and set fields to None
+            state.network.set_proxy_health(None, None);
+        } else {
+            // Non-OAuth mode: perform proxy health check as usual
+            let proxy_health_options = ProxyHealthOptions {
+                use_root_urls: true, // Enhanced mode: try root-based URLs first
+                try_fallback: true,
+                follow_redirect_once: true, // Enable safe same-host redirect following
+                timeout_ms: 1500,
+            };
 
-        let proxy_health_outcome =
-            assess_proxy_health(&creds.base_url, &proxy_health_options, &*self.health_client).await;
+            let proxy_health_outcome =
+                assess_proxy_health(&creds.base_url, &proxy_health_options, &*self.health_client)
+                    .await;
 
-        // Use centralized mapping function to set both legacy and new fields
-        match proxy_health_outcome {
-            Ok(outcome) => {
-                state
-                    .network
-                    .set_proxy_health(outcome.level, outcome.detail);
-            }
-            Err(_) => {
-                // Health check errors: no proxy detected or internal error
-                state.network.set_proxy_health(None, None);
+            // Use centralized mapping function to set both legacy and new fields
+            match proxy_health_outcome {
+                Ok(outcome) => {
+                    state
+                        .network
+                        .set_proxy_health(outcome.level, outcome.detail);
+                }
+                Err(_) => {
+                    // Health check errors: no proxy detected or internal error
+                    state.network.set_proxy_health(None, None);
+                }
             }
         }
 
