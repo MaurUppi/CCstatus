@@ -180,6 +180,15 @@ $env:ANTHROPIC_AUTH_TOKEN = "sk-your-token-here"
 }
 ```
 
+### OAuth Tool Mode (Cross-Platform)
+```bash
+# CLAUDE_CODE_OAUTH_TOKEN signals OAuth tool mode presence
+# Never used as REST API key - triggers OAuth mode with fixed dummy credentials
+export CLAUDE_CODE_OAUTH_TOKEN="oauth-access-token-for-tools"
+```
+
+**Important**: `CLAUDE_CODE_OAUTH_TOKEN` is a tool-mode signal only and is never forwarded as an API key to REST endpoints. When detected, the system uses fixed OAuth credentials (`https://api.anthropic.com` + `probe-invalid-key`) for testing OAuth integration without exposing real tokens.
+
 ## Error Handling
 
 The module uses a comprehensive error handling strategy:
