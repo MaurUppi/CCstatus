@@ -33,10 +33,16 @@
 - When degraded/error occurs, detailed timing data is displayed (DNS|TCP|TLS|TTFB). TTFB is particularly important - it's the time from `sending model service request <--> Anthropic returns` the first byte.
 - This tool can only provide information about which stage has issues; you need to investigate which component has the highest latency yourself.
 
-### Areas for Improvement
+### OAuth Mode Support ✨ (v2.2.6)
+- **Smart Mode Detection**: Automatically detects OAuth mode and optimizes display
+  - **Hidden Status Lights**: Hides network status emojis (🟢/🟡/🔴/⚪) and proxy health prefix in OAuth mode
+  - **Skip Proxy Checks**: automatically skips proxy health checks, avoiding unnecessary network requests
+  - **Preserve Timing Metrics**: Continues displaying P95 latency, timing breakdown, and HTTP version performance data
+  - **Auto-Adaptive**: Automatically switches rendering mode via `api_config.source == "oauth"`
 
-- If you use Claude subscription instead of API key, and have **unofficial** BASE_URL/AUTH_TOKEN in `.zshrc, .bashrc`, the CRS health status icon will also display.
-  - Reason: Credential priority design: `System environment [sys env] --> Environment files [.zshrc] --> JSON`, and I haven't found a way to identify `subscription` users yet.
+### Areas for Improvement
+- ✅ ~~OAuth subscription user display issues resolved~~ (v2.2.6 fixed)
+- Other known issues: None
 
 ## User Interface
 

@@ -1,6 +1,6 @@
 [package]
 name = "ccstatus"
-version = "2.2.5"
+version = "2.2.6"
 edition = "2021"
 description = "CCstatus - Claude Code Network Monitor and StatusLine tool with connectivity monitoring"
 authors = ["MaurUppi"]

@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.6] - 2025-09-02
+
+### 🔧 OAuth Mode Enhancement
+
+#### ✨ OAuth Environment Support
+- **Smart OAuth Detection**: Automatic detection and optimized rendering for OAuth tool mode
+  - **Hidden Status Lights**: OAuth mode hides network status emojis (🟢/🟡/🔴/⚪) and proxy health prefix
+  - **Skip Proxy Health Checks**: OAuth credentials automatically bypass `assess_proxy_health()` to avoid unnecessary network requests
+  - **Preserve Performance Metrics**: Continues displaying P95 latency, timing breakdown, and HTTP version data
+  - **Auto-Adaptive Rendering**: Switches rendering mode via `api_config.source == "oauth"` detection
+
+#### 🏗️ Implementation Details
+- **HttpMonitor Enhancement**: Modified `process_probe_results()` to conditionally skip proxy health assessment based on credential source
+- **StatusRenderer Upgrade**: Added `render_oauth_metrics()` method for OAuth-specific display without status indicators
+- **API Compatibility**: Updated all `render_status()` callers to pass `api_config` parameter for source detection
+- **Type System**: Added `PartialEq` derive to `CredentialSource` enum for OAuth comparison support
+
+#### 🧪 Comprehensive Test Coverage
+- **OAuth Proxy Skip Tests**: Validates proxy health bypass with panic client (ensures no calls in OAuth mode)
+- **OAuth Rendering Tests**: Confirms status light and proxy health hiding in OAuth mode
+- **Non-OAuth Compatibility**: Verifies existing behavior unchanged for environment/shell/config sources
+- **Edge Case Coverage**: Tests OAuth mode with minimal metrics and fallback scenarios
+
+#### 🛡️ Quality Assurance
+- **Compilation Verified**: All code compiles without errors after signature updates
+- **Test Suite**: New OAuth-specific tests pass while maintaining existing test compatibility
+- **Code Quality**: Formatted with `cargo fmt` and linted with `cargo clippy`
+- **Backward Compatibility**: Non-OAuth modes function identically to previous versions
+
+---
+
 ## [2.2.5] - 2025-09-01
 
 ### 🔧 Network Monitoring Breakdown Format Enhancement
