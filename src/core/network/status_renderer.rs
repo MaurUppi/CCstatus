@@ -15,14 +15,14 @@ impl StatusRenderer {
     /// Text: 🟢 shows P95; 🟡 shows P95+breakdown; 🔴 shows breakdown; wraps long content to next line
     /// Proxy prefix: 🟢 |/🟡 |/🔴 |/⚪ | prepended when proxy health check is available (tri-state support + Unknown)
     /// Shield: 🛡️ indicators for bot challenges (GET and/or POST)
-    /// OAuth mode: Hides status lights and proxy health, shows only timing metrics
+    /// OAuth mode: Shows green status indicator and timing metrics, omits proxy health checks
     pub fn render_status(
         &self,
         status: &NetworkStatus,
         metrics: &NetworkMetrics,
         api_config: Option<&crate::core::network::types::ApiConfig>,
     ) -> String {
-        // OAuth mode: render only timing metrics without status lights and proxy health
+        // OAuth mode: render green status indicator with timing metrics, omits proxy health
         if let Some(config) = api_config {
             if config.source == "oauth" {
                 return self.render_oauth_metrics(metrics);
@@ -150,7 +150,7 @@ impl StatusRenderer {
     /// Shows only timing breakdown, HTTP version, and P95 metrics with green indicator
     fn render_oauth_metrics(&self, metrics: &NetworkMetrics) -> String {
         let mut parts = Vec::new();
-        
+
         // Add green status indicator for OAuth mode
         parts.push("🟢".to_string());
 
@@ -170,7 +170,8 @@ impl StatusRenderer {
         }
 
         // Join parts with space separator, or return minimal info if nothing available
-        if parts.len() == 1 { // Only emoji present
+        if parts.len() == 1 {
+            // Only emoji present
             "🟢 OAuth mode".to_string()
         } else {
             parts.join(" ")

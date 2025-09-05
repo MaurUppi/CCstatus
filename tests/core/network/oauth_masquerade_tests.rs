@@ -1,7 +1,52 @@
-use ccstatus::core::network::oauth_masquerade::{run_probe, OauthMasqueradeOptions, OauthMasqueradeResult};
+use ccstatus::core::network::http_monitor::HttpClientTrait;
+use ccstatus::core::network::oauth_masquerade::{
+    run_probe, OauthMasqueradeOptions, OauthMasqueradeResult,
+};
 use ccstatus::core::network::types::NetworkError;
-use std::env;
 use std::collections::HashMap;
+use std::env;
+use std::time::Duration;
+
+/// Mock HTTP client for testing OAuth masquerade
+struct MockHttpClient;
+
+#[async_trait::async_trait]
+impl HttpClientTrait for MockHttpClient {
+    async fn execute_request(
+        &self,
+        _url: String,
+        headers: std::collections::HashMap<String, String>,
+        _body: Vec<u8>,
+        _timeout_ms: u32,
+    ) -> Result<
+        (
+            u16,
+            Duration,
+            String,
+            std::collections::HashMap<String, String>,
+            Option<String>,
+        ),
+        String,
+    > {
+        // Return mock response that includes request headers to test redaction
+        let mut response_headers = HashMap::new();
+        // Include some request headers as if they were response headers (for testing redaction)
+        for (key, value) in &headers {
+            response_headers.insert(key.clone(), value.clone());
+        }
+        // Add some typical response headers
+        response_headers.insert("Server".to_string(), "anthropic".to_string());
+        response_headers.insert("Cache-Control".to_string(), "no-cache".to_string());
+
+        Ok((
+            200,
+            Duration::from_millis(265),
+            "DNS:5ms|TCP:10ms|TLS:50ms|ServerTTFB:200ms|Total:265ms".to_string(),
+            response_headers,
+            Some("HTTP/2.0".to_string()),
+        ))
+    }
+}
 
 /// Test OAuth masquerade options validation and construction
 #[test]
@@ -12,7 +57,7 @@ fn test_oauth_masquerade_options_creation() {
         expires_at: Some(1672531200000), // Fixed timestamp for testing
         stream: false,
     };
-    
+
     assert_eq!(opts.base_url, "https://api.anthropic.com");
     assert!(opts.access_token.starts_with("oat01_"));
     assert_eq!(opts.expires_at, Some(1672531200000));
@@ -24,7 +69,7 @@ fn test_oauth_masquerade_options_creation() {
 fn test_oauth_masquerade_result_creation() {
     let mut headers = HashMap::new();
     headers.insert("Authorization".to_string(), "Bearer test_token".to_string());
-    
+
     let result = OauthMasqueradeResult {
         status: 200,
         duration_ms: 265,
@@ -32,7 +77,7 @@ fn test_oauth_masquerade_result_creation() {
         response_headers: headers,
         http_version: Some("HTTP/2.0".to_string()),
     };
-    
+
     assert_eq!(result.status, 200);
     assert_eq!(result.duration_ms, 265);
     assert!(result.breakdown.contains("DNS:5ms"));
@@ -45,20 +90,21 @@ fn test_oauth_masquerade_result_creation() {
 async fn test_oauth_masquerade_valid_token() {
     // Use future timestamp to ensure token is not expired
     let future_timestamp = 9999999999999i64; // Far future
-    
+
     let opts = OauthMasqueradeOptions {
         base_url: "https://api.anthropic.com".to_string(),
         access_token: "oat01_test_valid_token".to_string(),
         expires_at: Some(future_timestamp),
         stream: false,
     };
-    
-    let result = run_probe(&opts).await;
-    
+
+    let mock_client = MockHttpClient;
+    let result = run_probe(&opts, &mock_client).await;
+
     // Should succeed with mock response
     assert!(result.is_ok());
     let response = result.unwrap();
-    
+
     // Verify mock response characteristics
     assert_eq!(response.status, 200);
     assert_eq!(response.duration_ms, 265);
@@ -75,16 +121,17 @@ async fn test_oauth_masquerade_valid_token() {
 async fn test_oauth_masquerade_expired_token() {
     // Use past timestamp to simulate expired token
     let past_timestamp = 1000000000000i64; // Past timestamp
-    
+
     let opts = OauthMasqueradeOptions {
         base_url: "https://api.anthropic.com".to_string(),
         access_token: "oat01_test_expired_token".to_string(),
         expires_at: Some(past_timestamp),
         stream: false,
     };
-    
-    let result = run_probe(&opts).await;
-    
+
+    let mock_client = MockHttpClient;
+    let result = run_probe(&opts, &mock_client).await;
+
     // Should fail due to expired token
     assert!(result.is_err());
     if let Err(NetworkError::HttpError(msg)) = result {
@@ -103,9 +150,10 @@ async fn test_oauth_masquerade_no_expiry() {
         expires_at: None, // No expiry means never expired
         stream: false,
     };
-    
-    let result = run_probe(&opts).await;
-    
+
+    let mock_client = MockHttpClient;
+    let result = run_probe(&opts, &mock_client).await;
+
     // Should succeed since no expiry means never expired
     assert!(result.is_ok());
     let response = result.unwrap();
@@ -116,21 +164,22 @@ async fn test_oauth_masquerade_no_expiry() {
 #[tokio::test]
 async fn test_oauth_masquerade_with_streaming() {
     let future_timestamp = 9999999999999i64;
-    
+
     let opts = OauthMasqueradeOptions {
         base_url: "https://api.anthropic.com".to_string(),
         access_token: "oat01_test_stream_token".to_string(),
         expires_at: Some(future_timestamp),
         stream: true, // Enable streaming
     };
-    
-    let result = run_probe(&opts).await;
-    
+
+    let mock_client = MockHttpClient;
+    let result = run_probe(&opts, &mock_client).await;
+
     // Should succeed with stream parameter
     assert!(result.is_ok());
     let response = result.unwrap();
     assert_eq!(response.status, 200);
-    
+
     // Verify headers include stream-related headers (from response_headers)
     let headers = &response.response_headers;
     assert!(headers.contains_key("x-stainless-helper-method") || headers.len() > 10);
@@ -140,16 +189,17 @@ async fn test_oauth_masquerade_with_streaming() {
 #[tokio::test]
 async fn test_oauth_masquerade_custom_base_url() {
     let future_timestamp = 9999999999999i64;
-    
+
     let opts = OauthMasqueradeOptions {
         base_url: "https://custom.api.endpoint.com".to_string(),
         access_token: "oat01_test_custom_url_token".to_string(),
         expires_at: Some(future_timestamp),
         stream: false,
     };
-    
-    let result = run_probe(&opts).await;
-    
+
+    let mock_client = MockHttpClient;
+    let result = run_probe(&opts, &mock_client).await;
+
     // Should succeed even with custom base URL
     assert!(result.is_ok());
     let response = result.unwrap();
@@ -161,23 +211,24 @@ async fn test_oauth_masquerade_custom_base_url() {
 async fn test_oauth_masquerade_debug_logging() {
     // Set debug logging environment variable
     env::set_var("CCSTATUS_DEBUG", "TRUE");
-    
+
     let future_timestamp = 9999999999999i64;
-    
+
     let opts = OauthMasqueradeOptions {
         base_url: "https://api.anthropic.com".to_string(),
         access_token: "oat01_test_debug_token_very_long_for_testing".to_string(),
         expires_at: Some(future_timestamp),
         stream: true,
     };
-    
-    let result = run_probe(&opts).await;
-    
+
+    let mock_client = MockHttpClient;
+    let result = run_probe(&opts, &mock_client).await;
+
     // Should succeed and generate debug logs (we can't easily test the logs, but can verify execution)
     assert!(result.is_ok());
     let response = result.unwrap();
     assert_eq!(response.status, 200);
-    
+
     // Clean up environment variable
     env::remove_var("CCSTATUS_DEBUG");
 }
@@ -187,18 +238,19 @@ async fn test_oauth_masquerade_debug_logging() {
 async fn test_oauth_masquerade_expired_token_debug_logging() {
     // Set debug logging environment variable
     env::set_var("CCSTATUS_DEBUG", "TRUE");
-    
+
     let past_timestamp = 1000000000000i64;
-    
+
     let opts = OauthMasqueradeOptions {
         base_url: "https://api.anthropic.com".to_string(),
         access_token: "oat01_test_expired_debug_token".to_string(),
         expires_at: Some(past_timestamp),
         stream: false,
     };
-    
-    let result = run_probe(&opts).await;
-    
+
+    let mock_client = MockHttpClient;
+    let result = run_probe(&opts, &mock_client).await;
+
     // Should fail due to expired token, but debug logging should occur
     assert!(result.is_err());
     if let Err(NetworkError::HttpError(msg)) = result {
@@ -206,7 +258,7 @@ async fn test_oauth_masquerade_expired_token_debug_logging() {
     } else {
         panic!("Expected HttpError with expired token message");
     }
-    
+
     // Clean up environment variable
     env::remove_var("CCSTATUS_DEBUG");
 }
@@ -216,11 +268,11 @@ async fn test_oauth_masquerade_expired_token_debug_logging() {
 fn test_token_length_calculation_for_debug_masking() {
     let short_token = "oat01_short";
     let long_token = "oat01_this_is_a_very_long_oauth_token_for_testing_purposes_12345";
-    
+
     // Verify tokens are properly formed (start with oat01_)
     assert!(short_token.starts_with("oat01_"));
     assert!(long_token.starts_with("oat01_"));
-    
+
     // Verify length calculation (used in debug logging)
     assert_eq!(short_token.len(), 11);
     assert_eq!(long_token.len(), 64);
@@ -234,27 +286,28 @@ async fn test_oauth_masquerade_with_test_overrides() {
     env::set_var("CCSTATUS_TEST_BETA_HEADER", "test-beta-feature");
     env::set_var("CCSTATUS_TEST_STAINLESS_OS", "TestOS");
     env::set_var("CCSTATUS_TEST_STAINLESS_ARCH", "test64");
-    
+
     let future_timestamp = 9999999999999i64;
-    
+
     let opts = OauthMasqueradeOptions {
         base_url: "https://api.anthropic.com".to_string(),
         access_token: "oat01_test_overrides_token".to_string(),
         expires_at: Some(future_timestamp),
         stream: false,
     };
-    
-    let result = run_probe(&opts).await;
-    
+
+    let mock_client = MockHttpClient;
+    let result = run_probe(&opts, &mock_client).await;
+
     // Should succeed with test overrides applied
     assert!(result.is_ok());
     let response = result.unwrap();
     assert_eq!(response.status, 200);
-    
+
     // The test overrides should be reflected in the response headers
     let headers = &response.response_headers;
     assert!(headers.len() > 15); // Should have many headers with test overrides
-    
+
     // Clean up test environment variables
     env::remove_var("CCSTATUS_TEST_UA");
     env::remove_var("CCSTATUS_TEST_BETA_HEADER");

@@ -35,7 +35,7 @@
 
 ### OAuth Mode Support ✨ (v2.2.6)
 - **Smart Mode Detection**: Automatically detects OAuth mode and optimizes display
-  - **Hidden Status Lights**: Hides network status emojis (🟢/🟡/🔴/⚪) and proxy health prefix in OAuth mode
+  - **OAuth Mode Display**: Shows green status indicator and timing metrics, omits proxy health prefix in OAuth mode
   - **Skip Proxy Checks**: automatically skips proxy health checks, avoiding unnecessary network requests
   - **Preserve Timing Metrics**: Continues displaying P95 latency, timing breakdown, and HTTP version performance data
   - **Auto-Adaptive**: Automatically switches rendering mode via `api_config.source == "oauth"`

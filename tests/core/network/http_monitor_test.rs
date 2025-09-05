@@ -2087,7 +2087,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
-        expires_at: None,
+            expires_at: None,
         };
 
         // Execute probe - should use injected FakeCurlRunner
@@ -2125,7 +2125,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
-        expires_at: None,
+            expires_at: None,
         };
 
         // Test the phase timing extraction logic by executing curl probe
@@ -2192,7 +2192,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
-        expires_at: None,
+            expires_at: None,
         };
 
         // First probe - new connection
@@ -2236,7 +2236,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
-        expires_at: None,
+            expires_at: None,
         };
 
         let result = monitor.probe(ProbeMode::Green, creds, None).await.unwrap();
@@ -2276,7 +2276,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
-        expires_at: None,
+            expires_at: None,
         };
 
         for (i, (dns_ms, tcp_ms, tls_ms, ttfb_ms, total_ms)) in test_cases.iter().enumerate() {
@@ -2370,7 +2370,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
-        expires_at: None,
+            expires_at: None,
         };
 
         // When timings-curl feature is enabled, should use curl probe
@@ -2400,7 +2400,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
-        expires_at: None,
+            expires_at: None,
         };
 
         // Mock curl timing for successful request
@@ -2465,7 +2465,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
-        expires_at: None,
+            expires_at: None,
         };
 
         let result = monitor.probe(ProbeMode::Red, creds, None).await.unwrap();
@@ -2499,7 +2499,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
-        expires_at: None,
+            expires_at: None,
         };
 
         // Test edge case: connection reuse (DNS ≈ 0, but other phases present)
@@ -2704,7 +2704,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "probe-invalid-key".to_string(),
             source: CredentialSource::OAuth,
-        expires_at: None,
+            expires_at: None,
         };
 
         let metrics = ProbeMetrics {
@@ -2751,7 +2751,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-api-key".to_string(),
             source: CredentialSource::Environment,
-        expires_at: None,
+            expires_at: None,
         };
 
         let metrics = ProbeMetrics {

@@ -11,20 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### ✨ OAuth Environment Support
 - **Smart OAuth Detection**: Automatic detection and optimized rendering for OAuth tool mode
-  - **Hidden Status Lights**: OAuth mode hides network status emojis (🟢/🟡/🔴/⚪) and proxy health prefix
+  - **OAuth Mode Display**: Shows green status indicator and timing metrics, omits proxy health prefix
   - **Skip Proxy Health Checks**: OAuth credentials automatically bypass `assess_proxy_health()` to avoid unnecessary network requests
   - **Preserve Performance Metrics**: Continues displaying P95 latency, timing breakdown, and HTTP version data
   - **Auto-Adaptive Rendering**: Switches rendering mode via `api_config.source == "oauth"` detection
 
 #### 🏗️ Implementation Details
 - **HttpMonitor Enhancement**: Modified `process_probe_results()` to conditionally skip proxy health assessment based on credential source
-- **StatusRenderer Upgrade**: Added `render_oauth_metrics()` method for OAuth-specific display without status indicators
+- **StatusRenderer Upgrade**: Added `render_oauth_metrics()` method for OAuth-specific display with green status indicator
 - **API Compatibility**: Updated all `render_status()` callers to pass `api_config` parameter for source detection
 - **Type System**: Added `PartialEq` derive to `CredentialSource` enum for OAuth comparison support
 
 #### 🧪 Comprehensive Test Coverage
 - **OAuth Proxy Skip Tests**: Validates proxy health bypass with panic client (ensures no calls in OAuth mode)
-- **OAuth Rendering Tests**: Confirms status light and proxy health hiding in OAuth mode
+- **OAuth Rendering Tests**: Confirms green status indicator display and proxy health omission in OAuth mode
 - **Non-OAuth Compatibility**: Verifies existing behavior unchanged for environment/shell/config sources
 - **Edge Case Coverage**: Tests OAuth mode with minimal metrics and fallback scenarios
 

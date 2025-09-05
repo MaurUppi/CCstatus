@@ -29,7 +29,9 @@ endpoints and maintains atomic state persistence with comprehensive timing metri
 */
 
 use crate::core::network::debug_logger::get_debug_logger;
-use crate::core::network::oauth_masquerade::{OauthMasqueradeOptions, run_probe as oauth_run_probe};
+use crate::core::network::oauth_masquerade::{
+    run_probe as oauth_run_probe, OauthMasqueradeOptions,
+};
 use crate::core::network::proxy_health::{
     assess_proxy_health, build_messages_endpoint, HealthCheckClient, ProxyHealthOptions,
 };
@@ -878,21 +880,26 @@ impl HttpMonitor {
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_millis() as i64;
-                
+
                 if expires_at <= now_ms {
                     // Token expired - return error immediately without probe
                     let debug_logger = get_debug_logger();
                     let _ = debug_logger
                         .debug(
                             "HttpMonitor",
-                            &format!("OAuth token expired: now={} expires_at={}", now_ms, expires_at)
+                            &format!(
+                                "OAuth token expired: now={} expires_at={}",
+                                now_ms, expires_at
+                            ),
                         )
                         .await;
-                    
-                    return Err(NetworkError::CredentialError("OAuth token expired".to_string()));
+
+                    return Err(NetworkError::CredentialError(
+                        "OAuth token expired".to_string(),
+                    ));
                 }
             }
-            
+
             // OAuth masquerade path
             let oauth_opts = OauthMasqueradeOptions {
                 base_url: creds.base_url.clone(),
@@ -900,8 +907,8 @@ impl HttpMonitor {
                 expires_at: creds.expires_at,
                 stream: false, // No streaming for probe requests
             };
-            
-            match oauth_run_probe(&oauth_opts).await {
+
+            match oauth_run_probe(&oauth_opts, self.http_client.as_ref()).await {
                 Ok(result) => {
                     let duration = Duration::from_millis(result.duration_ms as u64);
                     return Ok((
@@ -917,17 +924,17 @@ impl HttpMonitor {
                     let _ = debug_logger
                         .error(
                             "HttpMonitor",
-                            &format!("OAuth masquerade probe failed: {}", e)
+                            &format!("OAuth masquerade probe failed: {}", e),
                         )
                         .await;
-                    
+
                     // For now, return the error rather than falling back to x-api-key
                     // (OAuth-only environments should not have x-api-key as fallback)
                     return Err(e);
                 }
             }
         }
-        
+
         // x-api-key flow (existing implementation)
         // Check if curl runner is available for detailed timing measurements
         #[cfg(feature = "timings-curl")]
