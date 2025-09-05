@@ -237,18 +237,17 @@ pub fn run_probe(opts: &OauthMasqueradeOptions) -> Result<OauthMasqueradeResult,
                 .unwrap_or_default()
                 .as_millis() as i64;
             
+            let expiry_desc = opts.expires_at
+                .map(|exp| format!("{}", exp))
+                .unwrap_or_else(|| "none".to_string());
+                
             tokio::spawn(async move {
-                if let Ok(logger) = get_debug_logger().await {
-                    let expiry_desc = opts.expires_at
-                        .map(|exp| format!("{}", exp))
-                        .unwrap_or_else(|| "none".to_string());
-                    
-                    let _ = logger.debug(
-                        "OauthMasquerade",
-                        &format!("reason=expired_token now_ms={} expires_at_ms={} action=skip_no_probe", 
-                                now_ms, expiry_desc)
-                    ).await;
-                }
+                let logger = get_debug_logger();
+                let _ = logger.debug(
+                    "OauthMasquerade",
+                    &format!("reason=expired_token now_ms={} expires_at_ms={} action=skip_no_probe", 
+                            now_ms, expiry_desc)
+                ).await;
             });
         }
         

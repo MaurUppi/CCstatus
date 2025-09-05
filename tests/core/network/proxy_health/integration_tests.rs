@@ -151,6 +151,7 @@ fn create_proxy_credentials() -> ApiCredentials {
         base_url: "https://proxy.example.com".to_string(),
         auth_token: "test_token".to_string(),
         source: CredentialSource::Environment,
+        expires_at: None,
     }
 }
 
@@ -160,6 +161,7 @@ fn create_official_credentials() -> ApiCredentials {
         base_url: "https://api.anthropic.com".to_string(),
         auth_token: "test_token".to_string(),
         source: CredentialSource::Environment,
+        expires_at: None,
     }
 }
 

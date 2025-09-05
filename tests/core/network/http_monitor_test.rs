@@ -387,6 +387,7 @@ fn test_credentials() -> ApiCredentials {
         base_url: "https://api.anthropic.com".to_string(),
         auth_token: "test-token-12345".to_string(),
         source: CredentialSource::Environment,
+        expires_at: None,
     }
 }
 
@@ -1037,6 +1038,7 @@ async fn test_api_config_recording() {
         base_url: "https://custom-api.example.com".to_string(),
         auth_token: "custom-token".to_string(),
         source: CredentialSource::Environment,
+        expires_at: None,
     };
 
     let result = monitor.probe(ProbeMode::Green, creds, None).await.unwrap();
@@ -1200,6 +1202,7 @@ async fn test_api_config_source_formatting() {
         base_url: "https://api.anthropic.com".to_string(),
         auth_token: "test-token".to_string(),
         source: CredentialSource::Environment,
+        expires_at: None,
     };
 
     let result = monitor.probe(ProbeMode::Green, creds, None).await.unwrap();
@@ -1381,6 +1384,7 @@ async fn test_comprehensive_enhancements_integration() {
         base_url: "https://api.anthropic.com".to_string(),
         auth_token: "test-token".to_string(),
         source: CredentialSource::ShellConfig(std::path::PathBuf::from("/home/user/.bashrc")),
+        expires_at: None,
     };
 
     let result1 = monitor.probe(ProbeMode::Green, creds, None).await.unwrap();
@@ -1404,6 +1408,7 @@ async fn test_comprehensive_enhancements_integration() {
         source: CredentialSource::ClaudeConfig(std::path::PathBuf::from(
             "/home/user/.claude/config",
         )),
+        expires_at: None,
     };
 
     let result2 = monitor
@@ -1456,6 +1461,7 @@ async fn test_session_id_tracking_and_persistence() {
         base_url: "https://api.anthropic.com".to_string(),
         auth_token: "test-token".to_string(),
         source: CredentialSource::Environment,
+        expires_at: None,
     };
 
     let result = monitor.probe(ProbeMode::Cold, creds, None).await.unwrap();
@@ -1492,6 +1498,7 @@ async fn test_cold_probe_without_session_id() {
         base_url: "https://api.anthropic.com".to_string(),
         auth_token: "test-token".to_string(),
         source: CredentialSource::Environment,
+        expires_at: None,
     };
 
     let result = monitor.probe(ProbeMode::Cold, creds, None).await.unwrap();
@@ -1525,6 +1532,7 @@ async fn test_session_id_update_and_overwrite() {
         base_url: "https://api.anthropic.com".to_string(),
         auth_token: "test-token".to_string(),
         source: CredentialSource::Environment,
+        expires_at: None,
     };
 
     // First COLD probe with session ID 1
@@ -1585,6 +1593,7 @@ async fn test_session_deduplication_different_probe_modes() {
         base_url: "https://api.anthropic.com".to_string(),
         auth_token: "test-token".to_string(),
         source: CredentialSource::Environment,
+        expires_at: None,
     };
 
     // Execute COLD probe - should update session ID
@@ -1661,6 +1670,7 @@ async fn test_session_id_edge_cases() {
         base_url: "https://api.anthropic.com".to_string(),
         auth_token: "test-token".to_string(),
         source: CredentialSource::Environment,
+        expires_at: None,
     };
 
     // Test empty string session ID
@@ -1717,6 +1727,7 @@ async fn test_session_persistence_across_monitor_instances() {
         base_url: "https://api.anthropic.com".to_string(),
         auth_token: "test-token".to_string(),
         source: CredentialSource::Environment,
+        expires_at: None,
     };
 
     // First monitor instance - set session and execute COLD probe
@@ -2076,6 +2087,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
+        expires_at: None,
         };
 
         // Execute probe - should use injected FakeCurlRunner
@@ -2113,6 +2125,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
+        expires_at: None,
         };
 
         // Test the phase timing extraction logic by executing curl probe
@@ -2179,6 +2192,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
+        expires_at: None,
         };
 
         // First probe - new connection
@@ -2222,6 +2236,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
+        expires_at: None,
         };
 
         let result = monitor.probe(ProbeMode::Green, creds, None).await.unwrap();
@@ -2261,6 +2276,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
+        expires_at: None,
         };
 
         for (i, (dns_ms, tcp_ms, tls_ms, ttfb_ms, total_ms)) in test_cases.iter().enumerate() {
@@ -2354,6 +2370,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
+        expires_at: None,
         };
 
         // When timings-curl feature is enabled, should use curl probe
@@ -2383,6 +2400,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
+        expires_at: None,
         };
 
         // Mock curl timing for successful request
@@ -2447,6 +2465,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
+        expires_at: None,
         };
 
         let result = monitor.probe(ProbeMode::Red, creds, None).await.unwrap();
@@ -2480,6 +2499,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-token".to_string(),
             source: CredentialSource::Environment,
+        expires_at: None,
         };
 
         // Test edge case: connection reuse (DNS ≈ 0, but other phases present)
@@ -2684,6 +2704,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "probe-invalid-key".to_string(),
             source: CredentialSource::OAuth,
+        expires_at: None,
         };
 
         let metrics = ProbeMetrics {
@@ -2730,6 +2751,7 @@ mod curl_timing_tests {
             base_url: "https://api.anthropic.com".to_string(),
             auth_token: "test-api-key".to_string(),
             source: CredentialSource::Environment,
+        expires_at: None,
         };
 
         let metrics = ProbeMetrics {

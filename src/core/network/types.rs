@@ -110,6 +110,8 @@ pub struct ApiCredentials {
     pub base_url: String,
     pub auth_token: String,
     pub source: CredentialSource,
+    /// Token expiry timestamp in milliseconds since epoch (OAuth only)
+    pub expires_at: Option<i64>,
 }
 
 /// Error metadata from JSONL transcript

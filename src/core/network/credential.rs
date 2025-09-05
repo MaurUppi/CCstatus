@@ -371,6 +371,7 @@ impl CredentialManager {
                 base_url,
                 auth_token,
                 source: CredentialSource::Environment,
+                expires_at: None,
             }));
         }
 
@@ -398,10 +399,17 @@ impl CredentialManager {
                     "Test override: simulating OAuth credentials present",
                 )
                 .await;
+            
+            // Test override with configurable expiry
+            let test_expires_at = env::var("CCSTATUS_TEST_OAUTH_EXPIRES_AT")
+                .ok()
+                .and_then(|s| s.parse::<i64>().ok());
+            
             return Ok(Some(ApiCredentials {
                 base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
                 auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
                 source: CredentialSource::OAuth,
+                expires_at: test_expires_at,
             }));
         }
 
@@ -414,10 +422,17 @@ impl CredentialManager {
                         "OAuth env token present; selecting OAuth",
                     )
                     .await;
+                
+                // For env token testing, use configurable expiry
+                let test_expires_at = env::var("CCSTATUS_TEST_OAUTH_EXPIRES_AT")
+                    .ok()
+                    .and_then(|s| s.parse::<i64>().ok());
+                    
                 return Ok(Some(ApiCredentials {
                     base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
                     auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
                     source: CredentialSource::OAuth,
+                    expires_at: test_expires_at,
                 }));
             }
         }
@@ -441,13 +456,8 @@ impl CredentialManager {
                     )
                     .await;
 
-                // Return fixed OAuth credentials with dummy key
-                // Do NOT forward actual secrets from Keychain
-                Ok(Some(ApiCredentials {
-                    base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
-                    auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
-                    source: CredentialSource::OAuth,
-                }))
+                // Parse actual OAuth credentials from Keychain
+                self.parse_oauth_keychain_credentials(&logger).await
             }
             Ok(Ok(_)) => {
                 logger
@@ -493,10 +503,17 @@ impl CredentialManager {
                     "Test override: simulating OAuth credentials present",
                 )
                 .await;
+            
+            // Test override with configurable expiry
+            let test_expires_at = env::var("CCSTATUS_TEST_OAUTH_EXPIRES_AT")
+                .ok()
+                .and_then(|s| s.parse::<i64>().ok());
+            
             return Ok(Some(ApiCredentials {
                 base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
                 auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
                 source: CredentialSource::OAuth,
+                expires_at: test_expires_at,
             }));
         }
 
@@ -509,10 +526,17 @@ impl CredentialManager {
                         "OAuth env token present; selecting OAuth",
                     )
                     .await;
+                
+                // For env token testing, use configurable expiry
+                let test_expires_at = env::var("CCSTATUS_TEST_OAUTH_EXPIRES_AT")
+                    .ok()
+                    .and_then(|s| s.parse::<i64>().ok());
+                    
                 return Ok(Some(ApiCredentials {
                     base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
                     auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
                     source: CredentialSource::OAuth,
+                    expires_at: test_expires_at,
                 }));
             }
         }
@@ -569,6 +593,7 @@ impl CredentialManager {
                 base_url: creds.0,
                 auth_token: creds.1,
                 source: CredentialSource::ShellConfig(source_path.to_path_buf()),
+                expires_at: None,
             }));
         }
 
@@ -578,6 +603,7 @@ impl CredentialManager {
                 base_url: creds.0,
                 auth_token: creds.1,
                 source: CredentialSource::ShellConfig(source_path.to_path_buf()),
+                expires_at: None,
             }));
         }
 
@@ -587,6 +613,7 @@ impl CredentialManager {
                 base_url: creds.0,
                 auth_token: creds.1,
                 source: CredentialSource::ShellConfig(source_path.to_path_buf()),
+                expires_at: None,
             }));
         }
 
@@ -864,6 +891,7 @@ impl CredentialManager {
                 base_url: url,
                 auth_token: token,
                 source: CredentialSource::ShellConfig(source_path.to_path_buf()),
+                expires_at: None,
             }));
         }
 
@@ -893,6 +921,7 @@ impl CredentialManager {
                 base_url: base_url.to_string(),
                 auth_token: auth_token.to_string(),
                 source: CredentialSource::ClaudeConfig(config_path.clone()),
+                expires_at: None,
             }));
         }
 
@@ -905,10 +934,104 @@ impl CredentialManager {
                 base_url: base_url.to_string(),
                 auth_token: auth_token.to_string(),
                 source: CredentialSource::ClaudeConfig(config_path.clone()),
+                expires_at: None,
             }));
         }
 
         Ok(None)
+    }
+
+    /// Parse OAuth credentials from macOS Keychain JSON
+    #[cfg(target_os = "macos")]
+    async fn parse_oauth_keychain_credentials(
+        &self, 
+        logger: &crate::core::network::debug_logger::EnhancedDebugLogger
+    ) -> Result<Option<ApiCredentials>, NetworkError> {
+        // Get the actual credentials from keychain with -w flag
+        let output = tokio::task::spawn_blocking(|| {
+            std::process::Command::new("security")
+                .arg("find-generic-password")
+                .arg("-s")
+                .arg(Self::OAUTH_KEYCHAIN_SERVICE)
+                .arg("-w")  // Output password only
+                .output()
+        })
+        .await;
+
+        match output {
+            Ok(Ok(result)) if result.status.success() => {
+                let keychain_data = String::from_utf8(result.stdout)
+                    .map_err(|e| NetworkError::CredentialError(format!("Keychain data not UTF-8: {}", e)))?
+                    .trim()
+                    .to_string();
+
+                if keychain_data.is_empty() {
+                    logger
+                        .debug("CredentialManager", "Empty keychain data for OAuth credentials")
+                        .await;
+                    return Ok(None);
+                }
+
+                // Parse JSON from keychain
+                let keychain_json: serde_json::Value = serde_json::from_str(&keychain_data)
+                    .map_err(|e| NetworkError::CredentialError(format!("Invalid JSON in keychain: {}", e)))?;
+
+                // Extract OAuth credentials
+                let access_token = keychain_json
+                    .get("claudeAiOauth")
+                    .and_then(|oauth| oauth.get("accessToken"))
+                    .and_then(|token| token.as_str())
+                    .ok_or_else(|| NetworkError::CredentialError("Missing claudeAiOauth.accessToken in keychain".to_string()))?;
+
+                // Extract expiry (optional)
+                let expires_at = keychain_json
+                    .get("claudeAiOauth")
+                    .and_then(|oauth| oauth.get("expiresAt"))
+                    .and_then(|exp| exp.as_i64());
+
+                logger
+                    .debug(
+                        "CredentialManager",
+                        &format!(
+                            "Parsed OAuth credentials: token_length={} expires_at={}",
+                            access_token.len(),
+                            expires_at.map_or("none".to_string(), |exp| exp.to_string())
+                        )
+                    )
+                    .await;
+
+                Ok(Some(ApiCredentials {
+                    base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
+                    auth_token: access_token.to_string(),
+                    source: CredentialSource::OAuth,
+                    expires_at,
+                }))
+            }
+            Ok(Ok(_)) => {
+                logger
+                    .debug("CredentialManager", "Keychain command failed for OAuth credentials")
+                    .await;
+                Ok(None)
+            }
+            Ok(Err(e)) => {
+                logger
+                    .debug(
+                        "CredentialManager",
+                        &format!("Security command execution error: {}", e)
+                    )
+                    .await;
+                Ok(None)
+            }
+            Err(e) => {
+                logger
+                    .debug(
+                        "CredentialManager",
+                        &format!("Keychain access error: {}", e)
+                    )
+                    .await;
+                Ok(None)
+            }
+        }
     }
 }
 
