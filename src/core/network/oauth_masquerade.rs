@@ -204,6 +204,10 @@ fn build_request_body(opts: &OauthMasqueradeOptions) -> Result<Vec<u8>, NetworkE
     }
     
     serde_json::to_vec(&body).map_err(|e| {
+        // Debug logging for serialization errors
+        if std::env::var("CCSTATUS_DEBUG").unwrap_or_default().to_uppercase() == "TRUE" {
+            eprintln!("OAuth masquerade body serialization error: {}", e);
+        }
         NetworkError::HttpError(format!("OAuth masquerade body serialization failed: {}", e))
     })
 }
@@ -279,6 +283,24 @@ pub async fn run_probe(opts: &OauthMasqueradeOptions) -> Result<OauthMasqueradeR
     
     // Construct endpoint URL
     let endpoint = format!("{}/v1/messages", opts.base_url);
+    
+    // Debug logging: Request construction details
+    if env::var("CCSTATUS_DEBUG").unwrap_or_default().to_uppercase() == "TRUE" {
+        let logger = get_debug_logger();
+        let header_count = headers.len();
+        let body_size = body.len();
+        let has_test_overrides = env::var(TEST_HEADERS_FILE).is_ok() 
+            || env::var(TEST_UA).is_ok() 
+            || env::var(TEST_BETA_HEADER).is_ok();
+            
+        let _ = logger.debug(
+            "OauthMasquerade",
+            &format!(
+                "request_construction endpoint={} headers_count={} body_size={} test_overrides={} stream={}",
+                endpoint, header_count, body_size, has_test_overrides, opts.stream
+            )
+        ).await;
+    }
     
     // Use existing HTTP client infrastructure (simplified implementation for now)
     // In a full implementation, this would reuse the curl/isahc transport from http_monitor
