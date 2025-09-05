@@ -37,7 +37,6 @@ use crate::core::network::proxy_health::{
 };
 use serde_json;
 
-
 #[cfg(all(feature = "network-monitoring", feature = "timings-curl"))]
 use crate::core::network::proxy_health::CurlHealthCheckClient;
 

@@ -18,9 +18,9 @@
 //!
 //! 2. **OAuth (macOS only)** - macOS Keychain integration
 //!    - Uses `security find-generic-password -s "Claude Code-credentials"`
-//!    - Returns fixed credentials when keychain item exists:
+//!    - Returns OAuth credentials when keychain item exists:
 //!      - Base URL: `https://api.anthropic.com`
-//!      - Auth Token: `probe-invalid-key` (dummy key for testing)
+//!      - Auth Token: Actual OAuth token from CLAUDE_CODE_OAUTH_TOKEN or Keychain
 //!    - Fails silently on errors (returns None)
 //!    - Skipped entirely on non-macOS platforms
 //!
@@ -49,7 +49,7 @@
 //! The OAuth integration provides cross-platform OAuth detection with fixed credentials:
 //!
 //! - **Detection Signals**: Test flag `CCSTATUS_TEST_OAUTH_PRESENT`, `CLAUDE_CODE_OAUTH_TOKEN`, and (macOS) Keychain presence
-//! - **Behavior on Selection**: Fixed `base_url=https://api.anthropic.com`, `auth_token=probe-invalid-key`, source=`oauth`
+//! - **Behavior on Selection**: Fixed `base_url=https://api.anthropic.com`, `auth_token=<actual-oauth-token>`, source=`oauth`
 //! - **OAuth Masquerade Mode**: OAuth tokens are sent as first-party-like Authorization headers to `https://api.anthropic.com` when unexpired, masquerading as direct client requests
 //! - **Cross-platform**: `CLAUDE_CODE_OAUTH_TOKEN` env var works on all platforms
 //! - **macOS Keychain**: `security find-generic-password -s "Claude Code-credentials"`
@@ -430,7 +430,7 @@ impl CredentialManager {
 
                 return Ok(Some(ApiCredentials {
                     base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
-                    auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
+                    auth_token: oauth_token, // Use actual OAuth token instead of dummy
                     source: CredentialSource::OAuth,
                     expires_at: test_expires_at,
                 }));
@@ -534,7 +534,7 @@ impl CredentialManager {
 
                 return Ok(Some(ApiCredentials {
                     base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
-                    auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
+                    auth_token: oauth_token, // Use actual OAuth token instead of dummy
                     source: CredentialSource::OAuth,
                     expires_at: test_expires_at,
                 }));

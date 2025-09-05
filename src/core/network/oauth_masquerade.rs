@@ -335,7 +335,9 @@ pub async fn run_probe(
             });
         }
 
-        return Err(NetworkError::HttpError("OAuth token expired".to_string()));
+        return Err(NetworkError::CredentialError(
+            "OAuth token expired".to_string(),
+        ));
     }
 
     // Debug logging: Entry decision
@@ -519,7 +521,9 @@ pub async fn run_probe(
             });
         }
 
-        return Err(NetworkError::HttpError("OAuth token expired".to_string()));
+        return Err(NetworkError::CredentialError(
+            "OAuth token expired".to_string(),
+        ));
     }
 
     // Debug logging: Entry decision
@@ -758,7 +762,7 @@ mod tests {
 
         #[cfg(feature = "timings-curl")]
         let result = run_probe(&opts, &mock_client, None).await.unwrap();
-        
+
         #[cfg(not(feature = "timings-curl"))]
         let result = run_probe(&opts, &mock_client).await.unwrap();
 

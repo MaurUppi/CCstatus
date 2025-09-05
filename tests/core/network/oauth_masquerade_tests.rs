@@ -134,10 +134,10 @@ async fn test_oauth_masquerade_expired_token() {
 
     // Should fail due to expired token
     assert!(result.is_err());
-    if let Err(NetworkError::HttpError(msg)) = result {
+    if let Err(NetworkError::CredentialError(msg)) = result {
         assert_eq!(msg, "OAuth token expired");
     } else {
-        panic!("Expected HttpError with expired token message");
+        panic!("Expected CredentialError with expired token message");
     }
 }
 
@@ -253,10 +253,10 @@ async fn test_oauth_masquerade_expired_token_debug_logging() {
 
     // Should fail due to expired token, but debug logging should occur
     assert!(result.is_err());
-    if let Err(NetworkError::HttpError(msg)) = result {
+    if let Err(NetworkError::CredentialError(msg)) = result {
         assert_eq!(msg, "OAuth token expired");
     } else {
-        panic!("Expected HttpError with expired token message");
+        panic!("Expected CredentialError with expired token message");
     }
 
     // Clean up environment variable
@@ -313,4 +313,187 @@ async fn test_oauth_masquerade_with_test_overrides() {
     env::remove_var("CCSTATUS_TEST_BETA_HEADER");
     env::remove_var("CCSTATUS_TEST_STAINLESS_OS");
     env::remove_var("CCSTATUS_TEST_STAINLESS_ARCH");
+}
+
+#[cfg(feature = "timings-curl")]
+mod curl_tests {
+    use super::*;
+    use ccstatus::core::network::http_monitor::{CurlProbeRunner, PhaseTimings};
+    use ccstatus::core::network::types::NetworkError;
+
+    /// Mock curl runner that returns successful phase timings
+    struct MockSuccessfulCurlRunner;
+
+    #[async_trait::async_trait]
+    impl CurlProbeRunner for MockSuccessfulCurlRunner {
+        async fn run(
+            &self,
+            _url: &str,
+            _headers: &[(&str, String)],
+            _body: &[u8],
+            _timeout_ms: u32,
+        ) -> Result<PhaseTimings, NetworkError> {
+            Ok(PhaseTimings {
+                status: 200,
+                dns_ms: 20,
+                tcp_ms: 25,
+                tls_ms: 15,
+                ttfb_ms: 100,
+                total_ttfb_ms: 160,
+                total_ms: 190,
+            })
+        }
+    }
+
+    /// Mock curl runner that fails to test isahc fallback
+    struct MockFailingCurlRunner;
+
+    #[async_trait::async_trait]
+    impl CurlProbeRunner for MockFailingCurlRunner {
+        async fn run(
+            &self,
+            _url: &str,
+            _headers: &[(&str, String)],
+            _body: &[u8],
+            _timeout_ms: u32,
+        ) -> Result<PhaseTimings, NetworkError> {
+            Err(NetworkError::HttpError("Curl execution failed".to_string()))
+        }
+    }
+
+    /// Test OAuth masquerade with successful curl phase timings
+    #[tokio::test]
+    async fn test_oauth_masquerade_curl_success() {
+        let future_timestamp = 9999999999999i64;
+
+        let opts = OauthMasqueradeOptions {
+            base_url: "https://api.anthropic.com".to_string(),
+            access_token: "oat01_test_curl_success_token".to_string(),
+            expires_at: Some(future_timestamp),
+            stream: false,
+        };
+
+        let mock_client = MockHttpClient;
+        let mock_curl_runner = MockSuccessfulCurlRunner;
+
+        let result = run_probe(&opts, &mock_client, Some(&mock_curl_runner)).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+
+        // Verify curl response characteristics
+        assert_eq!(response.status, 200);
+        assert_eq!(response.duration_ms, 190); // total_ms from curl
+
+        // Verify phase timing formatting: DNS|TCP|TLS|TTFB|Total
+        let expected_breakdown = "DNS:20ms|TCP:25ms|TLS:15ms|TTFB:100ms|Total:190ms";
+        assert_eq!(response.breakdown, expected_breakdown);
+        assert_eq!(response.http_version, Some("HTTP/2.0".to_string()));
+
+        // Curl path doesn't capture response headers, so it should be empty
+        assert!(response.response_headers.is_empty());
+    }
+
+    /// Test OAuth masquerade with curl failure falls back to isahc
+    #[tokio::test]
+    async fn test_oauth_masquerade_curl_fallback_to_isahc() {
+        let future_timestamp = 9999999999999i64;
+
+        let opts = OauthMasqueradeOptions {
+            base_url: "https://api.anthropic.com".to_string(),
+            access_token: "oat01_test_curl_fallback_token".to_string(),
+            expires_at: Some(future_timestamp),
+            stream: false,
+        };
+
+        let mock_client = MockHttpClient;
+        let mock_failing_curl_runner = MockFailingCurlRunner;
+
+        let result = run_probe(&opts, &mock_client, Some(&mock_failing_curl_runner)).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+
+        // Should fall back to isahc (MockHttpClient) after curl fails
+        assert_eq!(response.status, 200);
+        assert_eq!(response.duration_ms, 265); // from MockHttpClient
+
+        // Should have isahc breakdown format (not curl format)
+        assert!(response.breakdown.contains("DNS:5ms"));
+        assert!(response.breakdown.contains("TCP:10ms"));
+        assert!(response.breakdown.contains("TLS:50ms"));
+        assert!(response.breakdown.contains("ServerTTFB:200ms"));
+        assert!(response.breakdown.contains("Total:265ms"));
+        assert_eq!(response.http_version, Some("HTTP/2.0".to_string()));
+
+        // Isahc path captures response headers
+        assert!(!response.response_headers.is_empty());
+        assert!(response.response_headers.contains_key("Server"));
+        assert!(response.response_headers.contains_key("Cache-Control"));
+    }
+
+    /// Test OAuth masquerade with no curl runner uses isahc directly
+    #[tokio::test]
+    async fn test_oauth_masquerade_no_curl_runner_uses_isahc() {
+        let future_timestamp = 9999999999999i64;
+
+        let opts = OauthMasqueradeOptions {
+            base_url: "https://api.anthropic.com".to_string(),
+            access_token: "oat01_test_no_curl_token".to_string(),
+            expires_at: Some(future_timestamp),
+            stream: false,
+        };
+
+        let mock_client = MockHttpClient;
+
+        // Pass None for curl_runner to test direct isahc path
+        let result = run_probe(&opts, &mock_client, None).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+
+        // Should use isahc directly (MockHttpClient)
+        assert_eq!(response.status, 200);
+        assert_eq!(response.duration_ms, 265); // from MockHttpClient
+
+        // Should have isahc breakdown format
+        assert!(response.breakdown.contains("DNS:5ms"));
+        assert!(response.breakdown.contains("TCP:10ms"));
+        assert!(response.breakdown.contains("TLS:50ms"));
+        assert!(response.breakdown.contains("ServerTTFB:200ms"));
+        assert!(response.breakdown.contains("Total:265ms"));
+        assert_eq!(response.http_version, Some("HTTP/2.0".to_string()));
+
+        // Isahc path captures response headers
+        assert!(!response.response_headers.is_empty());
+    }
+
+    /// Test OAuth masquerade curl with streaming enabled
+    #[tokio::test]
+    async fn test_oauth_masquerade_curl_with_streaming() {
+        let future_timestamp = 9999999999999i64;
+
+        let opts = OauthMasqueradeOptions {
+            base_url: "https://api.anthropic.com".to_string(),
+            access_token: "oat01_test_curl_stream_token".to_string(),
+            expires_at: Some(future_timestamp),
+            stream: true, // Enable streaming
+        };
+
+        let mock_client = MockHttpClient;
+        let mock_curl_runner = MockSuccessfulCurlRunner;
+
+        let result = run_probe(&opts, &mock_client, Some(&mock_curl_runner)).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+
+        // Should succeed with curl timings
+        assert_eq!(response.status, 200);
+        assert_eq!(response.duration_ms, 190);
+
+        // Verify phase timing formatting includes all phases
+        let expected_breakdown = "DNS:20ms|TCP:25ms|TLS:15ms|TTFB:100ms|Total:190ms";
+        assert_eq!(response.breakdown, expected_breakdown);
+    }
 }
