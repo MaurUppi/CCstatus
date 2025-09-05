@@ -50,7 +50,7 @@
 //!
 //! - **Detection Signals**: Test flag `CCSTATUS_TEST_OAUTH_PRESENT`, `CLAUDE_CODE_OAUTH_TOKEN`, and (macOS) Keychain presence
 //! - **Behavior on Selection**: Fixed `base_url=https://api.anthropic.com`, `auth_token=probe-invalid-key`, source=`oauth`
-//! - **Never Forward OAuth Tokens**: OAuth tokens are never sent to REST API
+//! - **OAuth Masquerade Mode**: OAuth tokens are sent as first-party-like Authorization headers to `https://api.anthropic.com` when unexpired, masquerading as direct client requests
 //! - **Cross-platform**: `CLAUDE_CODE_OAUTH_TOKEN` env var works on all platforms
 //! - **macOS Keychain**: `security find-generic-password -s "Claude Code-credentials"`
 //! - **Error Handling**: All OAuth errors fail silently, continuing to next source
