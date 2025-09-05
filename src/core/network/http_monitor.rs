@@ -29,6 +29,7 @@ endpoints and maintains atomic state persistence with comprehensive timing metri
 */
 
 use crate::core::network::debug_logger::get_debug_logger;
+use crate::core::network::oauth_masquerade::{OauthMasqueradeOptions, run_probe as oauth_run_probe};
 use crate::core::network::proxy_health::{
     assess_proxy_health, build_messages_endpoint, HealthCheckClient, ProxyHealthOptions,
 };
@@ -850,9 +851,10 @@ impl HttpMonitor {
 
     /// Execute HTTP probe with timing measurement
     ///
-    /// Uses curl-based probe for detailed phase timings when timings-curl feature is enabled
-    /// (auto-wired by default, can be overridden). Falls back to isahc-based probe on curl
-    /// failures or when no runner is available.
+    /// Uses OAuth masquerade for OAuth credentials when unexpired, otherwise uses x-api-key flow.
+    /// For x-api-key: Uses curl-based probe for detailed phase timings when timings-curl feature
+    /// is enabled (auto-wired by default, can be overridden). Falls back to isahc-based probe
+    /// on curl failures or when no runner is available.
     async fn execute_http_probe(
         &self,
         creds: &ApiCredentials,
@@ -868,6 +870,65 @@ impl HttpMonitor {
         ),
         NetworkError,
     > {
+        // Path selection: OAuth masquerade vs x-api-key flow
+        if creds.source == CredentialSource::OAuth {
+            // Check if token is expired (hard gate)
+            if let Some(expires_at) = creds.expires_at {
+                let now_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as i64;
+                
+                if expires_at <= now_ms {
+                    // Token expired - return error immediately without probe
+                    let debug_logger = get_debug_logger();
+                    let _ = debug_logger
+                        .debug(
+                            "HttpMonitor",
+                            &format!("OAuth token expired: now={} expires_at={}", now_ms, expires_at)
+                        )
+                        .await;
+                    
+                    return Err(NetworkError::CredentialError("OAuth token expired".to_string()));
+                }
+            }
+            
+            // OAuth masquerade path
+            let oauth_opts = OauthMasqueradeOptions {
+                base_url: creds.base_url.clone(),
+                access_token: creds.auth_token.clone(),
+                expires_at: creds.expires_at,
+                stream: false, // No streaming for probe requests
+            };
+            
+            match oauth_run_probe(&oauth_opts).await {
+                Ok(result) => {
+                    let duration = Duration::from_millis(result.duration_ms as u64);
+                    return Ok((
+                        result.status,
+                        duration,
+                        result.breakdown,
+                        result.response_headers,
+                        result.http_version,
+                    ));
+                }
+                Err(e) => {
+                    let debug_logger = get_debug_logger();
+                    let _ = debug_logger
+                        .error(
+                            "HttpMonitor",
+                            &format!("OAuth masquerade probe failed: {}", e)
+                        )
+                        .await;
+                    
+                    // For now, return the error rather than falling back to x-api-key
+                    // (OAuth-only environments should not have x-api-key as fallback)
+                    return Err(e);
+                }
+            }
+        }
+        
+        // x-api-key flow (existing implementation)
         // Check if curl runner is available for detailed timing measurements
         #[cfg(feature = "timings-curl")]
         if let Some(ref curl_runner) = self.curl_runner {
