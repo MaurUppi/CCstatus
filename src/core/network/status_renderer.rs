@@ -147,9 +147,12 @@ impl StatusRenderer {
     }
 
     /// Render OAuth mode metrics without status lights or proxy health
-    /// Shows only timing breakdown, HTTP version, and P95 metrics
+    /// Shows only timing breakdown, HTTP version, and P95 metrics with green indicator
     fn render_oauth_metrics(&self, metrics: &NetworkMetrics) -> String {
         let mut parts = Vec::new();
+        
+        // Add green status indicator for OAuth mode
+        parts.push("🟢".to_string());
 
         // Add P95 if available
         if metrics.p95_latency_ms > 0 {
@@ -167,8 +170,8 @@ impl StatusRenderer {
         }
 
         // Join parts with space separator, or return minimal info if nothing available
-        if parts.is_empty() {
-            "OAuth mode".to_string()
+        if parts.len() == 1 { // Only emoji present
+            "🟢 OAuth mode".to_string()
         } else {
             parts.join(" ")
         }
