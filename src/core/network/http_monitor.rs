@@ -37,11 +37,12 @@ use crate::core::network::proxy_health::{
 };
 use serde_json;
 
-#[cfg(feature = "network-monitoring")]
-use crate::core::network::proxy_health::IsahcHealthCheckClient;
 
 #[cfg(all(feature = "network-monitoring", feature = "timings-curl"))]
 use crate::core::network::proxy_health::CurlHealthCheckClient;
+
+#[cfg(all(feature = "network-monitoring", not(feature = "timings-curl")))]
+use crate::core::network::proxy_health::IsahcHealthCheckClient;
 
 #[cfg(not(feature = "network-monitoring"))]
 use crate::core::network::proxy_health::MockHealthCheckClient;
@@ -908,7 +909,18 @@ impl HttpMonitor {
                 stream: false, // No streaming for probe requests
             };
 
-            match oauth_run_probe(&oauth_opts, self.http_client.as_ref()).await {
+            #[cfg(feature = "timings-curl")]
+            let result = oauth_run_probe(
+                &oauth_opts,
+                self.http_client.as_ref(),
+                self.curl_runner.as_ref().map(|r| r.as_ref()),
+            )
+            .await;
+
+            #[cfg(not(feature = "timings-curl"))]
+            let result = oauth_run_probe(&oauth_opts, self.http_client.as_ref()).await;
+
+            match result {
                 Ok(result) => {
                     let duration = Duration::from_millis(result.duration_ms as u64);
                     return Ok((

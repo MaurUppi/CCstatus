@@ -8,6 +8,9 @@ use crate::core::network::types::NetworkError;
 use std::collections::HashMap;
 use std::env;
 
+#[cfg(feature = "timings-curl")]
+use crate::core::network::http_monitor::CurlProbeRunner;
+
 /// Configuration options for OAuth masquerade probe
 pub struct OauthMasqueradeOptions {
     /// Base URL for the API endpoint (expect https://api.anthropic.com)
@@ -260,15 +263,19 @@ fn build_request_body(opts: &OauthMasqueradeOptions) -> Result<Vec<u8>, NetworkE
 
     serde_json::to_vec(&body).map_err(|e| {
         // Debug logging for serialization errors
-        if std::env::var("CCSTATUS_DEBUG")
-            .unwrap_or_default()
-            .to_uppercase()
-            == "TRUE"
-        {
+        if is_debug_enabled() {
             eprintln!("OAuth masquerade body serialization error: {}", e);
         }
         NetworkError::HttpError(format!("OAuth masquerade body serialization failed: {}", e))
     })
+}
+
+/// Check if debug mode is enabled via CCSTATUS_DEBUG environment variable
+fn is_debug_enabled() -> bool {
+    env::var("CCSTATUS_DEBUG")
+        .unwrap_or_default()
+        .to_uppercase()
+        == "TRUE"
 }
 
 /// Check if OAuth token is expired
@@ -288,20 +295,22 @@ fn is_token_expired(expires_at: Option<i64>) -> bool {
 ///
 /// This function executes a first-party-shaped POST request to the Claude API
 /// when valid OAuth credentials are present and unexpired.
+///
+/// When `timings-curl` feature is enabled and a curl_runner is provided, uses curl
+/// for detailed phase timings (DNS|TCP|TLS|TTFB breakdown), otherwise falls back
+/// to isahc-based transport with simplified "Total:...ms" timing.
+#[cfg(feature = "timings-curl")]
 pub async fn run_probe(
     opts: &OauthMasqueradeOptions,
     http_client: &dyn crate::core::network::http_monitor::HttpClientTrait,
+    curl_runner: Option<&dyn CurlProbeRunner>,
 ) -> Result<OauthMasqueradeResult, NetworkError> {
     use crate::core::network::debug_logger::get_debug_logger;
 
     // Check for expired token (hard gate)
     if is_token_expired(opts.expires_at) {
         // Log expiry skip when CCSTATUS_DEBUG=TRUE
-        if env::var("CCSTATUS_DEBUG")
-            .unwrap_or_default()
-            .to_uppercase()
-            == "TRUE"
-        {
+        if is_debug_enabled() {
             let now_ms = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -330,11 +339,7 @@ pub async fn run_probe(
     }
 
     // Debug logging: Entry decision
-    if env::var("CCSTATUS_DEBUG")
-        .unwrap_or_default()
-        .to_uppercase()
-        == "TRUE"
-    {
+    if is_debug_enabled() {
         let logger = get_debug_logger();
         let user_agent =
             env::var(TEST_UA).unwrap_or_else(|_| DEFAULT_HEADER_PROFILE.user_agent.to_string());
@@ -363,11 +368,7 @@ pub async fn run_probe(
     let endpoint = format!("{}/v1/messages", opts.base_url);
 
     // Debug logging: Request construction details
-    if env::var("CCSTATUS_DEBUG")
-        .unwrap_or_default()
-        .to_uppercase()
-        == "TRUE"
-    {
+    if is_debug_enabled() {
         let logger = get_debug_logger();
         let header_count = headers.len();
         let body_size = body.len();
@@ -384,12 +385,196 @@ pub async fn run_probe(
         ).await;
     }
 
-    // Execute actual HTTP request using the provided HTTP client
+    // Try curl first when available for detailed phase timings, fallback to isahc
+    let debug_logger = get_debug_logger();
+    if let Some(curl_runner) = curl_runner {
+        let _ = debug_logger
+            .debug(
+                "OauthMasquerade",
+                "Trying OAuth masquerade probe with curl for phase timings",
+            )
+            .await;
+
+        // Convert HashMap headers to Vec<(&str, String)> format expected by curl
+        let headers_vec: Vec<(&str, String)> = headers
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.clone()))
+            .collect();
+
+        // Try curl first for detailed phase timings
+        match curl_runner.run(&endpoint, &headers_vec, &body, 10000).await {
+            Ok(phase_timings) => {
+                let breakdown = format!(
+                    "DNS:{}ms|TCP:{}ms|TLS:{}ms|TTFB:{}ms|Total:{}ms",
+                    phase_timings.dns_ms,
+                    phase_timings.tcp_ms,
+                    phase_timings.tls_ms,
+                    phase_timings.ttfb_ms,
+                    phase_timings.total_ms
+                );
+
+                // Note: curl branch doesn't capture response headers in current implementation
+                let empty_headers = std::collections::HashMap::new();
+                // HTTP/2 is typically negotiated with curl when using HTTP/2 TLS version
+                let http_version = Some("HTTP/2.0".to_string());
+
+                return Ok(OauthMasqueradeResult {
+                    status: phase_timings.status,
+                    duration_ms: phase_timings.total_ms,
+                    breakdown,
+                    response_headers: empty_headers,
+                    http_version,
+                });
+            }
+            Err(curl_error) => {
+                // Log curl failure and fallback to isahc for resiliency
+                let _ = debug_logger
+                    .error(
+                        "OauthMasquerade",
+                        &format!(
+                            "OAuth curl probe failed, falling back to isahc: {}",
+                            curl_error
+                        ),
+                    )
+                    .await;
+                // Fall through to isahc path below
+            }
+        }
+    }
+
+    // Execute actual HTTP request using the provided HTTP client (isahc fallback)
+    let _ = debug_logger
+        .debug(
+            "OauthMasquerade",
+            "Executing OAuth masquerade probe with isahc HTTP transport",
+        )
+        .await;
+
+    // Execute the request through the HTTP client
+    let (status, duration, breakdown, response_headers, http_version) = http_client
+        .execute_request(endpoint, headers, body, 10000) // 10 second timeout for OAuth probes
+        .await
+        .map_err(|e| NetworkError::HttpError(format!("OAuth HTTP request failed: {}", e)))?;
+
+    // Create redacted response headers without sensitive information
+    let redacted_response_headers = response_headers
+        .iter()
+        .filter(|(key, _)| {
+            !key.eq_ignore_ascii_case("Authorization")
+                && !key.eq_ignore_ascii_case("X-Api-Key")
+                && !key.eq_ignore_ascii_case("Proxy-Authorization")
+                && !key.eq_ignore_ascii_case("Cookie")
+                && !key.eq_ignore_ascii_case("Set-Cookie")
+        })
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect::<HashMap<String, String>>();
+
+    Ok(OauthMasqueradeResult {
+        status,
+        duration_ms: duration.as_millis() as u32,
+        breakdown,
+        response_headers: redacted_response_headers,
+        http_version,
+    })
+}
+
+/// Run OAuth masquerade probe (without curl timing support)
+///
+/// This function executes a first-party-shaped POST request to the Claude API
+/// when valid OAuth credentials are present and unexpired.
+///
+/// Uses isahc-based transport with simplified "Total:...ms" timing format.
+#[cfg(not(feature = "timings-curl"))]
+pub async fn run_probe(
+    opts: &OauthMasqueradeOptions,
+    http_client: &dyn crate::core::network::http_monitor::HttpClientTrait,
+) -> Result<OauthMasqueradeResult, NetworkError> {
+    use crate::core::network::debug_logger::get_debug_logger;
+
+    // Check for expired token (hard gate)
+    if is_token_expired(opts.expires_at) {
+        // Log expiry skip when CCSTATUS_DEBUG=TRUE
+        if is_debug_enabled() {
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as i64;
+
+            let expiry_desc = opts
+                .expires_at
+                .map(|exp| format!("{}", exp))
+                .unwrap_or_else(|| "none".to_string());
+
+            tokio::spawn(async move {
+                let logger = get_debug_logger();
+                let _ = logger
+                    .debug(
+                        "OauthMasquerade",
+                        &format!(
+                            "reason=expired_token now_ms={} expires_at_ms={} action=skip_no_probe",
+                            now_ms, expiry_desc
+                        ),
+                    )
+                    .await;
+            });
+        }
+
+        return Err(NetworkError::HttpError("OAuth token expired".to_string()));
+    }
+
+    // Debug logging: Entry decision
+    if is_debug_enabled() {
+        let logger = get_debug_logger();
+        let user_agent =
+            env::var(TEST_UA).unwrap_or_else(|_| DEFAULT_HEADER_PROFILE.user_agent.to_string());
+        let beta_present =
+            env::var(TEST_BETA_HEADER).is_ok() || !DEFAULT_HEADER_PROFILE.anthropic_beta.is_empty();
+        let token_len = opts.access_token.len();
+        let expires_desc = opts
+            .expires_at
+            .map(|exp| format!("{}", exp))
+            .unwrap_or_else(|| "none".to_string());
+
+        let _ = logger.debug(
+            "OauthMasquerade",
+            &format!(
+                "masquerade=true base={} stream={} ua=\"{}\" beta_present={} headers_profile=default token_len={} expires_at_ms={}",
+                opts.base_url, opts.stream, user_agent, beta_present, token_len, expires_desc
+            )
+        ).await;
+    }
+
+    // Build headers and body for first-party-shaped request
+    let headers = build_headers(opts);
+    let body = build_request_body(opts)?;
+
+    // Construct endpoint URL
+    let endpoint = format!("{}/v1/messages", opts.base_url);
+
+    // Debug logging: Request construction details
+    if is_debug_enabled() {
+        let logger = get_debug_logger();
+        let header_count = headers.len();
+        let body_size = body.len();
+        let has_test_overrides = env::var(TEST_HEADERS_FILE).is_ok()
+            || env::var(TEST_UA).is_ok()
+            || env::var(TEST_BETA_HEADER).is_ok();
+
+        let _ = logger.debug(
+            "OauthMasquerade",
+            &format!(
+                "request_construction endpoint={} headers_count={} body_size={} test_overrides={} stream={}",
+                endpoint, header_count, body_size, has_test_overrides, opts.stream
+            )
+        ).await;
+    }
+
+    // Execute HTTP request using the provided HTTP client (isahc)
     let debug_logger = get_debug_logger();
     let _ = debug_logger
         .debug(
             "OauthMasquerade",
-            "Executing OAuth masquerade probe with real HTTP transport",
+            "Executing OAuth masquerade probe with isahc HTTP transport",
         )
         .await;
 
@@ -570,6 +755,11 @@ mod tests {
         };
 
         let mock_client = MockHttpClient;
+
+        #[cfg(feature = "timings-curl")]
+        let result = run_probe(&opts, &mock_client, None).await.unwrap();
+        
+        #[cfg(not(feature = "timings-curl"))]
         let result = run_probe(&opts, &mock_client).await.unwrap();
 
         // Ensure sensitive headers are NOT present in the result
