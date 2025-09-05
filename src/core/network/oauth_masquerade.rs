@@ -97,14 +97,16 @@ const DEFAULT_HEADER_PROFILE: HeaderProfile = HeaderProfile {
 /// Claude Code system prompt that must always be at system[0]
 const CLAUDE_CODE_SYSTEM_PROMPT: &str = "You are Claude Code, Anthropic's official CLI for Claude.";
 
-/// Test environment variable names (internal use only)
+/// Configuration environment variable names for OAuth masquerade headers
+/// These allow runtime overrides of default header values to prevent drift
 const TEST_HEADERS_FILE: &str = "CCSTATUS_TEST_HEADERS_FILE";
-const TEST_UA: &str = "CCSTATUS_TEST_UA";
-const TEST_BETA_HEADER: &str = "CCSTATUS_TEST_BETA_HEADER";
-const TEST_STAINLESS_OS: &str = "CCSTATUS_TEST_STAINLESS_OS";
-const TEST_STAINLESS_ARCH: &str = "CCSTATUS_TEST_STAINLESS_ARCH";
-const TEST_STAINLESS_RUNTIME: &str = "CCSTATUS_TEST_STAINLESS_RUNTIME";
-const TEST_STAINLESS_RUNTIME_VERSION: &str = "CCSTATUS_TEST_STAINLESS_RUNTIME_VERSION";
+const TEST_UA: &str = "CCSTATUS_USER_AGENT";
+const TEST_BETA_HEADER: &str = "CCSTATUS_ANTHROPIC_BETA";
+const TEST_STAINLESS_PACKAGE_VERSION: &str = "CCSTATUS_STAINLESS_PACKAGE_VERSION";
+const TEST_STAINLESS_OS: &str = "CCSTATUS_STAINLESS_OS";
+const TEST_STAINLESS_ARCH: &str = "CCSTATUS_STAINLESS_ARCH";
+const TEST_STAINLESS_RUNTIME: &str = "CCSTATUS_STAINLESS_RUNTIME";
+const TEST_STAINLESS_RUNTIME_VERSION: &str = "CCSTATUS_STAINLESS_RUNTIME_VERSION";
 
 /// Build headers for OAuth masquerade request
 fn build_headers(opts: &OauthMasqueradeOptions) -> HashMap<String, String> {
@@ -159,12 +161,12 @@ fn build_headers(opts: &OauthMasqueradeOptions) -> HashMap<String, String> {
         "X-Stainless-Lang".to_string(),
         DEFAULT_HEADER_PROFILE.x_stainless_lang.to_string(),
     );
-    headers.insert(
-        "X-Stainless-Package-Version".to_string(),
+    let package_version = env::var(TEST_STAINLESS_PACKAGE_VERSION).unwrap_or_else(|_| {
         DEFAULT_HEADER_PROFILE
             .x_stainless_package_version
-            .to_string(),
-    );
+            .to_string()
+    });
+    headers.insert("X-Stainless-Package-Version".to_string(), package_version);
 
     let os = env::var(TEST_STAINLESS_OS)
         .unwrap_or_else(|_| DEFAULT_HEADER_PROFILE.x_stainless_os.to_string());
@@ -278,6 +280,45 @@ fn is_debug_enabled() -> bool {
         == "TRUE"
 }
 
+/// Redact response headers using allowlist approach for security
+/// Only returns headers that are safe to log and don't contain sensitive information
+fn redact_response_headers(headers: &HashMap<String, String>) -> HashMap<String, String> {
+    // Allowlist of safe response headers that don't contain sensitive information
+    const ALLOWED_HEADERS: &[&str] = &[
+        "server",
+        "date",
+        "cache-control",
+        "via",
+        "cf-ray",
+        "age",
+        "content-type",
+        "content-length",
+        "content-encoding",
+        "x-request-id",
+        "x-trace-id",
+        "cf-cache-status",
+        "cf-connecting-ip",
+        "vary",
+        "etag",
+        "last-modified",
+        "expires",
+        "x-ratelimit-limit",
+        "x-ratelimit-remaining",
+        "x-ratelimit-reset",
+        "retry-after",
+    ];
+
+    headers
+        .iter()
+        .filter(|(key, _)| {
+            ALLOWED_HEADERS
+                .iter()
+                .any(|allowed| key.eq_ignore_ascii_case(allowed))
+        })
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect()
+}
+
 /// Check if OAuth token is expired
 fn is_token_expired(expires_at: Option<i64>) -> bool {
     if let Some(expiry_ms) = expires_at {
@@ -335,9 +376,7 @@ pub async fn run_probe(
             });
         }
 
-        return Err(NetworkError::CredentialError(
-            "OAuth token expired".to_string(),
-        ));
+        return Err(NetworkError::SkipProbe("OAuth token expired".to_string()));
     }
 
     // Debug logging: Entry decision
@@ -415,10 +454,10 @@ pub async fn run_probe(
                     phase_timings.total_ms
                 );
 
-                // Note: curl branch doesn't capture response headers in current implementation
+                // Note: curl branch doesn't capture response headers or HTTP version in current implementation
+                // Setting http_version=None to avoid misleading diagnostics about version negotiation
                 let empty_headers = std::collections::HashMap::new();
-                // HTTP/2 is typically negotiated with curl when using HTTP/2 TLS version
-                let http_version = Some("HTTP/2.0".to_string());
+                let http_version = None; // Unknown version - curl implementation doesn't capture this
 
                 return Ok(OauthMasqueradeResult {
                     status: phase_timings.status,
@@ -458,18 +497,8 @@ pub async fn run_probe(
         .await
         .map_err(|e| NetworkError::HttpError(format!("OAuth HTTP request failed: {}", e)))?;
 
-    // Create redacted response headers without sensitive information
-    let redacted_response_headers = response_headers
-        .iter()
-        .filter(|(key, _)| {
-            !key.eq_ignore_ascii_case("Authorization")
-                && !key.eq_ignore_ascii_case("X-Api-Key")
-                && !key.eq_ignore_ascii_case("Proxy-Authorization")
-                && !key.eq_ignore_ascii_case("Cookie")
-                && !key.eq_ignore_ascii_case("Set-Cookie")
-        })
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect::<HashMap<String, String>>();
+    // Create redacted response headers using allowlist for security
+    let redacted_response_headers = redact_response_headers(&response_headers);
 
     Ok(OauthMasqueradeResult {
         status,
@@ -521,9 +550,7 @@ pub async fn run_probe(
             });
         }
 
-        return Err(NetworkError::CredentialError(
-            "OAuth token expired".to_string(),
-        ));
+        return Err(NetworkError::SkipProbe("OAuth token expired".to_string()));
     }
 
     // Debug logging: Entry decision
@@ -588,18 +615,8 @@ pub async fn run_probe(
         .await
         .map_err(|e| NetworkError::HttpError(format!("OAuth HTTP request failed: {}", e)))?;
 
-    // Create redacted response headers without sensitive information
-    let redacted_response_headers = response_headers
-        .iter()
-        .filter(|(key, _)| {
-            !key.eq_ignore_ascii_case("Authorization")
-                && !key.eq_ignore_ascii_case("X-Api-Key")
-                && !key.eq_ignore_ascii_case("Proxy-Authorization")
-                && !key.eq_ignore_ascii_case("Cookie")
-                && !key.eq_ignore_ascii_case("Set-Cookie")
-        })
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect::<HashMap<String, String>>();
+    // Create redacted response headers using allowlist for security
+    let redacted_response_headers = redact_response_headers(&response_headers);
 
     Ok(OauthMasqueradeResult {
         status,

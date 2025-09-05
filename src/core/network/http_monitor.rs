@@ -657,6 +657,39 @@ impl HttpMonitor {
                     http_version,
                 )
             }
+            Err(NetworkError::SkipProbe(skip_reason)) => {
+                // OAuth token expired - silently skip probe and return previous state unchanged
+                debug_logger
+                    .debug("HttpMonitor", &format!("Probe skipped: {}", skip_reason))
+                    .await;
+
+                let state = self.load_state().await?;
+                let outcome = ProbeOutcome {
+                    status: state.status,
+                    metrics: ProbeMetrics {
+                        latency_ms: state.network.latency_ms,
+                        breakdown: state.network.breakdown,
+                        last_http_status: state.network.last_http_status,
+                        error_type: state.network.error_type,
+                        http_version: state.network.http_version,
+                    },
+                    p95_latency_ms: state.network.p95_latency_ms,
+                    rolling_len: state.network.rolling_totals.len(),
+                    api_config: state.api_config.unwrap_or_default(),
+                    mode,
+                    state_written: false, // No state was written since we skipped
+                    timestamp_local: state.timestamp,
+                };
+
+                debug_logger.network_probe_end(
+                    &format!("{:?}", mode),
+                    None, // No status code for skipped probe
+                    0,    // No latency for skipped probe
+                    probe_id,
+                );
+
+                return Ok(outcome);
+            }
             Err(err) => {
                 debug_logger
                     .error("HttpMonitor", &format!("Probe failed: {}", err))
@@ -894,9 +927,7 @@ impl HttpMonitor {
                         )
                         .await;
 
-                    return Err(NetworkError::CredentialError(
-                        "OAuth token expired".to_string(),
-                    ));
+                    return Err(NetworkError::SkipProbe("OAuth token expired".to_string()));
                 }
             }
 
@@ -1016,10 +1047,10 @@ impl HttpMonitor {
                         )
                     };
 
-                    // Note: curl branch doesn't capture response headers in current implementation
+                    // Note: curl branch doesn't capture response headers or HTTP version in current implementation
+                    // Setting http_version=None to avoid misleading diagnostics about version negotiation
                     let empty_headers = std::collections::HashMap::new();
-                    // HTTP/2 is typically negotiated with curl when using HTTP/2 TLS version
-                    let http_version = Some("HTTP/2.0".to_string());
+                    let http_version = None; // Unknown version - curl implementation doesn't capture this
                     return Ok((
                         phase_timings.status,
                         duration,

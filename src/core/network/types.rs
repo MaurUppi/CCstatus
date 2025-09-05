@@ -229,6 +229,8 @@ pub enum NetworkError {
     HttpError(String),
     StateFileError(String),
     CredentialError(String),
+    /// Indicates probe should be silently skipped (e.g., expired OAuth token)
+    SkipProbe(String),
 }
 
 impl std::fmt::Display for NetworkError {
@@ -242,6 +244,7 @@ impl std::fmt::Display for NetworkError {
             NetworkError::HttpError(msg) => write!(f, "HTTP error: {}", msg),
             NetworkError::StateFileError(msg) => write!(f, "State file error: {}", msg),
             NetworkError::CredentialError(msg) => write!(f, "Credential error: {}", msg),
+            NetworkError::SkipProbe(msg) => write!(f, "Skip probe: {}", msg),
         }
     }
 }
