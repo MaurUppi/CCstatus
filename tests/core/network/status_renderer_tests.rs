@@ -964,10 +964,10 @@ fn test_oauth_mode_hides_status_lights_and_proxy_health() {
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics, Some(&oauth_config));
 
-    // OAuth mode should not show status lights (🟢/🟡/🔴) or proxy health prefix
+    // OAuth mode should show green status indicator as per requirements
     assert!(
-        !result.contains("🟢"),
-        "OAuth mode should not show green status light"
+        result.contains("🟢"),
+        "OAuth mode should show green status indicator"
     );
     assert!(
         !result.contains("🟡"),
@@ -1030,10 +1030,10 @@ fn test_oauth_mode_with_minimal_metrics() {
 
     let result = renderer.render_status(&NetworkStatus::Error, &metrics, Some(&oauth_config));
 
-    // Should fallback to "OAuth mode" when no metrics available
+    // Should fallback to "🟢 OAuth mode" when no metrics available
     assert_eq!(
-        result, "OAuth mode",
-        "Should show minimal OAuth mode text when no metrics available"
+        result, "🟢 OAuth mode",
+        "Should show minimal OAuth mode text with green indicator when no metrics available"
     );
 }
 
