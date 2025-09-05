@@ -9,5 +9,6 @@ pub mod credential_tests;
 pub mod http_monitor_test;
 pub mod jsonl_monitor_tests;
 pub mod network_segment_tests;
+pub mod oauth_masquerade_tests;
 pub mod proxy_health;
 pub mod status_renderer_tests;
