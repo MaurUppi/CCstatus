@@ -33,12 +33,15 @@
 - When degraded/error occurs, detailed timing data is displayed (DNS|TCP|TLS|TTFB). TTFB is particularly important - it's the time from `sending model service request <--> Anthropic returns` the first byte.
 - This tool can only provide information about which stage has issues; you need to investigate which component has the highest latency yourself.
 
-### OAuth Mode Support ✨ (v2.2.6)
-- **Smart Mode Detection**: Automatically detects OAuth mode and optimizes display
-  - **OAuth Mode Display**: Shows green status indicator and timing metrics, omits proxy health prefix in OAuth mode
-  - **Skip Proxy Checks**: automatically skips proxy health checks, avoiding unnecessary network requests
-  - **Preserve Timing Metrics**: Continues displaying P95 latency, timing breakdown, and HTTP version performance data
-  - **Auto-Adaptive**: Automatically switches rendering mode via `api_config.source == "oauth"`
+### OAuth Masquerade Support ✨ (v2.2.6)
+- **OAuth Masquerade Mode**: Complete OAuth environment support with OAuth masquerade probing system
+  - **First-party Request Masquerade**: OAuth tokens sent as Authorization headers to `https://api.anthropic.com`, masquerading as direct client requests
+  - **Green Status Indicator**: Displays green emoji (🟢) with timing metrics, omits proxy health prefix
+  - **Token Expiry Validation**: Automatic token expiration checking to prevent invalid requests  
+  - **Detailed Timing Breakdown**: Supports DNS|TCP|TLS|TTFB detailed timings (requires `timings-curl` feature)
+  - **Secure Debug Logging**: Logs token length rather than full token to protect sensitive information
+  - **Cross-platform Support**: Via `CLAUDE_CODE_OAUTH_TOKEN` environment variable and macOS Keychain
+  - **Smart Rendering**: Format `🟢 P95:...ms DNS:...|TCP:...|TLS:...|Total:... HTTP/x`
 
 ### Areas for Improvement
 - ✅ ~~OAuth subscription user display issues resolved~~ (v2.2.6 fixed)

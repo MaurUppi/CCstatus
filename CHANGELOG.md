@@ -5,16 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.2.6] - 2025-09-02
+## [2.2.6] - 2025-09-06
 
-### 🔧 OAuth Mode Enhancement
+### 🔧 OAuth Masquerade System Implementation
 
-#### ✨ OAuth Environment Support
-- **Smart OAuth Detection**: Automatic detection and optimized rendering for OAuth tool mode
-  - **OAuth Mode Display**: Shows green status indicator and timing metrics, omits proxy health prefix
-  - **Skip Proxy Health Checks**: OAuth credentials automatically bypass `assess_proxy_health()` to avoid unnecessary network requests
-  - **Preserve Performance Metrics**: Continues displaying P95 latency, timing breakdown, and HTTP version data
-  - **Auto-Adaptive Rendering**: Switches rendering mode via `api_config.source == "oauth"` detection
+#### ✨ OAuth Masquerade Core Features
+- **OAuth Masquerade Mode**: Complete OAuth environment support with first-party request simulation
+  - **First-party Request Masquerade**: OAuth tokens sent as Authorization headers to `https://api.anthropic.com`, masquerading as direct client requests
+  - **Token Expiry Validation**: Automatic token expiration checking with `expires_at` millisecond precision to prevent invalid requests
+  - **Cross-platform Support**: Via `CLAUDE_CODE_OAUTH_TOKEN` environment variable and macOS Keychain integration
+  - **Secure Debug Logging**: Logs token length rather than full token to protect sensitive information
+  - **Green Status Indicator**: Displays green emoji (🟢) with timing metrics, omits proxy health prefix in OAuth mode
+  - **Smart Rendering**: Format `🟢 P95:...ms DNS:...|TCP:...|TLS:...|Total:... HTTP/x`
+
+#### ⚡ Advanced Timing Features  
+- **curl Phase Timings Support**: Enhanced OAuth masquerade with detailed timing breakdown when `timings-curl` feature is enabled
+  - **DNS|TCP|TLS|TTFB|Total Breakdown**: Provides comprehensive timing analysis for OAuth requests
+  - **Feature-gated Implementation**: Dual function signatures for timings-curl enabled/disabled configurations
+  - **isahc Fallback**: Automatic fallback to isahc for resilience when curl is unavailable
+  - **Header Conversion**: HashMap to Vec format conversion for curl compatibility
+
+#### 🛡️ Security & Quality Enhancements
+- **Duplicate Code Elimination**: Comprehensive refactoring to remove 132+ lines of duplicate code
+  - **Token Expiration Helper**: Extracted `check_token_expiry_with_logging()` to eliminate 60 lines of duplicate token validation
+  - **Debug Logging Helpers**: Created `log_entry_decision()` and `log_request_construction()` to eliminate 72 lines of duplicate logging
+  - **Code Quality**: Improved maintainability through centralized helper functions
+- **Linter Warning Fixes**: Resolved Rust code style warnings for improved code quality
+  - **Control Flow Optimization**: Extracted `return` keyword from if-else and match expressions
+  - **Path Prefix Cleanup**: Removed unnecessary `serde_json::` prefixes where `Value` is already imported
+  - **Idiomatic Rust**: Improved code readability following Rust best practices
 
 #### 🏗️ Implementation Details
 - **HttpMonitor Enhancement**: Modified `process_probe_results()` to conditionally skip proxy health assessment based on credential source
