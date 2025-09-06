@@ -368,6 +368,52 @@ async fn check_token_expiry_with_logging(opts: &OauthMasqueradeOptions) -> Resul
     Ok(())
 }
 
+/// Log OAuth masquerade entry decision debug information
+async fn log_entry_decision(opts: &OauthMasqueradeOptions) {
+    if is_debug_enabled() {
+        use crate::core::network::debug_logger::get_debug_logger;
+        let logger = get_debug_logger();
+        let user_agent =
+            env::var(TEST_UA).unwrap_or_else(|_| DEFAULT_HEADER_PROFILE.user_agent.to_string());
+        let beta_present =
+            env::var(TEST_BETA_HEADER).is_ok() || !DEFAULT_HEADER_PROFILE.anthropic_beta.is_empty();
+        let token_len = opts.access_token.len();
+        let expires_desc = opts
+            .expires_at
+            .map(|exp| format!("{}", exp))
+            .unwrap_or_else(|| "none".to_string());
+
+        let _ = logger.debug(
+            "OauthMasquerade",
+            &format!(
+                "masquerade=true base={} stream={} ua=\"{}\" beta_present={} headers_profile=default token_len={} expires_at_ms={}",
+                opts.base_url, opts.stream, user_agent, beta_present, token_len, expires_desc
+            )
+        ).await;
+    }
+}
+
+/// Log OAuth masquerade request construction debug information
+async fn log_request_construction(endpoint: &str, headers: &std::collections::HashMap<String, String>, body: &[u8], opts: &OauthMasqueradeOptions) {
+    if is_debug_enabled() {
+        use crate::core::network::debug_logger::get_debug_logger;
+        let logger = get_debug_logger();
+        let header_count = headers.len();
+        let body_size = body.len();
+        let has_test_overrides = env::var(TEST_HEADERS_FILE).is_ok()
+            || env::var(TEST_UA).is_ok()
+            || env::var(TEST_BETA_HEADER).is_ok();
+
+        let _ = logger.debug(
+            "OauthMasquerade",
+            &format!(
+                "request_construction endpoint={} headers_count={} body_size={} test_overrides={} stream={}",
+                endpoint, header_count, body_size, has_test_overrides, opts.stream
+            )
+        ).await;
+    }
+}
+
 /// Run OAuth masquerade probe
 ///
 /// This function executes a first-party-shaped POST request to the Claude API
@@ -388,26 +434,7 @@ pub async fn run_probe(
     check_token_expiry_with_logging(opts).await?;
 
     // Debug logging: Entry decision
-    if is_debug_enabled() {
-        let logger = get_debug_logger();
-        let user_agent =
-            env::var(TEST_UA).unwrap_or_else(|_| DEFAULT_HEADER_PROFILE.user_agent.to_string());
-        let beta_present =
-            env::var(TEST_BETA_HEADER).is_ok() || !DEFAULT_HEADER_PROFILE.anthropic_beta.is_empty();
-        let token_len = opts.access_token.len();
-        let expires_desc = opts
-            .expires_at
-            .map(|exp| format!("{}", exp))
-            .unwrap_or_else(|| "none".to_string());
-
-        let _ = logger.debug(
-            "OauthMasquerade",
-            &format!(
-                "masquerade=true base={} stream={} ua=\"{}\" beta_present={} headers_profile=default token_len={} expires_at_ms={}",
-                opts.base_url, opts.stream, user_agent, beta_present, token_len, expires_desc
-            )
-        ).await;
-    }
+    log_entry_decision(opts).await;
 
     // Build headers and body for first-party-shaped request
     let headers = build_headers(opts);
@@ -417,22 +444,7 @@ pub async fn run_probe(
     let endpoint = format!("{}/v1/messages", opts.base_url);
 
     // Debug logging: Request construction details
-    if is_debug_enabled() {
-        let logger = get_debug_logger();
-        let header_count = headers.len();
-        let body_size = body.len();
-        let has_test_overrides = env::var(TEST_HEADERS_FILE).is_ok()
-            || env::var(TEST_UA).is_ok()
-            || env::var(TEST_BETA_HEADER).is_ok();
-
-        let _ = logger.debug(
-            "OauthMasquerade",
-            &format!(
-                "request_construction endpoint={} headers_count={} body_size={} test_overrides={} stream={}",
-                endpoint, header_count, body_size, has_test_overrides, opts.stream
-            )
-        ).await;
-    }
+    log_request_construction(&endpoint, &headers, &body, opts).await;
 
     // Try curl first when available for detailed phase timings, fallback to isahc
     let debug_logger = get_debug_logger();
@@ -534,26 +546,7 @@ pub async fn run_probe(
     check_token_expiry_with_logging(opts).await?;
 
     // Debug logging: Entry decision
-    if is_debug_enabled() {
-        let logger = get_debug_logger();
-        let user_agent =
-            env::var(TEST_UA).unwrap_or_else(|_| DEFAULT_HEADER_PROFILE.user_agent.to_string());
-        let beta_present =
-            env::var(TEST_BETA_HEADER).is_ok() || !DEFAULT_HEADER_PROFILE.anthropic_beta.is_empty();
-        let token_len = opts.access_token.len();
-        let expires_desc = opts
-            .expires_at
-            .map(|exp| format!("{}", exp))
-            .unwrap_or_else(|| "none".to_string());
-
-        let _ = logger.debug(
-            "OauthMasquerade",
-            &format!(
-                "masquerade=true base={} stream={} ua=\"{}\" beta_present={} headers_profile=default token_len={} expires_at_ms={}",
-                opts.base_url, opts.stream, user_agent, beta_present, token_len, expires_desc
-            )
-        ).await;
-    }
+    log_entry_decision(opts).await;
 
     // Build headers and body for first-party-shaped request
     let headers = build_headers(opts);
@@ -563,22 +556,7 @@ pub async fn run_probe(
     let endpoint = format!("{}/v1/messages", opts.base_url);
 
     // Debug logging: Request construction details
-    if is_debug_enabled() {
-        let logger = get_debug_logger();
-        let header_count = headers.len();
-        let body_size = body.len();
-        let has_test_overrides = env::var(TEST_HEADERS_FILE).is_ok()
-            || env::var(TEST_UA).is_ok()
-            || env::var(TEST_BETA_HEADER).is_ok();
-
-        let _ = logger.debug(
-            "OauthMasquerade",
-            &format!(
-                "request_construction endpoint={} headers_count={} body_size={} test_overrides={} stream={}",
-                endpoint, header_count, body_size, has_test_overrides, opts.stream
-            )
-        ).await;
-    }
+    log_request_construction(&endpoint, &headers, &body, opts).await;
 
     // Execute HTTP request using the provided HTTP client (isahc)
     let debug_logger = get_debug_logger();

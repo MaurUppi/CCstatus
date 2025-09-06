@@ -966,7 +966,7 @@ impl CredentialManager {
                 }
 
                 // Parse JSON from keychain
-                let keychain_json: serde_json::Value = serde_json::from_str(&keychain_data)
+                let keychain_json: Value = serde_json::from_str(&keychain_data)
                     .map_err(|e| {
                         NetworkError::CredentialError(format!("Invalid JSON in keychain: {}", e))
                     })?;

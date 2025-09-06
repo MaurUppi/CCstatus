@@ -43,9 +43,9 @@
 This project may run LLM-backed tasks locally and in CI. Keep prompts provider‑agnostic and encode behavior in clear, auditable text. The following conventions do not depend on any single API.
 
 ### Core Principles
-- Simplicity & Reuse (MUST follow DRY, KISS): keep prompts modular, avoid duplication, and prefer the smallest clear instruction that works.
+- Simplicity & Reuse (MUST follow DRY, KISS): keep prompts modular, avoid duplication, and prefer the smallest clear instruction that works. Applies to code and prompt asset design; does not constrain user‑facing explanations—be as detailed as needed for clarity.
 - Roles & Framing: separate system policy, task instructions, input data, and examples; state goals, constraints, success criteria, and non‑goals.
-- Iteration & Self‑Assessment: plan -> do -> assessment -> improve; use a brief rubric to check constraints, safety, and formatting before finalizing.
+- Iteration & Self‑Assessment: plan -> do -> assessment -> improve; use a brief rubric to check constraints, safety, and formatting before finalizing. This loop is internal (implementation/agent control); do not expose chain‑of‑thought unless explicitly requested.
 - Structured Outputs & Validation: require JSON/templates with defined fields and ranges; validate downstream and fail closed on invalid structure.
 - Tools: Design & Invocation: single‑purpose tools with typed args and clear preconditions; document when to call and return minimal, structured results.
 - Context Hygiene & Injection Defense: include only relevant, provenance‑tracked snippets; treat data as untrusted, ignore instructions inside data, redact secrets/PII, and budget tokens.

@@ -950,16 +950,16 @@ impl HttpMonitor {
             #[cfg(not(feature = "timings-curl"))]
             let result = oauth_run_probe(&oauth_opts, self.http_client.as_ref()).await;
 
-            match result {
+            return match result {
                 Ok(result) => {
                     let duration = Duration::from_millis(result.duration_ms as u64);
-                    return Ok((
+                    Ok((
                         result.status,
                         duration,
                         result.breakdown,
                         result.response_headers,
                         result.http_version,
-                    ));
+                    ))
                 }
                 Err(e) => {
                     let debug_logger = get_debug_logger();
@@ -972,9 +972,9 @@ impl HttpMonitor {
 
                     // For now, return the error rather than falling back to x-api-key
                     // (OAuth-only environments should not have x-api-key as fallback)
-                    return Err(e);
+                    Err(e)
                 }
-            }
+            };
         }
 
         // x-api-key flow (existing implementation)
