@@ -33,7 +33,7 @@
 - When degraded/error occurs, detailed timing data is displayed (DNS|TCP|TLS|TTFB). TTFB is particularly important - it's the time from `sending model service request <--> Anthropic returns` the first byte.
 - This tool can only provide information about which stage has issues; you need to investigate which component has the highest latency yourself.
 
-### OAuth Masquerade Support ✨ (v2.2.6)
+### OAuth Masquerade Support ✨ (v2.2.7)
 - **OAuth Masquerade Mode**: Complete OAuth environment support with OAuth masquerade probing system
   - **First-party Request Masquerade**: OAuth tokens sent as Authorization headers to `https://api.anthropic.com`, masquerading as direct client requests
   - **Green Status Indicator**: Displays green emoji (🟢) with timing metrics, omits proxy health prefix
