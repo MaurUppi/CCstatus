@@ -1,8 +1,15 @@
 use ccstatus::core::network::{
     credential::CredentialManager,
+    oauth_masquerade::testing::{
+        build_headers, build_request_body, is_token_expired, 
+        OauthMasqueradeOptions, CLAUDE_CODE_SYSTEM_PROMPT, TEST_HEADERS_FILE
+    },
+    oauth_masquerade::{run_probe, OauthMasqueradeResult},
+    http_monitor::HttpClientTrait,
     types::{ApiCredentials, CredentialSource},
 };
-use std::env;
+use std::{env, time::Duration, collections::HashMap};
+use tempfile::NamedTempFile;
 
 use crate::common::IsolatedEnv;
 
@@ -159,6 +166,8 @@ async fn test_env_overrides_oauth() {
     );
 
     env::remove_var("CCSTATUS_TEST_OAUTH_PRESENT");
+    env::remove_var("ANTHROPIC_BASE_URL");
+    env::remove_var("ANTHROPIC_AUTH_TOKEN");
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -292,6 +301,8 @@ async fn test_oauth_env_token_only() {
     );
 
     env::remove_var("CLAUDE_CODE_OAUTH_TOKEN");
+    env::remove_var("ANTHROPIC_BASE_URL");
+    env::remove_var("ANTHROPIC_AUTH_TOKEN");
 }
 
 /// Test that environment variables override OAuth env token
@@ -331,6 +342,10 @@ async fn test_env_overrides_oauth_env_token() {
     );
 
     env::remove_var("CLAUDE_CODE_OAUTH_TOKEN");
+    env::remove_var("ANTHROPIC_BASE_URL");
+    env::remove_var("ANTHROPIC_AUTH_TOKEN");
+    env::remove_var("ANTHROPIC_BASE_URL");
+    env::remove_var("ANTHROPIC_AUTH_TOKEN");
 }
 
 /// Test empty OAuth env token is ignored
@@ -364,6 +379,8 @@ async fn test_empty_oauth_env_token_ignored() {
     }
 
     env::remove_var("CLAUDE_CODE_OAUTH_TOKEN");
+    env::remove_var("ANTHROPIC_BASE_URL");
+    env::remove_var("ANTHROPIC_AUTH_TOKEN");
 }
 
 /// Test OAuth env token works on non-macOS platforms
@@ -404,4 +421,229 @@ async fn test_oauth_env_token_non_macos() {
     );
 
     env::remove_var("CLAUDE_CODE_OAUTH_TOKEN");
+    env::remove_var("ANTHROPIC_BASE_URL");
+    env::remove_var("ANTHROPIC_AUTH_TOKEN");
+}
+
+// ==================================================================================
+// OAuth Masquerade Unit Tests (migrated from oauth_masquerade.rs)
+// ==================================================================================
+
+/// Mock HTTP client for testing OAuth masquerade
+struct MockHttpClient;
+
+#[async_trait::async_trait]
+impl HttpClientTrait for MockHttpClient {
+    async fn execute_request(
+        &self,
+        _url: String,
+        headers: std::collections::HashMap<String, String>,
+        _body: Vec<u8>,
+        _timeout_ms: u32,
+    ) -> Result<
+        (
+            u16,
+            Duration,
+            String,
+            std::collections::HashMap<String, String>,
+            Option<String>,
+        ),
+        String,
+    > {
+        // Return mock response that includes request headers to test redaction
+        let mut response_headers = HashMap::new();
+        // Include some request headers as if they were response headers (for testing redaction)
+        for (key, value) in &headers {
+            response_headers.insert(key.clone(), value.clone());
+        }
+        // Add some typical response headers
+        response_headers.insert("Server".to_string(), "anthropic".to_string());
+        response_headers.insert("Cache-Control".to_string(), "no-cache".to_string());
+
+        Ok((
+            200,
+            Duration::from_millis(250),
+            "DNS:5ms|TCP:10ms|TLS:50ms|TTFB:200ms|Total:265ms".to_string(),
+            response_headers,
+            Some("HTTP/2.0".to_string()),
+        ))
+    }
+}
+
+#[test]
+fn test_build_headers_includes_required_names() {
+    let opts = OauthMasqueradeOptions {
+        base_url: "https://api.anthropic.com".to_string(),
+        access_token: "test_token".to_string(),
+        expires_at: None,
+        stream: false,
+    };
+
+    let headers = build_headers(&opts);
+
+    // Verify required headers are present
+    assert!(headers.contains_key("Authorization"));
+    assert!(headers.contains_key("Content-Type"));
+    assert!(headers.contains_key("Accept"));
+    assert!(headers.contains_key("anthropic-version"));
+    assert!(headers.contains_key("User-Agent"));
+    assert!(headers.contains_key("X-Stainless-Retry-Count"));
+    assert!(headers.contains_key("anthropic-beta"));
+
+    // Verify Authorization header format
+    assert_eq!(headers.get("Authorization").unwrap(), "Bearer test_token");
+}
+
+#[test]
+fn test_build_headers_stream_adds_helper_method() {
+    let opts = OauthMasqueradeOptions {
+        base_url: "https://api.anthropic.com".to_string(),
+        access_token: "test_token".to_string(),
+        expires_at: None,
+        stream: true,
+    };
+
+    let headers = build_headers(&opts);
+    assert!(headers.contains_key("x-stainless-helper-method"));
+    assert_eq!(headers.get("x-stainless-helper-method").unwrap(), "stream");
+}
+
+#[test]
+fn test_build_request_body_includes_system_prompt() {
+    let opts = OauthMasqueradeOptions {
+        base_url: "https://api.anthropic.com".to_string(),
+        access_token: "test_token".to_string(),
+        expires_at: None,
+        stream: false,
+    };
+
+    let body_bytes = build_request_body(&opts).unwrap();
+    let body_str = String::from_utf8(body_bytes).unwrap();
+
+    assert!(body_str.contains(CLAUDE_CODE_SYSTEM_PROMPT));
+    assert!(body_str.contains("\"max_tokens\":1"));
+    assert!(body_str.contains("\"role\":\"user\""));
+}
+
+#[test]
+fn test_build_request_body_stream_parameter() {
+    let opts = OauthMasqueradeOptions {
+        base_url: "https://api.anthropic.com".to_string(),
+        access_token: "test_token".to_string(),
+        expires_at: None,
+        stream: true,
+    };
+
+    let body_bytes = build_request_body(&opts).unwrap();
+    let body_str = String::from_utf8(body_bytes).unwrap();
+
+    assert!(body_str.contains("\"stream\":true"));
+}
+
+#[test]
+fn test_is_token_expired() {
+    // No expiry = never expired
+    assert!(!is_token_expired(None));
+
+    // Far future = not expired
+    let future_ms = (std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64)
+        + 3600000; // +1 hour
+    assert!(!is_token_expired(Some(future_ms)));
+
+    // Past = expired
+    let past_ms = (std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64)
+        - 3600000; // -1 hour
+    assert!(is_token_expired(Some(past_ms)));
+}
+
+#[tokio::test]
+async fn test_result_headers_exclude_sensitive_data() {
+    let opts = OauthMasqueradeOptions {
+        base_url: "https://api.anthropic.com".to_string(),
+        access_token: "test_sensitive_token".to_string(),
+        expires_at: None,
+        stream: false,
+    };
+
+    let mock_client = MockHttpClient;
+
+    #[cfg(feature = "timings-curl")]
+    let result = run_probe(&opts, &mock_client, None).await.unwrap();
+
+    #[cfg(not(feature = "timings-curl"))]
+    let result = run_probe(&opts, &mock_client).await.unwrap();
+
+    // Ensure sensitive headers are NOT present in the result
+    assert!(!result.response_headers.contains_key("Authorization"));
+    assert!(!result.response_headers.contains_key("authorization"));
+    assert!(!result.response_headers.contains_key("X-Api-Key"));
+    assert!(!result.response_headers.contains_key("x-api-key"));
+    assert!(!result.response_headers.contains_key("Proxy-Authorization"));
+    assert!(!result.response_headers.contains_key("proxy-authorization"));
+    assert!(!result.response_headers.contains_key("Cookie"));
+    assert!(!result.response_headers.contains_key("cookie"));
+    assert!(!result.response_headers.contains_key("Set-Cookie"));
+    assert!(!result.response_headers.contains_key("set-cookie"));
+
+    // Ensure non-sensitive response headers are still present (only actual response headers)
+    assert!(result.response_headers.contains_key("Server"));
+    assert!(result.response_headers.contains_key("Cache-Control"));
+}
+
+#[test]
+fn test_test_headers_file_filters_sensitive_headers() {
+    use std::fs;
+
+    // Create a temporary file with both safe and sensitive headers
+    let temp_file = NamedTempFile::new().unwrap();
+    let content = r#"Custom-Header: safe-value
+Authorization: Bearer malicious-token
+X-Custom: another-safe-value
+Cookie: session=dangerous
+Set-Cookie: token=evil
+X-Api-Key: malicious-api-key
+Proxy-Authorization: Basic evil-creds
+Host: malicious-host.com
+Content-Length: 9999
+Safe-Header: totally-fine"#;
+    fs::write(temp_file.path(), content).unwrap();
+
+    // Set the test environment variable
+    env::set_var(TEST_HEADERS_FILE, temp_file.path().to_str().unwrap());
+
+    let opts = OauthMasqueradeOptions {
+        base_url: "https://api.anthropic.com".to_string(),
+        access_token: "test_token".to_string(),
+        expires_at: None,
+        stream: false,
+    };
+
+    let headers = build_headers(&opts);
+
+    // Verify the Authorization header exists (from build_headers) but not overridden by file
+    assert!(headers.contains_key("Authorization"));
+    assert_eq!(headers.get("Authorization").unwrap(), "Bearer test_token"); // Original, not from file
+    assert!(!headers.contains_key("Cookie"));
+    assert!(!headers.contains_key("Set-Cookie"));
+    assert!(!headers.contains_key("X-Api-Key"));
+    assert!(!headers.contains_key("Proxy-Authorization"));
+    assert!(!headers.contains_key("Host"));
+    assert!(!headers.contains_key("Content-Length"));
+
+    // Verify safe headers from file ARE included
+    assert!(headers.contains_key("Custom-Header"));
+    assert_eq!(headers.get("Custom-Header").unwrap(), "safe-value");
+    assert!(headers.contains_key("X-Custom"));
+    assert_eq!(headers.get("X-Custom").unwrap(), "another-safe-value");
+    assert!(headers.contains_key("Safe-Header"));
+    assert_eq!(headers.get("Safe-Header").unwrap(), "totally-fine");
+
+    // Clean up
+    env::remove_var(TEST_HEADERS_FILE);
 }

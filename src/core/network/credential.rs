@@ -191,6 +191,66 @@ impl CredentialManager {
             .await;
     }
 
+    /// Helper method to handle OAuth test override simulation
+    /// Returns Some(ApiCredentials) if test override is active, None otherwise
+    async fn handle_oauth_test_override(
+        &self,
+        logger: &crate::core::network::debug_logger::EnhancedDebugLogger,
+    ) -> Option<ApiCredentials> {
+        if env::var(Self::TEST_OAUTH_PRESENT).unwrap_or_default() == "1" {
+            logger
+                .debug(
+                    "CredentialManager",
+                    "Test override: simulating OAuth credentials present",
+                )
+                .await;
+
+            // Test override with configurable expiry
+            let test_expires_at = env::var("CCSTATUS_TEST_OAUTH_EXPIRES_AT")
+                .ok()
+                .and_then(|s| s.parse::<i64>().ok());
+
+            return Some(ApiCredentials {
+                base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
+                auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
+                source: CredentialSource::OAuth,
+                expires_at: test_expires_at,
+            });
+        }
+        None
+    }
+
+    /// Helper method to check for OAuth environment token
+    /// Returns Some(ApiCredentials) if environment token is present, None otherwise
+    async fn check_oauth_env_token(
+        &self,
+        logger: &crate::core::network::debug_logger::EnhancedDebugLogger,
+    ) -> Option<ApiCredentials> {
+        if let Ok(oauth_token) = env::var(Self::OAUTH_ENV_TOKEN) {
+            if !oauth_token.is_empty() {
+                logger
+                    .debug(
+                        "CredentialManager",
+                        "OAuth env token present; selecting OAuth",
+                    )
+                    .await;
+
+                // For env token testing, use configurable expiry
+                let test_expires_at = env::var("CCSTATUS_TEST_OAUTH_EXPIRES_AT")
+                    .ok()
+                    .and_then(|s| s.parse::<i64>().ok());
+
+                return Some(ApiCredentials {
+                    base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
+                    auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
+                    source: CredentialSource::OAuth,
+                    expires_at: test_expires_at,
+                });
+            }
+        }
+        None
+    }
+
     /// Get credentials from environment, OAuth, shell config, or Claude config files
     ///
     /// ## Error Handling Policy (IMPORTANT FOR MAINTAINERS)
@@ -391,50 +451,14 @@ impl CredentialManager {
             )
             .await;
 
-        // Test override: simulate OAuth credentials present for deterministic testing
-        if env::var(Self::TEST_OAUTH_PRESENT).unwrap_or_default() == "1" {
-            logger
-                .debug(
-                    "CredentialManager",
-                    "Test override: simulating OAuth credentials present",
-                )
-                .await;
-
-            // Test override with configurable expiry
-            let test_expires_at = env::var("CCSTATUS_TEST_OAUTH_EXPIRES_AT")
-                .ok()
-                .and_then(|s| s.parse::<i64>().ok());
-
-            return Ok(Some(ApiCredentials {
-                base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
-                auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
-                source: CredentialSource::OAuth,
-                expires_at: test_expires_at,
-            }));
+        // Check for test override first
+        if let Some(test_creds) = self.handle_oauth_test_override(&logger).await {
+            return Ok(Some(test_creds));
         }
 
         // Check for OAuth env token (cross-platform signal)
-        if let Ok(oauth_token) = env::var(Self::OAUTH_ENV_TOKEN) {
-            if !oauth_token.is_empty() {
-                logger
-                    .debug(
-                        "CredentialManager",
-                        "OAuth env token present; selecting OAuth",
-                    )
-                    .await;
-
-                // For env token testing, use configurable expiry
-                let test_expires_at = env::var("CCSTATUS_TEST_OAUTH_EXPIRES_AT")
-                    .ok()
-                    .and_then(|s| s.parse::<i64>().ok());
-
-                return Ok(Some(ApiCredentials {
-                    base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
-                    auth_token: oauth_token, // Use actual OAuth token instead of dummy
-                    source: CredentialSource::OAuth,
-                    expires_at: test_expires_at,
-                }));
-            }
+        if let Some(env_creds) = self.check_oauth_env_token(&logger).await {
+            return Ok(Some(env_creds));
         }
 
         // Check if Claude Code credentials exist in Keychain
@@ -495,50 +519,14 @@ impl CredentialManager {
         use crate::core::network::debug_logger::get_debug_logger;
         let logger = get_debug_logger();
 
-        // Test override: simulate OAuth credentials present for deterministic testing
-        if env::var(Self::TEST_OAUTH_PRESENT).unwrap_or_default() == "1" {
-            logger
-                .debug(
-                    "CredentialManager",
-                    "Test override: simulating OAuth credentials present",
-                )
-                .await;
-
-            // Test override with configurable expiry
-            let test_expires_at = env::var("CCSTATUS_TEST_OAUTH_EXPIRES_AT")
-                .ok()
-                .and_then(|s| s.parse::<i64>().ok());
-
-            return Ok(Some(ApiCredentials {
-                base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
-                auth_token: Self::OAUTH_FIXED_TOKEN.to_string(),
-                source: CredentialSource::OAuth,
-                expires_at: test_expires_at,
-            }));
+        // Check for test override first
+        if let Some(test_creds) = self.handle_oauth_test_override(&logger).await {
+            return Ok(Some(test_creds));
         }
 
         // Check for OAuth env token (cross-platform signal)
-        if let Ok(oauth_token) = env::var(Self::OAUTH_ENV_TOKEN) {
-            if !oauth_token.is_empty() {
-                logger
-                    .debug(
-                        "CredentialManager",
-                        "OAuth env token present; selecting OAuth",
-                    )
-                    .await;
-
-                // For env token testing, use configurable expiry
-                let test_expires_at = env::var("CCSTATUS_TEST_OAUTH_EXPIRES_AT")
-                    .ok()
-                    .and_then(|s| s.parse::<i64>().ok());
-
-                return Ok(Some(ApiCredentials {
-                    base_url: Self::OAUTH_FIXED_BASE_URL.to_string(),
-                    auth_token: oauth_token, // Use actual OAuth token instead of dummy
-                    source: CredentialSource::OAuth,
-                    expires_at: test_expires_at,
-                }));
-            }
+        if let Some(env_creds) = self.check_oauth_env_token(&logger).await {
+            return Ok(Some(env_creds));
         }
 
         // Non-macOS builds: no Keychain support

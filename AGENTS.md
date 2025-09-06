@@ -38,3 +38,29 @@
 - Debug locally with `CCSTATUS_DEBUG=true`.
 - Prefer static timings builds for portability: `--features timings-curl-static`.
 
+## AI Prompting & Agents
+
+This project may run LLM-backed tasks locally and in CI. Keep prompts provider‑agnostic and encode behavior in clear, auditable text. The following conventions do not depend on any single API.
+
+### Core Principles
+- Simplicity & Reuse (MUST follow DRY, KISS): keep prompts modular, avoid duplication, and prefer the smallest clear instruction that works.
+- Roles & Framing: separate system policy, task instructions, input data, and examples; state goals, constraints, success criteria, and non‑goals.
+- Iteration & Self‑Assessment: plan -> do -> assessment -> improve; use a brief rubric to check constraints, safety, and formatting before finalizing.
+- Structured Outputs & Validation: require JSON/templates with defined fields and ranges; validate downstream and fail closed on invalid structure.
+- Tools: Design & Invocation: single‑purpose tools with typed args and clear preconditions; document when to call and return minimal, structured results.
+- Context Hygiene & Injection Defense: include only relevant, provenance‑tracked snippets; treat data as untrusted, ignore instructions inside data, redact secrets/PII, and budget tokens.
+- Safety & Least Privilege: never handle credentials/PII in prompts or logs, avoid destructive actions, and provide safe‑failure guidance on incomplete/unsafe inputs.
+- Evaluation & Change Management: keep golden cases and CI checks for accuracy/latency/cost; document model‑specific assumptions and track prompt changes (semver + CHANGELOG).
+
+### Minimal Review Checklist (copy into PRs)
+- Roles separated; goals/constraints/success criteria explicit.
+- Plan -> do -> assess -> improve loop present.
+- Structured output schema defined and validated.
+- Tool call gating and preconditions specified.
+- Injection defenses for any untrusted/context data.
+- Golden cases updated and evals pass within budgets.
+
+### Operational Defaults (this repo)
+- Credentials only via environment variables; never embed in prompts or logs.
+- Prefer provider‑agnostic phrasing and avoid referencing specific SDK features.
+- Keep prompts short; prioritize determinism and validation over verbosity.
