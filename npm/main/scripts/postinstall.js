@@ -119,6 +119,19 @@ try {
     console.log(`📍 Location: ${targetPath}`);
     console.log('🎉 You can now use: ccstatus --help');
   }
+
+  // Attempt to update Claude settings.json with statusLine configuration
+  try {
+    const updater = require('./update-settings');
+    const res = updater.run();
+    if (!silent && res && res.settingsPath) {
+      console.log(`🔧 Claude settings configured at: ${res.settingsPath}`);
+    }
+  } catch (e) {
+    if (!silent) {
+      console.log('Note: Failed to update Claude settings.json automatically.');
+    }
+  }
 } catch (error) {
   // Silent failure - don't break installation
   if (!silent) {

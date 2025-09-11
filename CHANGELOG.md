@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.8] - 2025-09-11
+
+### Added
+- NPM postinstall now auto-updates Claude settings.json `statusLine` to point to the installed ccstatus binary
+  - macOS/Linux: `~/.claude/ccstatus/ccstatus`
+  - Windows: `%USERPROFILE%\.claude\ccstatus\ccstatus.exe`
+- Manual reconfigure command: `npm --prefix npm/main run configure-claude`
+- Safe, idempotent update: creates `~/.claude/settings.json` if missing, backs up malformed JSON as `settings.json.bak-<timestamp>`
+
+### Notes
+- No environment flag is provided to disable this behavior. Edit `~/.claude/settings.json` manually if you need to customize `statusLine`.
+
 ## [2.2.7] - 2025-09-06
 
 ### 🔧 OAuth Masquerade System Implementation

@@ -97,10 +97,15 @@ npm install -g @mauruppi/ccstatus --registry https://registry.npmmirror.com
 - ✅ **一键安装** 支持所有平台
 - ✅ **自动平台检测**（macOS Intel/ARM64、Linux x64、Windows x64）
 - ✅ **Claude Code 自动配置**（自动安装到 `~/.claude/ccstatus/`）
+- ✅ **自动写入 settings.json**：
+  - macOS/Linux: `"command": "~/.claude/ccstatus/ccstatus"`
+  - Windows: `"command": "%USERPROFILE%\\.claude\\ccstatus\\ccstatus.exe"`
 - ✅ **静态二进制** 零依赖
 - ✅ **简易更新** 通过 `npm update -g @mauruppi/ccstatus`
 
-安装完成后，二进制文件自动配置到 Claude Code，即可使用。
+安装完成后，已自动为 Claude Code 配置好状态栏。若需手动重置配置：
+
+- 运行：`npm --prefix npm/main run configure-claude`
 
 ### 手动下载安装（备选）
 #### [GitHub Releases](https://github.com/MaurUppi/CCstatus/releases)
@@ -154,6 +159,8 @@ Move-Item "ccstatus.exe" "$env:USERPROFILE\.claude\ccstatus\CCstatus.exe"
 
 
 ### Claude Code 启用
+
+提示：通过 npm 安装时，settings.json 会自动写入指向 `~/.claude/ccstatus/ccstatus` 的命令（Windows 为 `%USERPROFILE%\\.claude\\ccstatus\\ccstatus.exe`）。以下为手动配置示例：
 
 **Linux/macOS:** `~/.claude/settings.json`
 ```json
