@@ -88,10 +88,15 @@ npm install -g @mauruppi/ccstatus --registry https://registry.npmmirror.com
 - ✅ **One-command installation** across all platforms
 - ✅ **Automatic platform detection** (macOS Intel/ARM64, Linux x64, Windows x64)
 - ✅ **Auto-setup for Claude Code** (installs to `~/.claude/ccstatus/`)
+- ✅ **Auto-writes settings.json**:
+  - macOS/Linux: `"command": "~/.claude/ccstatus/ccstatus"`
+  - Windows: `"command": "%USERPROFILE%\\.claude\\ccstatus\\ccstatus.exe"`
 - ✅ **Static binaries** with zero dependencies
 - ✅ **Easy updates** via `npm update -g @mauruppi/ccstatus`
 
-After installation, the binary is automatically configured for Claude Code and ready to use.
+After installation, Claude Code is ready. To reconfigure manually:
+
+- Run: `npm --prefix npm/main run configure-claude`
 
 ### Manual Installation (Alternative)
 #### [GitHub Releases](https://github.com/MaurUppi/CCstatus/releases)
@@ -155,6 +160,8 @@ Move-Item "ccstatus.exe" "$env:USERPROFILE\.claude\ccstatus\CCstatus.exe"
 </details> 
 
 ### Claude Code Activation
+
+Note: When installed via npm, settings.json is auto-managed and points to `~/.claude/ccstatus/ccstatus` (Windows: `%USERPROFILE%\\.claude\\ccstatus\\ccstatus.exe`). The following examples are for manual setup:
 
 **Linux/macOS:** `~/.claude/settings.json`
 ```json

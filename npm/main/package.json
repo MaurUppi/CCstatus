@@ -6,7 +6,8 @@
     "ccstatus": "./bin/ccstatus.js"
   },
   "scripts": {
-    "postinstall": "node scripts/postinstall.js"
+    "postinstall": "node scripts/postinstall.js",
+    "configure-claude": "node scripts/update-settings.js"
   },
   "optionalDependencies": {
     "@mauruppi/ccstatus-darwin-x64": "0.0.0",
